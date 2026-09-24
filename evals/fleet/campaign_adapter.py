@@ -1,0 +1,635 @@
+"""Fleet source-Job adapter for the generic resumable pass@4 controller.
+
+One sealed CPU Job may evaluate several held-out tasks for one model and seed.
+This adapter lets each statistical cell remain independently resumable while
+electing exactly one cell to create that shared Job.  It never reads scores,
+prompts, traces, answers, or flags.
+"""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+import re
+from collections.abc import Callable
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+import httpx
+
+from evals import campaign
+from evals.fleet import evaluate, heldout_launch
+from evals.fleet import opencode_self_hosted as harness
+
+SCHEMA = "cyber_fleet_campaign_bindings_v1"
+BUDGET_SCHEMA = "cyber_fleet_daily_rollout_budget_v1"
+RESERVATION_SCHEMA = "cyber_fleet_daily_rollout_reservation_v1"
+BUDGET_ROOT = campaign.CANONICAL_REGISTRY / "fleet-daily-rollouts-v1"
+_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{1,127}")
+_SHA = re.compile(r"sha256:[0-9a-f]{64}")
+
+
+class AdapterError(ValueError):
+    """The frozen Fleet cell mapping or its external evidence is invalid."""
+
+
+class CapacityUnavailable(AdapterError):
+    """The bound daily rollout allowance cannot admit this source group."""
+
+
+def _digest(value: object) -> str:
+    return "sha256:" + hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
+
+
+def _file_digest(path: Path) -> str:
+    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _read(path: Path) -> dict[str, Any]:
+    if path.is_symlink() or not path.is_file():
+        raise AdapterError("required JSON evidence is absent")
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise AdapterError("required JSON evidence is invalid") from exc
+    if not isinstance(value, dict):
+        raise AdapterError("required JSON evidence is invalid")
+    return value
+
+
+def _write_once(path: Path, value: dict[str, Any]) -> None:
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+        stream.write(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
+def _validate_digest(value: object, label: str) -> str:
+    if not isinstance(value, str) or _SHA.fullmatch(value) is None:
+        raise AdapterError(f"{label} is not a SHA-256 digest")
+    return value
+
+
+def load_bindings(path: Path) -> dict[str, Any]:
+    value = _read(path)
+    if set(value) != {"schema", "budget", "groups", "cells", "sha256"}:
+        raise AdapterError("Fleet campaign bindings have unknown or missing fields")
+    unsigned = {key: item for key, item in value.items() if key != "sha256"}
+    if value["schema"] != SCHEMA or value["sha256"] != _digest(unsigned):
+        raise AdapterError("Fleet campaign bindings identity changed")
+    budget = value["budget"]
+    if not isinstance(budget, dict) or set(budget) != {
+        "date_utc",
+        "cap",
+        "used",
+        "census_receipt_sha256",
+    }:
+        raise AdapterError("Fleet daily budget binding is invalid")
+    try:
+        datetime.strptime(budget["date_utc"], "%Y-%m-%d")
+    except (TypeError, ValueError) as exc:
+        raise AdapterError("Fleet daily budget date is invalid") from exc
+    if budget["cap"] != 500 or type(budget["used"]) is not int or not 0 <= budget["used"] <= 500:
+        raise AdapterError("Fleet daily budget must bind the 500-rollout limit")
+    _validate_digest(budget["census_receipt_sha256"], "budget census receipt")
+    groups, cells = value["groups"], value["cells"]
+    if not isinstance(groups, dict) or not groups or not isinstance(cells, dict) or not cells:
+        raise AdapterError("Fleet campaign source groups and cells are required")
+    assigned: set[str] = set()
+    for group_id, group in groups.items():
+        if (
+            not isinstance(group_id, str)
+            or _ID.fullmatch(group_id) is None
+            or not isinstance(group, dict)
+        ):
+            raise AdapterError("Fleet source group is invalid")
+        if set(group) != {"packet", "packet_sha256", "leader", "cells"}:
+            raise AdapterError("Fleet source group shape is invalid")
+        _validate_digest(group["packet_sha256"], "source packet")
+        members = group["cells"]
+        if (
+            not isinstance(group["packet"], str)
+            or not isinstance(members, list)
+            or not members
+            or any(
+                not isinstance(member, str) or _SHA.fullmatch(member) is None
+                for member in members
+            )
+            or len(members) != len(set(members))
+            or group["leader"] not in members
+            or any(member in assigned for member in members)
+        ):
+            raise AdapterError("Fleet source group membership is invalid")
+        assigned.update(members)
+    if assigned != set(cells):
+        raise AdapterError("Fleet source groups do not partition campaign cells")
+    required = {
+        "group",
+        "attempt",
+        "task_version_id",
+        "model_id",
+        "model_revision",
+        "source_attempt",
+        "campaign_model_id",
+    }
+    for key, cell in cells.items():
+        if (
+            not isinstance(key, str)
+            or _SHA.fullmatch(key) is None
+            or not isinstance(cell, dict)
+            or set(cell) != required
+            or not isinstance(cell["group"], str)
+            or cell["group"] not in groups
+            or key not in groups[cell["group"]]["cells"]
+            or type(cell["attempt"]) is not int
+            or not 1 <= cell["attempt"] <= 4
+            or type(cell["source_attempt"]) is not int
+            or cell["source_attempt"] < 1
+            or any(
+                not isinstance(cell[field], str) or not cell[field]
+                for field in required - {"group", "attempt", "source_attempt"}
+            )
+        ):
+            raise AdapterError("Fleet campaign cell binding is invalid")
+    return value
+
+
+def _source(
+    bindings_path: Path, target: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any], heldout_launch.Package, Path]:
+    bindings = load_bindings(bindings_path)
+    key = target.get("experiment_key")
+    if key not in bindings["cells"]:
+        raise AdapterError("campaign cell has no Fleet source binding")
+    cell = bindings["cells"][key]
+    group = bindings["groups"][cell["group"]]
+    packet = (bindings_path.resolve().parent / group["packet"]).resolve()
+    if (
+        bindings_path.resolve().parent not in packet.parents
+        or _file_digest(packet) != group["packet_sha256"]
+    ):
+        raise AdapterError("sealed Fleet source packet differs from its binding")
+    package = heldout_launch.build_package(packet)
+    sealed = heldout_launch.sealed_evaluation(package)
+    rows = {
+        (row["task_version_id"], row["model_id"], row["model_revision"], row["attempt"])
+        for row in sealed.rows
+    }
+    expected = {
+        (
+            bindings["cells"][member]["task_version_id"],
+            bindings["cells"][member]["model_id"],
+            bindings["cells"][member]["model_revision"],
+            bindings["cells"][member]["source_attempt"],
+        )
+        for member in group["cells"]
+    }
+    identity = target.get("identity", {})
+    if (
+        rows != expected
+        or len(rows) != len(group["cells"])
+        or package.packet.identity["pass_k"] != 1
+        or package.packet.identity["retry_limit"] != 0
+        or identity.get("attempt") != cell["attempt"]
+        or identity.get("seed") != package.packet.identity["sampling_seed"]
+        or identity.get("model", {}).get("id") != cell["campaign_model_id"]
+    ):
+        raise AdapterError("campaign cell and sealed Fleet source Job differ")
+    return bindings, cell, package, packet
+
+
+def _group_root(packet: Path, group_id: str) -> Path:
+    # packet.json is <campaign>/targets/<experiment-key>/packet.json.
+    state = packet.resolve().parents[2]
+    if not (state / "plan.json").is_file():
+        raise AdapterError("campaign state root is invalid")
+    return state / "fleet-source-jobs" / group_id
+
+
+def _signed(value: dict[str, Any]) -> dict[str, Any]:
+    return {**value, "receipt_sha256": _digest(value)}
+
+
+def _receipt(
+    target: dict[str, Any], phase: str, action: str, status: str, **extra: Any
+) -> dict[str, Any]:
+    return _signed(
+        {
+            "schema": campaign.RECEIPT_SCHEMA,
+            "experiment_key": target["experiment_key"],
+            "phase": phase,
+            "action": action,
+            "provider": "fleet",
+            "status": status,
+            **extra,
+        }
+    )
+
+
+def _route_ready(package: heldout_launch.Package) -> dict[str, Any]:
+    key = os.environ.get("FLEET_API_KEY")
+    if not key:
+        raise AdapterError("Fleet route check requires FLEET_API_KEY")
+    route = next(iter(package.evaluation_config["routes"].values()))
+    model = package.evaluation_config["models"][route["model"]]
+    with httpx.Client(headers={"Authorization": f"Bearer {key}"}, timeout=60) as client:
+        account = harness._request(client, "GET", "/v1/account")  # noqa: SLF001
+        if account.get("team_name") != "fleet" or account.get("team_id") != harness.FLEET_TEAM_ID:
+            raise AdapterError("Fleet team identity is required")
+        return evaluate.check_route(route, model, client)
+
+
+def _budget(
+    binding: dict[str, Any],
+    group_id: str,
+    count: int,
+    packet_sha256: str,
+    *,
+    root: Path = BUDGET_ROOT,
+    reserve: bool,
+) -> dict[str, Any]:
+    budget = binding["budget"]
+    if type(count) is not int or not 1 <= count <= 500:
+        raise AdapterError("Fleet rollout reservation count is invalid")
+    if budget["date_utc"] != datetime.now(UTC).date().isoformat():
+        raise AdapterError("Fleet daily budget census is not from today UTC")
+    day = root / budget["date_utc"]
+    if root.is_symlink() or day.is_symlink():
+        raise AdapterError("Fleet daily budget path must not be a symlink")
+    day.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with (day / ".lock").open("a", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        baseline_path = day / "baseline.json"
+        baseline = {"schema": BUDGET_SCHEMA, **budget}
+        baseline = {**baseline, "sha256": _digest(baseline)}
+        if baseline_path.exists():
+            if _read(baseline_path) != baseline:
+                raise AdapterError("Fleet daily budget baseline differs")
+        elif reserve:
+            _write_once(baseline_path, baseline)
+        reservations = day / "reservations"
+        reservations.mkdir(mode=0o700, exist_ok=True)
+        reservation_key = hashlib.sha256(
+            f"{binding['sha256']}:{group_id}".encode()
+        ).hexdigest()
+        path = reservations / f"{reservation_key}.json"
+        reservation = {
+            "schema": RESERVATION_SCHEMA,
+            "date_utc": budget["date_utc"],
+            "group_id": group_id,
+            "count": count,
+            "packet_sha256": packet_sha256,
+            "bindings_sha256": binding["sha256"],
+        }
+        reservation = {**reservation, "sha256": _digest(reservation)}
+        existing = _read(path) if path.exists() else None
+        if existing is not None and existing != reservation:
+            raise AdapterError("Fleet daily rollout reservation differs")
+        total_reserved = 0
+        for item in reservations.glob("*.json"):
+            row = _read(item)
+            unsigned = {key: value for key, value in row.items() if key != "sha256"}
+            if (
+                set(row)
+                != {
+                    "schema",
+                    "date_utc",
+                    "group_id",
+                    "count",
+                    "packet_sha256",
+                    "bindings_sha256",
+                    "sha256",
+                }
+                or row.get("schema") != RESERVATION_SCHEMA
+                or row.get("date_utc") != budget["date_utc"]
+                or type(row.get("count")) is not int
+                or not 1 <= row["count"] <= 500
+                or row.get("sha256") != _digest(unsigned)
+            ):
+                raise AdapterError("Fleet daily rollout reservation is invalid")
+            total_reserved += row.get("count", 0)
+        if existing is None:
+            if budget["used"] + total_reserved + count > budget["cap"]:
+                raise CapacityUnavailable("Fleet daily 500-rollout budget is exhausted")
+            if reserve:
+                _write_once(path, reservation)
+                total_reserved += count
+        return {"used": budget["used"], "reserved": total_reserved, "cap": budget["cap"]}
+
+
+def _launch_record(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    value = _read(path)
+    unsigned = {key: item for key, item in value.items() if key != "sha256"}
+    if value.get("schema") != "cyber_fleet_source_launch_v1" or value.get(
+        "sha256"
+    ) != _digest(unsigned):
+        raise AdapterError("shared Fleet source launch record is invalid")
+    return value
+
+
+def run_action(
+    *,
+    action: str,
+    phase: str,
+    packet_path: Path,
+    bindings_path: Path,
+    context: str,
+    preview_receipt: Path | None = None,
+    readiness_receipt: Path | None = None,
+    launch_receipt: Path | None = None,
+    terminal_receipt: Path | None = None,
+    cluster: heldout_launch.Cluster | None = None,
+    database: heldout_launch.Database | None = None,
+    route_check: Callable[[heldout_launch.Package], dict[str, Any]] = _route_ready,
+    budget_root: Path = BUDGET_ROOT,
+) -> dict[str, Any]:
+    target = _read(packet_path)
+    bindings, cell, package, source_packet = _source(bindings_path, target)
+    group_id = cell["group"]
+    group = bindings["groups"][group_id]
+    root = _group_root(packet_path, group_id)
+    cluster = cluster or heldout_launch.KubectlCluster(context)
+    database = database or heldout_launch.PostgresDatabase()
+
+    if phase == "score":
+        collection_path = terminal_receipt or (
+            packet_path.resolve().parents[2]
+            / "targets"
+            / target["experiment_key"]
+            / "rollout"
+            / "observe.json"
+        )
+        collection = _read(collection_path)
+        if not collection or collection.get("status") != "accepted":
+            raise AdapterError("Fleet score phase requires an accepted rollout receipt")
+        common = {"collection_terminal_receipt_sha256": collection["receipt_sha256"]}
+        if action == "preview":
+            return _receipt(target, phase, action, "accepted", **common)
+        if action == "ready":
+            return _receipt(
+                target,
+                phase,
+                action,
+                "ready",
+                preview_receipt_sha256=_read(preview_receipt)["receipt_sha256"],
+                defer_reason_code=None,
+                **common,
+            )
+        if action == "launch":
+            ready = _read(readiness_receipt)
+            return _receipt(
+                target,
+                phase,
+                action,
+                "created",
+                preview_receipt_sha256=_read(preview_receipt)["receipt_sha256"],
+                readiness_receipt_path=str(readiness_receipt),
+                readiness_receipt_sha256=ready["receipt_sha256"],
+                remote_id="score:" + target["experiment_key"],
+                **common,
+            )
+        launch = _read(launch_receipt)
+        return _receipt(
+            target,
+            phase,
+            action,
+            "accepted",
+            launch_receipt_sha256=launch["receipt_sha256"],
+            remote_id=launch["remote_id"],
+            terminal_evidence_sha256=collection["terminal_evidence_sha256"],
+            **common,
+        )
+
+    shared = _launch_record(root / "launch.json")
+    if action == "preview":
+        server_preview = heldout_launch.preview_package(package, cluster=cluster)
+        return _receipt(
+            target,
+            phase,
+            action,
+            "accepted",
+            rendered_objects=[
+                {
+                    "apiVersion": "batch/v1",
+                    "kind": "Job",
+                    "metadata": {"annotations": {heldout_launch.FAILURE_ALERT_ANNOTATION: "off"}},
+                }
+            ],
+            server_preview_sha256=server_preview,
+            source_packet_sha256=group["packet_sha256"],
+        )
+    if action == "ready":
+        preview = _read(preview_receipt)
+        try:
+            if shared is not None:
+                route = {"profile_sha256": shared["route_profile_sha256"]}
+            else:
+                try:
+                    route = route_check(package)
+                except (AdapterError, RuntimeError):
+                    return _receipt(
+                        target,
+                        phase,
+                        action,
+                        "deferred_not_ready",
+                        preview_receipt_sha256=preview["receipt_sha256"],
+                        defer_reason_code="dependency_not_ready",
+                    )
+                if target["experiment_key"] != group["leader"]:
+                    raise LookupError
+                _budget(
+                    bindings,
+                    group_id,
+                    len(group["cells"]),
+                    group["packet_sha256"],
+                    root=budget_root,
+                    reserve=False,
+                )
+                heldout_launch.duplicate_census(package, cluster=cluster, database=database)
+        except LookupError:
+            return _receipt(
+                target,
+                phase,
+                action,
+                "deferred_not_ready",
+                preview_receipt_sha256=preview["receipt_sha256"],
+                defer_reason_code="dependency_not_ready",
+            )
+        except CapacityUnavailable:
+            return _receipt(
+                target,
+                phase,
+                action,
+                "deferred_not_ready",
+                preview_receipt_sha256=preview["receipt_sha256"],
+                defer_reason_code="capacity_unavailable",
+            )
+        return _receipt(
+            target,
+            phase,
+            action,
+            "ready",
+            preview_receipt_sha256=preview["receipt_sha256"],
+            defer_reason_code=None,
+            route_profile_sha256=route["profile_sha256"],
+        )
+    if action == "launch":
+        preview, ready = _read(preview_receipt), _read(readiness_receipt)
+        if shared is None:
+            if target["experiment_key"] != group["leader"]:
+                raise AdapterError("non-leader Fleet cell cannot create its source Job")
+            _budget(
+                bindings,
+                group_id,
+                len(group["cells"]),
+                group["packet_sha256"],
+                root=budget_root,
+                reserve=True,
+            )
+            if root.is_symlink():
+                raise AdapterError("Fleet source group path must not be a symlink")
+            root.mkdir(mode=0o700, parents=True, exist_ok=True)
+            result = heldout_launch.launch_once(
+                source_packet,
+                cluster=cluster,
+                database=database,
+                journal=root / "create-intent.jsonl",
+            )
+            unsigned = {
+                "schema": "cyber_fleet_source_launch_v1",
+                "group_id": group_id,
+                "packet_sha256": group["packet_sha256"],
+                "route_profile_sha256": ready["route_profile_sha256"],
+                **result,
+            }
+            shared = {**unsigned, "sha256": _digest(unsigned)}
+            _write_once(root / "launch.json", shared)
+        return _receipt(
+            target,
+            phase,
+            action,
+            "created",
+            preview_receipt_sha256=preview["receipt_sha256"],
+            readiness_receipt_path=str(readiness_receipt),
+            readiness_receipt_sha256=ready["receipt_sha256"],
+            remote_id=shared["job_uid"],
+            source_launch_sha256=shared["sha256"],
+        )
+    if action != "observe" or shared is None:
+        raise AdapterError("Fleet source Job has not been launched")
+    launch = _read(launch_receipt)
+    job = cluster.get("jobs.batch", package.packet.namespace, package.packet.job_name)
+    if job.get("metadata", {}).get("uid") != shared["job_uid"]:
+        raise AdapterError("Fleet source Job UID changed")
+    conditions = {
+        row.get("type")
+        for row in job.get("status", {}).get("conditions", [])
+        if isinstance(row, dict) and row.get("status") == "True"
+    }
+    terminal = conditions & {"Complete", "Failed"}
+    if not terminal:
+        return _receipt(
+            target,
+            phase,
+            action,
+            "running",
+            launch_receipt_sha256=launch["receipt_sha256"],
+            remote_id=shared["job_uid"],
+        )
+    terminal_path = root / "terminal.json"
+    if terminal_path.exists():
+        source_terminal = _read(terminal_path)
+    else:
+        source_terminal = heldout_launch.collect_terminal(
+            source_packet,
+            cluster=cluster,
+            database=database,
+            receipt_path=terminal_path,
+        )
+    terminal_unsigned = {key: value for key, value in source_terminal.items() if key != "sha256"}
+    if (
+        source_terminal.get("schema") != heldout_launch.TERMINAL_SCHEMA
+        or source_terminal.get("sha256") != _digest(terminal_unsigned)
+        or source_terminal.get("job", {}).get("uid") != shared["job_uid"]
+    ):
+        raise AdapterError("shared Fleet terminal evidence is invalid")
+    try:
+        row = database.cell_status(
+            package.packet.database,
+            task_version_id=cell["task_version_id"],
+            model_id=cell["model_id"],
+            model_revision=cell["model_revision"],
+            attempt=cell["source_attempt"],
+        )
+    except heldout_launch.HeldoutLaunchError:
+        # The source Job is terminal and its collector already completed all
+        # score-blind reads. A missing exact row is terminal infrastructure
+        # evidence for this cell, not a reason to hold its siblings forever.
+        row = {"cell_id": None, "state": "absent", "receipt_digest": None}
+    accepted = (
+        row.get("state") == "accepted"
+        and row.get("result_class") == "valid"
+        and row.get("local_results") == 1
+        and row.get("retry_count") == 0
+        and row.get("max_retries") == 0
+        and isinstance(row.get("receipt_digest"), str)
+        and _SHA.fullmatch(row["receipt_digest"]) is not None
+    )
+    evidence = {
+        "source_terminal_sha256": source_terminal["sha256"],
+        "cell_id": row.get("cell_id"),
+        "cell_state": row.get("state"),
+        "cell_receipt_sha256": row.get("receipt_digest"),
+        "cleanup_completed": accepted,
+    }
+    return _receipt(
+        target,
+        phase,
+        action,
+        "accepted" if accepted else "infrastructure_invalid",
+        launch_receipt_sha256=launch["receipt_sha256"],
+        remote_id=shared["job_uid"],
+        terminal_evidence_sha256=_digest(evidence),
+        evidence=evidence,
+    )
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("action", choices=campaign.ACTIONS)
+    parser.add_argument("phase", choices=campaign.PHASES)
+    parser.add_argument("packet", type=Path)
+    parser.add_argument("receipt", type=Path)
+    parser.add_argument("--bindings", required=True, type=Path)
+    parser.add_argument("--context", required=True)
+    parser.add_argument("--preview-receipt", type=Path)
+    parser.add_argument("--readiness-receipt", type=Path)
+    parser.add_argument("--launch-receipt", type=Path)
+    parser.add_argument("--terminal-receipt", type=Path)
+    args = parser.parse_args(argv)
+    result = run_action(
+        action=args.action,
+        phase=args.phase,
+        packet_path=args.packet,
+        bindings_path=args.bindings,
+        context=args.context,
+        preview_receipt=args.preview_receipt,
+        readiness_receipt=args.readiness_receipt,
+        launch_receipt=args.launch_receipt,
+        terminal_receipt=args.terminal_receipt,
+    )
+    _write_once(args.receipt, result)
+
+
+if __name__ == "__main__":
+    main()
