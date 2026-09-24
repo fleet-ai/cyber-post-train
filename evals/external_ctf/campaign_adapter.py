@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import lzma
 import os
 import re
 import time
@@ -21,7 +22,7 @@ from typing import Any
 from evals.campaign import RECEIPT_SCHEMA, canonical, digest
 from evals.webexploitbench.tensorlake import collection_replica_set as replica_set
 
-from . import tensorlake
+from . import opencode_scored, tensorlake
 from .execution_packet import load as load_execution_packet
 from .protocol import file_digest, load_protocol
 
@@ -38,8 +39,39 @@ import base64
 import hashlib
 import importlib.util
 import json
+import lzma
 import os
+import platform
 import pathlib
+import subprocess
+import sys
+
+bundle = os.environ.pop("CAMPAIGN_BUNDLE_B64", None)
+if bundle is not None:
+    compressed = base64.b64decode(bundle, validate=True)
+    if "sha256:" + hashlib.sha256(compressed).hexdigest() != os.environ.pop(
+        "CAMPAIGN_BUNDLE_SHA256"
+    ):
+        raise RuntimeError("campaign_bundle_digest_mismatch")
+    files = json.loads(lzma.decompress(compressed))
+    root = pathlib.Path("/workspace/external_ctf_campaign")
+    if root.exists() or root.is_symlink():
+        raise RuntimeError("campaign_bundle_root_exists")
+    for package in (root / "evals", root / "evals/external_ctf"):
+        package.mkdir(mode=0o700, parents=True)
+        (package / "__init__.py").write_bytes(b"")
+    for relative, encoded in files.items():
+        relative_path = pathlib.PurePosixPath(relative)
+        if (
+            relative_path.is_absolute()
+            or not relative_path.parts
+            or any(part in {"", ".", ".."} for part in relative_path.parts)
+        ):
+            raise RuntimeError("campaign_bundle_path_invalid")
+        target = root.joinpath(*relative_path.parts)
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        target.write_bytes(base64.b64decode(encoded, validate=True))
+    sys.path.insert(0, str(root))
 
 worker = base64.b64decode(os.environ.pop("WORKER_B64"), validate=True)
 if "sha256:" + hashlib.sha256(worker).hexdigest() != os.environ.pop("WORKER_SHA256"):
@@ -62,8 +94,122 @@ def run(protocol, task_id, arm, checkout, qualification):
     return original(protocol, task_id, arm, checkout, qualification)
 
 module._run_cvebench = run
+
+def external_qualification(protocol, benchmark, task_id):
+    raw = base64.b64decode(os.environ.pop("EXTERNAL_CTF_QUALIFICATION_B64"), validate=True)
+    if module._sha(raw) != os.environ.pop("EXTERNAL_CTF_QUALIFICATION_SHA256"):
+        raise ValueError("runtime_qualification_file_digest_mismatch")
+    terminal = json.loads(raw)
+    result = terminal.get("result") if isinstance(terminal, dict) else None
+    unsigned_terminal = {
+        key: item for key, item in terminal.items() if key != "receipt_sha256"
+    }
+    unsigned_result = (
+        {key: item for key, item in result.items() if key != "receipt_sha256"}
+        if isinstance(result, dict)
+        else {}
+    )
+    task_index = protocol["benchmarks"][benchmark]["task_ids"].index(task_id)
+    if (
+        raw != module._canonical(terminal) + b"\n"
+        or terminal.get("receipt_sha256") != module._sha(module._canonical(unsigned_terminal))
+        or terminal.get("schema") != "external_ctf_cell_terminal_v1"
+        or terminal.get("protocol_sha256") != protocol["protocol_sha256"]
+        or terminal.get("benchmark") != benchmark
+        or terminal.get("task_index") != task_index
+        or terminal.get("task_id") != task_id
+        or terminal.get("arm") != "qualification"
+        or terminal.get("outcome") != "runtime_preflight_passed"
+        or not isinstance(result, dict)
+        or result.get("receipt_sha256") != module._sha(module._canonical(unsigned_result))
+        or result.get("protocol_sha256") != protocol["protocol_sha256"]
+        or result.get("benchmark") != benchmark
+        or result.get("task_index") != task_index
+        or result.get("status") != "runtime_qualified"
+        or result.get("model_requests") != 0
+    ):
+        raise ValueError("runtime_qualification_binding_mismatch")
+    if benchmark == "nyu_ctf_web_test":
+        qualification = result.get("qualification")
+        if not isinstance(qualification, dict):
+            raise ValueError("runtime_qualification_binding_mismatch")
+        return qualification
+    if benchmark == "cybench_web" and isinstance(result.get("task_evidence"), dict):
+        return result
+    raise ValueError("runtime_qualification_binding_mismatch")
+
+def run_external():
+    if platform.system() != "Linux" or platform.machine() != "x86_64":
+        raise RuntimeError("linux_amd64_required")
+    protocol = module._protocol()
+    benchmark = os.environ.pop("EXTERNAL_CTF_BENCHMARK")
+    task_id = os.environ.pop("EXTERNAL_CTF_TASK_ID")
+    arm = os.environ.pop("EXTERNAL_CTF_ARM")
+    mode = os.environ.pop("EXTERNAL_CTF_MODE")
+    source = protocol["benchmarks"][benchmark]
+    if (
+        benchmark not in {"nyu_ctf_web_test", "cybench_web"}
+        or mode != "scored"
+        or arm != "base"
+        or task_id not in source["task_ids"]
+        or task_id in source.get("source_unavailable_task_ids", [])
+        or task_id in source.get("execution_unavailable_task_ids", [])
+    ):
+        raise ValueError("cell_identity_invalid")
+    module._CONTEXT.update(
+        {
+            "protocol_sha256": protocol["protocol_sha256"],
+            "benchmark": benchmark,
+            "task_id": task_id,
+            "arm": arm,
+        }
+    )
+    protocol["arms"][arm] = {
+        **protocol["arms"][arm],
+        "served_model": model["served_model"],
+    }
+    checkout = pathlib.Path("/workspace/external-ctf-source")
+    subprocess.run(
+        ["git", "clone", "--quiet", source["source"]["repository"], str(checkout)],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "checkout", "--quiet", source["source"]["commit"]],
+        cwd=checkout,
+        check=True,
+    )
+    observed = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=checkout, text=True
+    ).strip()
+    if observed != source["source"]["commit"]:
+        raise ValueError("source_commit_mismatch")
+    qualification = external_qualification(protocol, benchmark, task_id)
+    from evals.external_ctf import opencode_scored
+
+    runner = (
+        opencode_scored.run_nyu
+        if benchmark == "nyu_ctf_web_test"
+        else opencode_scored.run_cybench
+    )
+    passed = runner(protocol, checkout, task_id, arm, qualification)
+    module._write(
+        {
+            "schema": "external_ctf_cell_result_v1",
+            "protocol_sha256": protocol["protocol_sha256"],
+            "benchmark": benchmark,
+            "task_id": task_id,
+            "arm": arm,
+            "status": "scored",
+            "score": int(passed),
+            "grader": source["scoring"],
+        }
+    )
+
 try:
-    module.main()
+    if os.environ.get("EXTERNAL_CTF_BENCHMARK") == "cvebench_zero_day":
+        module.main()
+    else:
+        run_external()
     result = json.loads(module.RESULT.read_bytes())
     if (
         result.get("schema") != "external_ctf_cell_result_v1"
@@ -107,6 +253,20 @@ class ExternalCampaignError(RuntimeError):
 def _signed(value: dict[str, Any]) -> dict[str, Any]:
     unsigned = {key: item for key, item in value.items() if key != "receipt_sha256"}
     return {**unsigned, "receipt_sha256": digest(unsigned)}
+
+
+def _scored_bundle(protocol: dict[str, Any], benchmark: str) -> bytes:
+    """Extend the reviewed model-free runtime bundle with the shared scorer."""
+    files = json.loads(lzma.decompress(tensorlake._qualification_bundle(protocol, benchmark)))  # noqa: SLF001
+    paths = {
+        "evals/external_ctf/opencode_scored.py": Path(__file__).with_name("opencode_scored.py"),
+        "evals/external_ctf/external_proxy.py": Path(__file__).with_name("external_proxy.py"),
+        "evals/external_ctf/fixed_proxy.py": Path(__file__).parents[1] / "fleet/fixed_proxy.py",
+    }
+    files.update(
+        {relative: base64.b64encode(path.read_bytes()).decode() for relative, path in paths.items()}
+    )
+    return lzma.compress(canonical(files), preset=9)
 
 
 def _write_once(path: Path, value: dict[str, Any]) -> None:
@@ -291,9 +451,10 @@ def _models(value: object, matrix: dict[str, Any]) -> list[dict[str, Any]]:
         ):
             raise ExternalCampaignError("route_preflight_binding_invalid")
         result.append({**row, "route_preflight_path": str(preflight_path)})
-    if ids != set(matrix_arms) or len(
-        {row["matched_treatment_receipt_sha256"] for row in result}
-    ) != 1:
+    if (
+        ids != set(matrix_arms)
+        or len({row["matched_treatment_receipt_sha256"] for row in result}) != 1
+    ):
         raise ExternalCampaignError("model_treatment_mismatch")
     return result
 
@@ -308,6 +469,7 @@ def load_bindings(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         "web_retry_execution",
         "qualification_packet",
         "qualification_summaries",
+        "scored_adapter_qualification",
         "harness_receipt_sha256",
         "scoring_protocol_sha256",
         "models",
@@ -329,6 +491,54 @@ def load_bindings(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     qualification_path, _qualification = _file_binding(
         value["qualification_packet"], "qualification_packet", signed=True
     )
+    adapter = None
+    if value["scored_adapter_qualification"] is not None:
+        _adapter_path, adapter = _file_binding(
+            value["scored_adapter_qualification"],
+            "scored_adapter_qualification",
+            signed=True,
+        )
+    harness_ids = {
+        protocol["benchmarks"][benchmark]["harness"]["image_id"]
+        for benchmark in ("nyu_ctf_web_test", "cybench_web")
+    }
+    if adapter is not None and (
+        set(adapter)
+        != {
+            "schema",
+            "protocol_sha256",
+            "adapter_source_sha256",
+            "status",
+            "platform",
+            "proxy_image",
+            "harness_image_id",
+            "provider_calls",
+            "model_requests",
+            "provider_credential_location",
+            "agent_provider_credential_present",
+            "challenge_provider_credential_present",
+            "agent_docker_socket_present",
+            "cleanup_verified",
+            "contains_credentials_prompts_flags_solutions_traces_or_scores",
+            "receipt_sha256",
+        }
+        or adapter.get("schema") != "external_ctf_scored_adapter_qualification_v1"
+        or adapter.get("protocol_sha256") != protocol["protocol_sha256"]
+        or adapter.get("adapter_source_sha256") != opencode_scored.source_sha256()
+        or adapter.get("status") != "qualified"
+        or adapter.get("platform") != "linux/amd64"
+        or adapter.get("proxy_image") != opencode_scored.PROXY_IMAGE
+        or harness_ids != {adapter.get("harness_image_id")}
+        or adapter.get("provider_calls") != 0
+        or adapter.get("model_requests") != 0
+        or adapter.get("provider_credential_location") != "fixed_proxy_only"
+        or adapter.get("agent_provider_credential_present") is not False
+        or adapter.get("challenge_provider_credential_present") is not False
+        or adapter.get("agent_docker_socket_present") is not False
+        or adapter.get("cleanup_verified") is not True
+        or adapter.get("contains_credentials_prompts_flags_solutions_traces_or_scores") is not False
+    ):
+        raise ExternalCampaignError("scored_adapter_qualification_invalid")
     summaries = value["qualification_summaries"]
     if not isinstance(summaries, dict) or set(summaries) != set(BENCHMARKS):
         raise ExternalCampaignError("qualification_summaries_invalid")
@@ -371,6 +581,7 @@ def load_bindings(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         "protocol_path": protocol_path,
         "web_retry_execution_path": retry_path,
         "qualification_packet_path": qualification_path,
+        "scored_adapter_qualification_loaded": adapter,
         "qualification_summaries_loaded": loaded_summaries,
         "models_loaded": models,
     }, protocol
@@ -473,10 +684,7 @@ def controller_config(bindings_path: Path) -> dict[str, Any]:
                 {
                     "id": f"{PREFIXES[benchmark]}-t{index:02d}",
                     "identity_receipt_sha256": digest(identity),
-                    "canary": index == CANARIES[benchmark]
-                    and (
-                        benchmark == "cvebench_zero_day" or source.get("adapter_qualified") is True
-                    ),
+                    "canary": index == CANARIES[benchmark],
                 }
             )
         benchmarks.append(
@@ -592,11 +800,7 @@ def _packet(
     if (
         packet.get("experiment_key") != digest(identity)
         or identity.get("benchmark") != expected_benchmark
-        or packet.get("canary")
-        is not (
-            index == CANARIES[benchmark]
-            and (benchmark == "cvebench_zero_day" or source.get("adapter_qualified") is True)
-        )
+        or packet.get("canary") is not (index == CANARIES[benchmark])
         or identity["target"].get("identity_receipt_sha256") != digest(target_identity)
     ):
         raise ExternalCampaignError("campaign_target_binding_mismatch")
@@ -633,8 +837,20 @@ def _packet(
 
 def _qualification_ready(bindings: dict[str, Any], protocol: dict[str, Any], cell: dict) -> bool:
     benchmark = cell["benchmark"]
-    rows = bindings["qualification_summaries_loaded"][benchmark]["rows"]
-    row = next((item for item in rows if item.get("task_index") == cell["task_index"]), None)
+    summaries = bindings.get("qualification_summaries_loaded")
+    if not isinstance(summaries, dict) or benchmark not in summaries:
+        return False
+    rows = summaries[benchmark].get("rows")
+    if not isinstance(rows, list):
+        return False
+    row = next(
+        (
+            item
+            for item in rows
+            if isinstance(item, dict) and item.get("task_index") == cell["task_index"]
+        ),
+        None,
+    )
     return (
         isinstance(row, dict)
         and row.get("task_id") == cell["task_id"]
@@ -643,7 +859,7 @@ def _qualification_ready(bindings: dict[str, Any], protocol: dict[str, Any], cel
         and _DIGEST.fullmatch(str(row.get("release_receipt_sha256"))) is not None
         and (
             benchmark == "cvebench_zero_day"
-            or protocol["benchmarks"][benchmark].get("adapter_qualified") is True
+            or bindings.get("scored_adapter_qualification_loaded") is not None
         )
     )
 
@@ -791,7 +1007,7 @@ def _launch_cell(
     authority: dict[str, Any],
     output: Path,
 ) -> dict[str, Any]:
-    if cell["benchmark"] != "cvebench_zero_day":
+    if not _qualification_ready(bindings, protocol, cell):
         raise ExternalCampaignError("scored_adapter_not_qualified")
     if output.exists() or output.is_symlink():
         raise ExternalCampaignError("campaign_output_root_exists")
@@ -867,6 +1083,11 @@ def _launch_cell(
         protocol=protocol, bindings=bindings, cell=cell, authority=authority
     )
     worker = tensorlake.WORKER.read_bytes()
+    bundle = (
+        None
+        if cell["benchmark"] == "cvebench_zero_day"
+        else _scored_bundle(protocol, cell["benchmark"])
+    )
     model = canonical(
         {
             "id": cell["model"]["id"],
@@ -879,26 +1100,34 @@ def _launch_cell(
     fleet_key = os.environ.get("FLEET_API_KEY", "")
     if not fleet_key or fleet_key.strip() != fleet_key or any(ch.isspace() for ch in fleet_key):
         raise ExternalCampaignError("fleet_credential_missing_or_invalid")
+    environment = {
+        "EXTERNAL_CTF_PROTOCOL_B64": base64.b64encode(
+            bindings["protocol_path"].read_bytes()
+        ).decode(),
+        "EXTERNAL_CTF_BENCHMARK": cell["benchmark"],
+        "EXTERNAL_CTF_TASK_ID": cell["task_id"],
+        "EXTERNAL_CTF_ARM": "base",
+        "EXTERNAL_CTF_MODE": "scored",
+        "EXTERNAL_CTF_QUALIFICATION_B64": base64.b64encode(qualification).decode(),
+        "EXTERNAL_CTF_QUALIFICATION_SHA256": file_digest(qualification),
+        "CAMPAIGN_MODEL_B64": base64.b64encode(model).decode(),
+        "CAMPAIGN_MODEL_SHA256": file_digest(model),
+        "WORKER_B64": base64.b64encode(worker).decode(),
+        "WORKER_SHA256": file_digest(worker),
+        "FLEET_API_KEY": fleet_key,
+    }
+    if bundle is not None:
+        environment.update(
+            {
+                "CAMPAIGN_BUNDLE_B64": base64.b64encode(bundle).decode(),
+                "CAMPAIGN_BUNDLE_SHA256": file_digest(bundle),
+            }
+        )
     process_spec = {
         "command": "/usr/bin/python3",
         "args": ["-c", _CAMPAIGN_WORKER_BOOTSTRAP],
         "user": "root",
-        "env": {
-            "EXTERNAL_CTF_PROTOCOL_B64": base64.b64encode(
-                bindings["protocol_path"].read_bytes()
-            ).decode(),
-            "EXTERNAL_CTF_BENCHMARK": cell["benchmark"],
-            "EXTERNAL_CTF_TASK_ID": cell["task_id"],
-            "EXTERNAL_CTF_ARM": "base",
-            "EXTERNAL_CTF_MODE": "scored",
-            "EXTERNAL_CTF_QUALIFICATION_B64": base64.b64encode(qualification).decode(),
-            "EXTERNAL_CTF_QUALIFICATION_SHA256": file_digest(qualification),
-            "CAMPAIGN_MODEL_B64": base64.b64encode(model).decode(),
-            "CAMPAIGN_MODEL_SHA256": file_digest(model),
-            "WORKER_B64": base64.b64encode(worker).decode(),
-            "WORKER_SHA256": file_digest(worker),
-            "FLEET_API_KEY": fleet_key,
-        },
+        "env": environment,
         "stdin_mode": "closed",
         "stdout_mode": "discard",
         "stderr_mode": "discard",
@@ -911,6 +1140,7 @@ def _launch_cell(
             "sandbox_id": sandbox_id,
             "created_receipt_sha256": created["receipt_sha256"],
             "worker_sha256": file_digest(worker),
+            "bundle_sha256": None if bundle is None else file_digest(bundle),
             "model_sha256": file_digest(model),
         },
     )

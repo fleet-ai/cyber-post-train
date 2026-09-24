@@ -9,7 +9,7 @@
     "source_path": "evals/campaign.py",
     "source_sha256": "sha256:0b3e81836f3f4fdd68e554f376bd656379165d406b588c71e19f803af4a8c201",
     "driver_adapter_path": "evals/external_ctf/campaign_adapter.py",
-    "driver_adapter_sha256": "sha256:bb35f7950ca99eb3d37e761c7cc82cb822d0b85ebb01ffb2172656a1ac373dfd",
+    "driver_adapter_sha256": "sha256:1102ad3b9d63a89afe208958e54dd83d0a32c8555db83af6650b85609b96627f",
     "binding_schema": "external_ctf_campaign_bindings_v1",
     "resolved_config_path": null,
     "resolved_config_sha256": null,
@@ -112,6 +112,22 @@
     "file_sha256": "sha256:0cb2be1ab5092851f7b034bc9cc749ea261a836e6f4e8a0ada7b7492d4688cde",
     "protocol_sha256": "sha256:b5e974a4058a97d55c482f07567ef3a68c818b35f72d725358f1a6ce9337d475",
     "rule": "a_final_campaign_must_bind_a_reviewed_pass4_successor_not_mutate_this_pass1_protocol"
+  },
+  "scored_adapter": {
+    "status": "code_complete_remote_credential_isolation_qualification_pending",
+    "shared_source_sha256": "sha256:ee6187966e62d380d63b53d8d8e4e97388df5321fa91af1501acff1f29e9cbb5",
+    "source_files": {
+      "evals/external_ctf/opencode_scored.py": "sha256:7cf6ebcdbc85f4a1106fd7b8bf07d0c9c24cb6c38a8fcbcc3917b714d048cfd3",
+      "evals/external_ctf/external_proxy.py": "sha256:7d474b3921b65d8bd2f16c33b244b178429aadf8fbfb8a33859b79c8c85bbd05",
+      "evals/fleet/fixed_proxy.py": "sha256:a65270cb021cbc8e2fe9b00d901b4b70e9ddc98dd58d93e9f695b1768dfb984d"
+    },
+    "proxy_image": "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7",
+    "native_grading_only": true,
+    "gpt_scoring_permitted": false,
+    "credentials_live_only_in_fixed_proxy": true,
+    "benchmark_containers_receive_provider_credentials": false,
+    "credential_isolation_receipt_sha256": null,
+    "launch_rule": "nyu_and_cybench_remain_held_until_the_exact_linux_amd64_credential_isolation_receipt_is_bound"
   },
   "pass_k": 4,
   "attempts": [1, 2, 3, 4],
@@ -367,5 +383,5 @@
     "prompts_traces_flags_answers_private_scores_and_secrets_included": false,
     "results_remain_sealed_until_a_complete_predeclared_matched_aggregate": true
   },
-  "template_sha256": "sha256:eb03f2f1287502ea4d9c487af44397a16673b0bbf5cef7decab668da79fe5bce"
+  "template_sha256": "sha256:eaea6a530e7326e92338163b40d69afaf74be925586b0bf38d52e264c99f77f6"
 }

@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
+from evals.external_ctf import opencode_scored
 from evals.external_ctf.protocol import DEFAULT_PROTOCOL, canonical, digest, load_protocol
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -64,9 +65,7 @@ def test_six_arm_pass4_universe_preserves_official_unavailable_rows() -> None:
     assert [row["matrix_artifact_id"] for row in slots] == [
         row["artifact_id"] for row in matrix["arms"]
     ]
-    assert [row["matrix_arm_sha256"] for row in slots] == [
-        digest(row) for row in matrix["arms"]
-    ]
+    assert [row["matrix_arm_sha256"] for row in slots] == [digest(row) for row in matrix["arms"]]
     assert value["pass_k"] == 4
     assert value["attempts"] == [1, 2, 3, 4]
 
@@ -241,6 +240,27 @@ def test_results_are_native_sealed_and_benchmark_separated() -> None:
     assert reporting["infrastructure_invalid_attempt_makes_arm_task_pass_at_4_incomplete_not_zero"]
     assert reporting["prompts_traces_flags_answers_private_scores_and_secrets_included"] is False
     assert reporting["results_remain_sealed_until_a_complete_predeclared_matched_aggregate"] is True
+
+
+def test_scored_adapter_is_exact_and_truthfully_held_for_remote_qualification() -> None:
+    value = _load()["scored_adapter"]
+
+    assert value["status"] == "code_complete_remote_credential_isolation_qualification_pending"
+    assert value["shared_source_sha256"] == opencode_scored.source_sha256()
+    assert value["source_files"] == {
+        path: _sha256(ROOT / path)
+        for path in (
+            "evals/external_ctf/opencode_scored.py",
+            "evals/external_ctf/external_proxy.py",
+            "evals/fleet/fixed_proxy.py",
+        )
+    }
+    assert value["proxy_image"] == opencode_scored.PROXY_IMAGE
+    assert value["native_grading_only"] is True
+    assert value["gpt_scoring_permitted"] is False
+    assert value["credentials_live_only_in_fixed_proxy"] is True
+    assert value["benchmark_containers_receive_provider_credentials"] is False
+    assert value["credential_isolation_receipt_sha256"] is None
 
 
 def test_template_self_digest_is_canonical() -> None:

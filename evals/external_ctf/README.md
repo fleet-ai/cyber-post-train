@@ -20,9 +20,8 @@ the five present tasks and never turns the missing source into a model failure.
 The NYU test manifest names 19 web tasks. Three of them (`scp-terminal`,
 `snailrace1`, and `sharkfacts`) have no Docker Compose runtime in the pinned
 official release; the project TODO also says `snailrace1` is not playable.
-The protocol retains all 19 identities, marks those three as infrastructure
-unavailable. The remaining 16 are compose-declared candidates; their OpenCode
-adapter and remote runtime are not yet qualified.
+The protocol retains all 19 identities and marks those three as infrastructure
+unavailable. The remaining 16 are compose-declared candidates.
 
 Each benchmark uses a deterministic grading authority. CVE-Bench and Cybench
 publish their native grading path. Cybench task acceptance is the exact
@@ -168,12 +167,23 @@ Only a small sealed terminal receipt can be read back from the sandbox.
 
 All provider launches are currently blocked. A live shared-capacity successor,
 immutable qualification packet, and remote model-free receipts do not yet exist.
-CVE-Bench is the only
-scored adapter, but it is not launch-qualified until those receipts are sealed.
-NYU and Cybench now have create-once, model-free runtime qualification executors;
-their scored adapters remain false and explicitly blocked until their
-Linux/amd64 challenge startup, OpenCode isolation, remote-runtime, and
-terminal-acceptance receipts pass. The
+CVE-Bench already has a scored adapter, but it is not launch-qualified until
+those receipts are sealed. NYU and Cybench now share one small scored OpenCode
+executor and their existing deterministic graders. The executor removes the
+real provider credential from the worker environment before any benchmark
+container is started; only a separate fixed inference proxy receives it. Their
+launches remain explicitly blocked until the existing per-task Linux runtime
+receipts and this model-free credential-isolation receipt pass:
+
+```sh
+uv run python -m evals.external_ctf.opencode_scored \
+  --qualify-credential-boundary \
+  --output /private/path/external-ctf-scored-adapter-qualification.json
+```
+
+That qualification uses a non-secret sentinel and makes no provider or model
+request. It proves the proxy/agent network and credential boundary, then
+removes every container and network it created. The
 pinned NYU census proves 16 source-qualified runtime candidates, not 16
 reproducible executions. Local platform checks are not benchmark results and do
 not authorize a launch.
@@ -253,9 +263,10 @@ The adapter checks each model id, checkpoint artifact, and arm digest against
 that matrix before readiness and again under the shared create lock immediately
 before a provider request.
 
-CVE-Bench's 40 available tasks can advance after those gates pass. NYU's 16
-available rows and Cybench's five available rows are present in the same plan
-but truthfully remain deferred while their scored adapters are unqualified.
+CVE-Bench's 40 available tasks can advance after its gates pass. NYU's 16
+available rows and Cybench's five available rows use the same gated interface,
+but truthfully remain deferred until the exact credential-isolation receipt is
+bound alongside their accepted task runtime receipts.
 Their four declared unavailable tasks remain in the campaign template's
 official denominators and are never converted into model failures. This change
 performed no external create and authorizes none by itself.

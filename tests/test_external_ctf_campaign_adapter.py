@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import base64
 import copy
 import json
+import lzma
 from pathlib import Path
 
 import pytest
 
 from evals import campaign
-from evals.external_ctf import campaign_adapter
+from evals.external_ctf import campaign_adapter, opencode_scored
 from evals.external_ctf.protocol import DEFAULT_PROTOCOL, canonical, file_digest, load_protocol
 
 SHA = "sha256:" + "1" * 64
@@ -61,6 +63,27 @@ def _reference(path: Path, receipt: str) -> dict:
     }
 
 
+def _adapter_receipt(protocol: dict) -> dict:
+    unsigned = {
+        "schema": "external_ctf_scored_adapter_qualification_v1",
+        "protocol_sha256": protocol["protocol_sha256"],
+        "adapter_source_sha256": opencode_scored.source_sha256(),
+        "status": "qualified",
+        "platform": "linux/amd64",
+        "proxy_image": opencode_scored.PROXY_IMAGE,
+        "harness_image_id": protocol["benchmarks"]["nyu_ctf_web_test"]["harness"]["image_id"],
+        "provider_calls": 0,
+        "model_requests": 0,
+        "provider_credential_location": "fixed_proxy_only",
+        "agent_provider_credential_present": False,
+        "challenge_provider_credential_present": False,
+        "agent_docker_socket_present": False,
+        "cleanup_verified": True,
+        "contains_credentials_prompts_flags_solutions_traces_or_scores": False,
+    }
+    return campaign_adapter._signed(unsigned)  # noqa: SLF001
+
+
 def test_binding_loader_accepts_formatted_protocol_and_exact_signed_evidence(
     tmp_path: Path,
 ) -> None:
@@ -69,6 +92,9 @@ def test_binding_loader_accepts_formatted_protocol_and_exact_signed_evidence(
     retry = _write_signed(retry_path, {"schema": "test_retry"})
     qualification_path = tmp_path / "qualification.json"
     qualification = _write_signed(qualification_path, {"schema": "test_qualification"})
+    adapter_path = tmp_path / "scored-adapter.json"
+    adapter = _adapter_receipt(protocol)
+    adapter_path.write_bytes(canonical(adapter) + b"\n")
     summary_references = {}
     for benchmark in campaign_adapter.BENCHMARKS:
         summary_path = tmp_path / f"{benchmark}.json"
@@ -112,13 +138,12 @@ def test_binding_loader_accepts_formatted_protocol_and_exact_signed_evidence(
         bindings_path,
         {
             "schema": campaign_adapter.SCHEMA,
-            "matrix": _reference(
-                MATRIX, "sha256:" + json.loads(MATRIX.read_bytes())["sha256"]
-            ),
+            "matrix": _reference(MATRIX, "sha256:" + json.loads(MATRIX.read_bytes())["sha256"]),
             "budgets_sha256": "sha256:" + "2" * 64,
             "protocol": _reference(DEFAULT_PROTOCOL, protocol["protocol_sha256"]),
             "web_retry_execution": _reference(retry_path, retry["receipt_sha256"]),
             "qualification_packet": _reference(qualification_path, qualification["receipt_sha256"]),
+            "scored_adapter_qualification": _reference(adapter_path, adapter["receipt_sha256"]),
             "qualification_summaries": summary_references,
             "harness_receipt_sha256": {
                 benchmark: "sha256:" + "4" * 64 for benchmark in campaign_adapter.BENCHMARKS
@@ -157,12 +182,7 @@ def test_rendered_config_is_exact_six_arm_pass4_native_campaign(monkeypatch) -> 
     assert all(row["score_driver"]["provider"] == "local" for row in config["benchmarks"])
     assert all(row["rollout_driver"]["provider"] == "tensorlake" for row in config["benchmarks"])
     assert "gpt" not in json.dumps(config).lower()
-    assert sum(target["canary"] for target in plan["targets"]) == 6 * 4
-    assert not any(
-        target["canary"]
-        for target in plan["targets"]
-        if target["identity"]["benchmark"]["id"] != "cvebench_zero_day"
-    )
+    assert sum(target["canary"] for target in plan["targets"]) == 3 * 6 * 4
 
 
 def test_remote_names_bind_model_attempt_and_experiment_key(monkeypatch) -> None:
@@ -219,7 +239,7 @@ def test_packet_rejects_driver_source_drift(tmp_path: Path, monkeypatch) -> None
         campaign_adapter._packet(packet_path, bindings, protocol)  # noqa: SLF001
 
 
-def test_current_adapter_gates_enable_cve_and_hold_nyu_and_cybench() -> None:
+def test_current_adapter_gates_require_shared_credential_isolation_receipt() -> None:
     protocol = load_protocol()
     summaries = {}
     cells = {}
@@ -243,12 +263,16 @@ def test_current_adapter_gates_enable_cve_and_hold_nyu_and_cybench() -> None:
     assert campaign_adapter._qualification_ready(  # noqa: SLF001
         bindings, protocol, cells["cvebench_zero_day"]
     )
-    assert not campaign_adapter._qualification_ready(  # noqa: SLF001
-        bindings, protocol, cells["nyu_ctf_web_test"]
-    )
-    assert not campaign_adapter._qualification_ready(  # noqa: SLF001
-        bindings, protocol, cells["cybench_web"]
-    )
+    for benchmark in ("nyu_ctf_web_test", "cybench_web"):
+        assert not campaign_adapter._qualification_ready(  # noqa: SLF001
+            bindings, protocol, cells[benchmark]
+        )
+
+    bindings["scored_adapter_qualification_loaded"] = _adapter_receipt(protocol)
+    for benchmark in ("nyu_ctf_web_test", "cybench_web"):
+        assert campaign_adapter._qualification_ready(  # noqa: SLF001
+            bindings, protocol, cells[benchmark]
+        )
 
 
 def test_campaign_result_is_exact_and_native() -> None:
@@ -312,3 +336,24 @@ def test_capacity_gate_honors_shared_project_and_campaign_limits(
     context: dict, canary: bool, expected: bool
 ) -> None:
     assert campaign_adapter._capacity_ready(context, {"canary": canary}) is expected  # noqa: SLF001
+
+
+def test_scored_bundle_reuses_the_reviewed_runtime_and_fixed_proxy_sources() -> None:
+    protocol = load_protocol()
+    files = json.loads(
+        lzma.decompress(
+            campaign_adapter._scored_bundle(protocol, "nyu_ctf_web_test")  # noqa: SLF001
+        )
+    )
+
+    expected = {
+        "evals/external_ctf/opencode_scored.py": ROOT / "evals/external_ctf/opencode_scored.py",
+        "evals/external_ctf/external_proxy.py": ROOT / "evals/external_ctf/external_proxy.py",
+        "evals/external_ctf/fixed_proxy.py": ROOT / "evals/fleet/fixed_proxy.py",
+    }
+    for relative, path in expected.items():
+        assert base64.b64decode(files[relative], validate=True) == path.read_bytes()
+
+
+def test_campaign_worker_bootstrap_is_valid_python() -> None:
+    compile(campaign_adapter._CAMPAIGN_WORKER_BOOTSTRAP, "<campaign-bootstrap>", "exec")  # noqa: SLF001
