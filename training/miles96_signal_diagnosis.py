@@ -21,7 +21,7 @@ VERIFIER_VERSION_ID = "9356b7ca-43b4-4926-a871-d9a95b41f6e5"
 MODEL_REVISION = "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
 SERVED_MODEL = "qwen/chris-q38-base-pass4-v1"
 RELEASE_SHA256 = "sha256:1c019cd9fa9906dc4453f1e80766c0b10fc984f18d3c9e94bcb8b5a9b3814583"
-JOB_NAME = "chris-q38-m96-signal-a2-diagnosis-a1"
+JOB_NAME = "chris-q38-m96-signal-a2-diagnosis-a2"
 CM_NAME = JOB_NAME + "-code"
 HEADER_JOB_NAME = "chris-q38-m96-signal-a2-header-a1"
 HEADER_CM_NAME = HEADER_JOB_NAME + "-code"
@@ -57,6 +57,16 @@ def _write_once(path: Path, value: dict[str, Any]) -> None:
         os.fsync(stream.fileno())
 
 
+def _terminal_digests_match(terminal: dict[str, Any]) -> bool:
+    plain_body = {
+        key: value for key, value in terminal.items() if key not in {"sha256", "receipt_sha256"}
+    }
+    receipt_body = {key: value for key, value in terminal.items() if key != "receipt_sha256"}
+    return terminal.get("sha256") == digest(plain_body, prefix=False) and terminal.get(
+        "receipt_sha256"
+    ) == digest(receipt_body)
+
+
 def header_probe(source: Path = SOURCE) -> dict[str, Any]:
     """Report only identity booleans for the preserved campaign terminal."""
     terminal_path = source / "EVAL_TERMINAL.json"
@@ -69,8 +79,7 @@ def header_probe(source: Path = SOURCE) -> dict[str, Any]:
         "source_job_uid": SOURCE_JOB_UID,
         "terminal_file_sha256": "sha256:" + hashlib.sha256(terminal_path.read_bytes()).hexdigest(),
         "schema_matches": terminal.get("schema") == "fleet_eval_campaign_terminal_v1",
-        "self_digest_matches": terminal.get("sha256")
-        == digest({k: v for k, v in terminal.items() if k != "sha256"}, prefix=False),
+        "self_digest_matches": _terminal_digests_match(terminal),
         "plan_matches": terminal.get("plan_sha256") == PLAN_SHA256,
         "terminal_fields_included": False,
         "reward_or_trace_content_read": False,
@@ -97,8 +106,7 @@ def diagnose(source: Path = SOURCE) -> dict[str, Any]:
     terminal = _read(source / "EVAL_TERMINAL.json")
     if (
         terminal.get("schema") != "fleet_eval_campaign_terminal_v1"
-        or terminal.get("sha256")
-        != digest({k: v for k, v in terminal.items() if k != "sha256"}, prefix=False)
+        or not _terminal_digests_match(terminal)
         or terminal.get("plan_sha256") != PLAN_SHA256
     ):
         raise ValueError("evaluation terminal differs")
@@ -280,7 +288,7 @@ def packet() -> dict[str, Any]:
         ],
     }
     body = {
-        "schema": "cyber_qwen38_miles96_signal_diagnosis_packet_v1",
+        "schema": "cyber_qwen38_miles96_signal_diagnosis_packet_v2",
         "job_name": JOB_NAME,
         "config_map_name": CM_NAME,
         "source_job_uid": SOURCE_JOB_UID,

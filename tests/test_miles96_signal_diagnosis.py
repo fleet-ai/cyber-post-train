@@ -35,10 +35,9 @@ def _output(root: Path) -> tuple[Path, str]:
         "routes": {"base": {"results": results}},
         "summary": {"total": 8, "by_state": {"retry_review": 8}},
     }
-    _write(
-        source / "EVAL_TERMINAL.json",
-        {**terminal_body, "sha256": diagnosis.digest(terminal_body, prefix=False)},
-    )
+    terminal = {**terminal_body, "sha256": diagnosis.digest(terminal_body, prefix=False)}
+    terminal["receipt_sha256"] = diagnosis.digest(terminal)
+    _write(source / "EVAL_TERMINAL.json", terminal)
     for index in range(8):
         attempt = attempts / str(index)
         attempt.mkdir()
@@ -129,6 +128,36 @@ def test_header_probe_emits_only_identity_booleans(tmp_path: Path) -> None:
         "terminal_fields_included",
         "terminal_file_sha256",
     }
+
+
+def test_diagnosis_rejects_either_tampered_terminal_digest(tmp_path: Path, monkeypatch) -> None:
+    source, release_sha256 = _output(tmp_path)
+    monkeypatch.setattr(diagnosis, "RECEIPT", source / "SIGNAL_DIAGNOSIS.json")
+    monkeypatch.setattr(diagnosis, "RELEASE_SHA256", release_sha256)
+    terminal_path = source / "EVAL_TERMINAL.json"
+    terminal = json.loads(terminal_path.read_text())
+    terminal["sha256"] = "0" * 64
+    _write(terminal_path, terminal)
+    try:
+        diagnosis.diagnose(source)
+    except ValueError as exc:
+        assert str(exc) == "evaluation terminal differs"
+    else:
+        raise AssertionError("plain terminal digest tampering was accepted")
+
+    terminal = json.loads(terminal_path.read_text())
+    terminal["sha256"] = diagnosis.digest(
+        {key: value for key, value in terminal.items() if key not in {"sha256", "receipt_sha256"}},
+        prefix=False,
+    )
+    terminal["receipt_sha256"] = "sha256:" + "0" * 64
+    _write(terminal_path, terminal)
+    try:
+        diagnosis.diagnose(source)
+    except ValueError as exc:
+        assert str(exc) == "evaluation terminal differs"
+    else:
+        raise AssertionError("outer terminal receipt tampering was accepted")
 
 
 def test_header_packet_has_silent_zero_gpu_root_job() -> None:
