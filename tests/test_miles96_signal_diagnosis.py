@@ -175,18 +175,38 @@ def test_header_packet_has_silent_zero_gpu_root_job() -> None:
 
 def test_predicate_probe_emits_only_aggregate_counts(tmp_path: Path, monkeypatch) -> None:
     source, release_sha256 = _output(tmp_path)
-    monkeypatch.setattr(diagnosis, "PREDICATE_RECEIPT", source / "SIGNAL_PREDICATE_PROBE.json")
+    monkeypatch.setattr(diagnosis, "PREDICATE_RECEIPT", source / "SIGNAL_QUALIFICATION_PROBE.json")
     monkeypatch.setattr(diagnosis, "RELEASE_SHA256", release_sha256)
+    for reward_path in (source / "attempts").glob("*/reward-result.json"):
+        reward = json.loads(reward_path.read_text())
+        reward.pop("direct_authority_attestation")
+        _write(reward_path, reward)
     result = json.loads((source / "attempts/0/result.json").read_text())
-    result["agent_termination"] = "not-completed"
+    result["agent_termination"] = "output_limit"
     _write(source / "attempts/0/result.json", result)
     receipt = diagnosis.predicate_probe(source)
     assert receipt["complete_contract_count"] == 7
     assert receipt["failed_predicate_counts"]["completed_termination"] == 1
     assert sum(receipt["failed_predicate_counts"].values()) == 1
+    assert receipt["termination_category_counts"] == {
+        "completed": 7,
+        "execution_timeout": 0,
+        "process_error": 0,
+        "malformed_trace": 0,
+        "harness_error": 0,
+        "missing_terminal_step": 0,
+        "incomplete_terminal_step": 0,
+        "output_limit": 1,
+        "other": 0,
+    }
+    assert receipt["finite_reward_count"] == 8
+    assert receipt["distinct_reward_count"] == 2
+    assert receipt["reward_multiplicities"] == [4, 4]
+    assert receipt["reward_variation"] is True
     assert receipt["identities_or_values_included"] is False
     assert receipt["prompts_traces_flags_answers_rewards_or_scores_included"] is False
     assert "execution-" not in json.dumps(receipt)
+    assert "direct_authority_attestation" not in json.dumps(receipt)
 
 
 def test_predicate_packet_has_silent_zero_gpu_root_job() -> None:

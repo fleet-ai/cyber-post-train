@@ -14,7 +14,7 @@ from typing import Any
 SOURCE = Path("/mnt/sfs/jobs/chris-q38-m96-signal-a2")
 RECEIPT = SOURCE / "SIGNAL_DIAGNOSIS.json"
 HEADER_RECEIPT = SOURCE / "SIGNAL_HEADER_PROBE.json"
-PREDICATE_RECEIPT = SOURCE / "SIGNAL_PREDICATE_PROBE.json"
+PREDICATE_RECEIPT = SOURCE / "SIGNAL_QUALIFICATION_PROBE.json"
 SOURCE_JOB_UID = "d3388003-61ce-4b5d-95cf-5b85d7e6ac8b"
 PLAN_SHA256 = "a4cca0bc9af5f8cd47d572c02bf7d513759a8b7c7ee4e912aada087c439261c0"
 TASK_VERSION_ID = "0920e798-c7e7-4da6-9d5e-ebeba45ec05a"
@@ -26,7 +26,7 @@ JOB_NAME = "chris-q38-m96-signal-a2-diagnosis-a2"
 CM_NAME = JOB_NAME + "-code"
 HEADER_JOB_NAME = "chris-q38-m96-signal-a2-header-a1"
 HEADER_CM_NAME = HEADER_JOB_NAME + "-code"
-PREDICATE_JOB_NAME = "chris-q38-m96-signal-a2-diagnosis-a3"
+PREDICATE_JOB_NAME = "chris-q38-m96-signal-a2-diagnosis-a4"
 PREDICATE_CM_NAME = PREDICATE_JOB_NAME + "-code"
 NAMESPACE = "fleet-train-jobs"
 IMAGE = (
@@ -211,7 +211,7 @@ def diagnose(source: Path = SOURCE) -> dict[str, Any]:
 
 
 def predicate_probe(source: Path = SOURCE) -> dict[str, Any]:
-    """Report only aggregate pass/fail counts for the exact attempt contract."""
+    """Report content-free classic-authority, termination, and reward aggregates."""
     receipt_path = source / PREDICATE_RECEIPT.name
     if source.is_symlink() or not source.is_dir() or receipt_path.exists():
         raise ValueError("source output is absent, unsafe, or already probed")
@@ -236,20 +236,35 @@ def predicate_probe(source: Path = SOURCE) -> dict[str, Any]:
     if len(attempts) != 8 or any(path.is_symlink() or not path.is_dir() for path in attempts):
         raise ValueError("bounded campaign attempt count differs")
     failures: collections.Counter[str] = collections.Counter()
+    termination_counts: collections.Counter[str] = collections.Counter()
+    rewards: list[float] = []
     complete = 0
+    termination_vocabulary = {
+        "completed",
+        "execution_timeout",
+        "process_error",
+        "malformed_trace",
+        "harness_error",
+        "missing_terminal_step",
+        "incomplete_terminal_step",
+        "output_limit",
+    }
     for attempt in attempts:
         result = _read(attempt / "result.json")
         reward = _read(attempt / "reward-result.json")
         binding = _read(attempt / "binding.json")
         cleanup = _read(attempt / "cleanup.json")
         score = reward.get("reward")
-        attestation = reward.get("direct_authority_attestation") or {}
-        context = attestation.get("context") or {}
         execution_id = reward.get("verifier_execution_id")
+        termination = result.get("agent_termination")
+        termination_counts[termination if termination in termination_vocabulary else "other"] += 1
+        finite_reward = (
+            not isinstance(score, bool)
+            and isinstance(score, (int, float))
+            and math.isfinite(float(score))
+            and 0.0 <= float(score) <= 1.0
+        )
         checks = {
-            "authority_task_identity": context.get("task_version_id") == TASK_VERSION_ID,
-            "authority_verifier_identity": context.get("verifier_version_id")
-            == VERIFIER_VERSION_ID,
             "binding_model_revision": binding.get("model", {}).get("revision") == MODEL_REVISION,
             "binding_served_model": binding.get("model", {}).get("session_model") == SERVED_MODEL,
             "binding_task_identity": binding.get("task", {}).get("version_id") == TASK_VERSION_ID,
@@ -264,26 +279,25 @@ def predicate_probe(source: Path = SOURCE) -> dict[str, Any]:
             },
             "execution_identity_equal": result.get("verifier_execution_id") == execution_id,
             "execution_identity_present": isinstance(execution_id, str) and bool(execution_id),
-            "finite_unit_reward": not isinstance(score, bool)
-            and isinstance(score, (int, float))
-            and math.isfinite(float(score))
-            and 0.0 <= float(score) <= 1.0,
+            "finite_unit_reward": finite_reward,
             "result_reward_equal": result.get("score") == score,
             "result_task_identity": result.get("task_version_id") == TASK_VERSION_ID,
         }
         failures.update(key for key, passed in checks.items() if not passed)
         complete += all(checks.values())
+        if finite_reward:
+            rewards.append(float(score))
+
+    reward_counts = collections.Counter(rewards)
 
     body = {
-        "schema": "cyber_qwen38_miles96_signal_predicate_probe_v1",
+        "schema": "cyber_qwen38_miles96_signal_qualification_probe_v1",
         "source_job_uid": SOURCE_JOB_UID,
         "episode_count": 8,
         "complete_contract_count": complete,
         "failed_predicate_counts": {
             key: failures[key]
             for key in (
-                "authority_task_identity",
-                "authority_verifier_identity",
                 "binding_model_revision",
                 "binding_served_model",
                 "binding_task_identity",
@@ -297,6 +311,24 @@ def predicate_probe(source: Path = SOURCE) -> dict[str, Any]:
                 "result_task_identity",
             )
         },
+        "termination_category_counts": {
+            key: termination_counts[key]
+            for key in (
+                "completed",
+                "execution_timeout",
+                "process_error",
+                "malformed_trace",
+                "harness_error",
+                "missing_terminal_step",
+                "incomplete_terminal_step",
+                "output_limit",
+                "other",
+            )
+        },
+        "finite_reward_count": len(rewards),
+        "distinct_reward_count": len(reward_counts),
+        "reward_multiplicities": sorted(reward_counts.values()),
+        "reward_variation": len(reward_counts) >= 2,
         "all_instances_released": True,
         "release_receipt_sha256": RELEASE_SHA256,
         "identities_or_values_included": False,
@@ -514,7 +546,7 @@ def predicate_packet() -> dict[str, Any]:
     job["spec"]["template"]["spec"]["containers"][0]["command"].append("--predicate-probe")
     job["spec"]["template"]["spec"]["volumes"][0]["configMap"]["name"] = PREDICATE_CM_NAME
     body = {
-        "schema": "cyber_qwen38_miles96_signal_predicate_packet_v1",
+        "schema": "cyber_qwen38_miles96_signal_qualification_packet_v2",
         "job_name": PREDICATE_JOB_NAME,
         "config_map_name": PREDICATE_CM_NAME,
         "source_job_uid": SOURCE_JOB_UID,
