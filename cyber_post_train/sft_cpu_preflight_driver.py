@@ -35,6 +35,14 @@ MAX_CHUNKS = 32
 MAX_CHUNK_BYTES = 48_000
 MAX_FILES = 160
 MAX_UNCOMPRESSED_BYTES = 8_000_000
+MAX_PEAK_MEMORY_BYTES = 48 * 1024**3
+PEAK_MEMORY_SOURCE = "cgroup_v2_memory.peak"
+QWEN38_262K_4NODE_RUNTIME_VARIANT = "qwen38_sft_262k_4node_v1"
+QWEN38_262K_4NODE_RUN_NAME = "chris-q38-t3k262-4n-can-v1"
+QWEN38_262K_4NODE_PLAN_SHA256 = "3f96ba9d9233a969e47110f70ccf52c0e72d7c2f01d1ab5ce09678d982507a7e"
+QWEN38_262K_4NODE_REQUEST_SHA256 = (
+    "1679d4699b36bbd6e687ae9e84f6c0d6288620583bdb7a857ec873b87b908470"
+)
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
@@ -44,6 +52,16 @@ def canonical_json(value: object) -> bytes:
 
 def digest(value: object) -> str:
     return hashlib.sha256(canonical_json(value)).hexdigest()
+
+
+def is_qwen38_262k_4node_candidate(plan: dict, request: dict) -> bool:
+    return (
+        plan.get("runtime_variant") == QWEN38_262K_4NODE_RUNTIME_VARIANT
+        and plan.get("run_name") == QWEN38_262K_4NODE_RUN_NAME
+        and request.get("name") == QWEN38_262K_4NODE_RUN_NAME
+        and digest(plan) == QWEN38_262K_4NODE_PLAN_SHA256
+        and digest(request) == QWEN38_262K_4NODE_REQUEST_SHA256
+    )
 
 
 def _jobs_path(value: str, expected_name: str) -> Path:
@@ -159,6 +177,53 @@ def _write_tree(root: Path, files: dict[str, str]) -> None:
             handle.write(text.encode())
 
 
+def _cgroup_v2_memory_peak_path(
+    cgroup_file: Path = Path("/proc/self/cgroup"),
+    cgroup_root: Path = Path("/sys/fs/cgroup"),
+) -> Path:
+    # v1 max_usage_in_bytes and process RSS/time(1) are different scopes.  An
+    # exact 262K receipt therefore fails closed instead of mixing measurements.
+    try:
+        raw = cgroup_file.read_bytes()
+    except OSError as exc:
+        raise ValueError("cgroup v2 peak-memory evidence is unavailable") from exc
+    if len(raw) > 4096:
+        raise ValueError("cgroup v2 membership is malformed")
+    try:
+        lines = raw.decode("ascii").splitlines()
+    except UnicodeDecodeError as exc:
+        raise ValueError("cgroup v2 membership is malformed") from exc
+    memberships = []
+    for line in lines:
+        fields = line.split(":", 2)
+        if len(fields) == 3 and fields[:2] == ["0", ""]:
+            memberships.append(fields[2])
+    if len(memberships) != 1:
+        raise ValueError("cgroup v2 peak-memory evidence is unavailable")
+    membership = PurePosixPath(memberships[0])
+    if (
+        not membership.is_absolute()
+        or ".." in membership.parts
+        or str(membership) != memberships[0]
+    ):
+        raise ValueError("cgroup v2 membership is malformed")
+    return cgroup_root.joinpath(*membership.parts[1:], "memory.peak")
+
+
+def _cgroup_v2_peak_memory_bytes(path: Path | None = None) -> int:
+    path = _cgroup_v2_memory_peak_path() if path is None else path
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise ValueError("cgroup v2 peak-memory evidence is unavailable") from exc
+    if len(raw) > 32 or re.fullmatch(rb"[0-9]+\n?", raw) is None:
+        raise ValueError("cgroup v2 peak-memory evidence is malformed")
+    value = int(raw)
+    if not 0 < value <= MAX_PEAK_MEMORY_BYTES:
+        raise ValueError("cgroup v2 peak-memory evidence is outside its bound")
+    return value
+
+
 def run_preflight() -> dict:
     if (
         os.environ.get("CUDA_VISIBLE_DEVICES") != ""
@@ -217,8 +282,14 @@ def run_preflight() -> dict:
         or native.get("request_sha256") != manifest["request_sha256"]
     ):
         raise ValueError("native dense-SFT CPU preflight receipt drifted")
-    receipt = {**native, "sha256": digest(native)}
-    return {
+    peak_memory_bytes = None
+    receipt_body = dict(native)
+    if is_qwen38_262k_4node_candidate(plan, request):
+        peak_memory_bytes = _cgroup_v2_peak_memory_bytes()
+        receipt_body["peak_memory_bytes"] = peak_memory_bytes
+        receipt_body["peak_memory_source"] = PEAK_MEMORY_SOURCE
+    receipt = {**receipt_body, "sha256": digest(receipt_body)}
+    envelope = {
         "schema": ENVELOPE_SCHEMA,
         "status": "passed",
         "gpus": 0,
@@ -230,6 +301,10 @@ def run_preflight() -> dict:
         "request_sha256": manifest["request_sha256"],
         "preflight": receipt,
     }
+    if peak_memory_bytes is not None:
+        envelope["peak_memory_bytes"] = peak_memory_bytes
+        envelope["peak_memory_source"] = PEAK_MEMORY_SOURCE
+    return envelope
 
 
 def main() -> None:

@@ -43,7 +43,10 @@ from .sft_cpu_preflight_driver import (
     LOG_PREFIX,
     MAX_CHUNK_BYTES,
     MAX_CHUNKS,
+    MAX_PEAK_MEMORY_BYTES,
+    PEAK_MEMORY_SOURCE,
     PREFLIGHT_SCHEMA,
+    is_qwen38_262k_4node_candidate,
 )
 
 JOB_ROLE = "sft-cpu-preflight"
@@ -210,6 +213,7 @@ def _render(
     plan, request, prepared, blob, source, environment = _bundle(
         directory, source_commit=source_commit
     )
+    memory_request = "16Gi" if is_qwen38_262k_4node_candidate(plan, request) else "32Gi"
     name = job_name(request, attempt)
     driver_sha256 = environment[ENV_DRIVER_SHA256]
     annotations = {
@@ -281,7 +285,7 @@ def _render(
                             "resources": {
                                 "requests": {
                                     "cpu": "4",
-                                    "memory": "32Gi",
+                                    "memory": memory_request,
                                     "ephemeral-storage": "2Gi",
                                 },
                                 "limits": {
@@ -459,6 +463,9 @@ def validate_sft_cpu_preflight_job_node_fit(
     package: SftCpuPreflightJobPackage, inventory: dict
 ) -> dict:
     validate_sft_cpu_preflight_job_package(package)
+    requests = package.job["spec"]["template"]["spec"]["containers"][0]["resources"]["requests"]
+    required_cpu = _cpu_millicores(requests["cpu"])
+    required_memory = _memory_bytes(requests["memory"])
     if inventory.get("kind") != "List" or not isinstance(inventory.get("items"), list):
         raise ValueError("CPU node inventory is incomplete")
     eligible = []
@@ -481,7 +488,7 @@ def validate_sft_cpu_preflight_job_node_fit(
             and ready
         ):
             eligible.append((node["metadata"].get("name"), cpu, memory))
-    fitting = [item for item in eligible if item[1] >= 4000 and item[2] >= 32 * 1024**3]
+    fitting = [item for item in eligible if item[1] >= required_cpu and item[2] >= required_memory]
     if not fitting:
         raise ValueError("dense-SFT CPU-preflight Job cannot fit a Ready eligible CPU node")
     return {"eligible_nodes": len(eligible), "fitting_nodes": len(fitting)}
@@ -613,10 +620,36 @@ def collect_sft_cpu_preflight_receipt(
         or not isinstance(envelope.get("observed_at_unix"), (int, float))
     ):
         raise ValueError("dense-SFT CPU-preflight observation identity drifted")
+    expects_peak_memory = is_qwen38_262k_4node_candidate(package.plan, package.request)
+    peak_memory_bytes = envelope.get("peak_memory_bytes")
+    peak_memory_source = envelope.get("peak_memory_source")
+    if expects_peak_memory:
+        memory_limit = _memory_bytes(
+            package.job["spec"]["template"]["spec"]["containers"][0]["resources"]["limits"][
+                "memory"
+            ]
+        )
+        if (
+            type(peak_memory_bytes) is not int
+            or not 0 < peak_memory_bytes <= min(memory_limit, MAX_PEAK_MEMORY_BYTES)
+            or peak_memory_source != PEAK_MEMORY_SOURCE
+        ):
+            raise ValueError("dense-SFT CPU-preflight peak-memory evidence drifted")
+    elif "peak_memory_bytes" in envelope or "peak_memory_source" in envelope:
+        raise ValueError("dense-SFT CPU-preflight peak-memory evidence is unexpected")
     receipt = envelope.get("preflight")
     if not isinstance(receipt, dict):
         raise ValueError("dense-SFT CPU-preflight native receipt is missing")
     receipt_body = {key: value for key, value in receipt.items() if key != "sha256"}
+    if expects_peak_memory:
+        peak_receipt_drifted = (
+            receipt_body.get("peak_memory_bytes") != peak_memory_bytes
+            or receipt_body.get("peak_memory_source") != peak_memory_source
+        )
+    else:
+        peak_receipt_drifted = (
+            "peak_memory_bytes" in receipt_body or "peak_memory_source" in receipt_body
+        )
     if (
         receipt.get("sha256") != digest(receipt_body)
         or receipt_body.get("schema") != PREFLIGHT_SCHEMA
@@ -624,6 +657,7 @@ def collect_sft_cpu_preflight_receipt(
         or receipt_body.get("gpus") != 0
         or receipt_body.get("plan_sha256") != proof["plan_sha256"]
         or receipt_body.get("request_sha256") != proof["request_sha256"]
+        or peak_receipt_drifted
     ):
         raise ValueError("dense-SFT CPU-preflight native receipt failed its binding")
     return receipt

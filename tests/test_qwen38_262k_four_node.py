@@ -12,8 +12,23 @@ import pytest
 
 from cyber_post_train import cli
 from cyber_post_train.jobs import digest, validate_preview
-from cyber_post_train.sft_cpu_preflight_job import build_sft_cpu_preflight_job
+from cyber_post_train.sft_cpu_preflight_driver import (
+    LOG_PREFIX,
+    MAX_PEAK_MEMORY_BYTES,
+    PEAK_MEMORY_SOURCE,
+    QWEN38_262K_4NODE_PLAN_SHA256,
+    QWEN38_262K_4NODE_REQUEST_SHA256,
+    is_qwen38_262k_4node_candidate,
+)
+from cyber_post_train.sft_cpu_preflight_job import (
+    build_sft_cpu_preflight_job,
+    collect_sft_cpu_preflight_receipt,
+    validate_sft_cpu_preflight_job_node_fit,
+    validate_sft_cpu_preflight_job_package,
+    validate_sft_cpu_preflight_job_response,
+)
 from tests.test_direct_submit import manifest, preview
+from tests.test_sfs_output_job import completed_objects, node_inventory, service_account
 from training import sft_262k_4node_v1 as compiler
 from training import sft_262k_runtime as hooks
 from training import sft_runtime as base_runtime
@@ -28,6 +43,19 @@ HOOK_EVIDENCE = ROOT / "configs/qualification/qwen38-teacher3k-262k-v12-hook-ast
 def candidate():
     source = read_mapping(CONFIG)
     return compiler.compile_sft(source, relative_to=CONFIG.parent)
+
+
+@pytest.fixture(scope="module")
+def exact_preflight_package(tmp_path_factory):
+    plan = candidate()
+    request = compiler.job_request(plan)
+    prepared = tmp_path_factory.mktemp("qwen38-262k-cpu-preflight") / "prepared"
+    cli._prepare(prepared, plan, request)
+    return build_sft_cpu_preflight_job(
+        prepared,
+        source_commit="a" * 40,
+        attempt=1,
+    )
 
 
 def request_bundle(request):
@@ -100,12 +128,31 @@ def test_candidate_changes_only_reviewed_topology_and_create_once_identity():
         "required_standard_jobs_rail": hooks.STANDARD_JOBS_RAIL,
     }
     request = compiler.job_request(plan)
+    assert digest(plan) == QWEN38_262K_4NODE_PLAN_SHA256
+    assert digest(request) == QWEN38_262K_4NODE_REQUEST_SHA256
     assert (request["workers"], request["gpus_per_worker"]) == (4, 8)
     assert request["priority_class"] == "c1"
     assert request["failureAlerts"] is False
     assert request["requeueIfPreempted"] is False
     assert request["image"] == compiler.IMAGE
     assert request["run_dir"] == "/mnt/sfs/jobs/chris-q38-t3k262-4n-can-v1"
+
+
+def test_reduced_cpu_preflight_memory_requires_the_complete_frozen_identity():
+    plan = candidate()
+    request = compiler.job_request(plan)
+    assert is_qwen38_262k_4node_candidate(plan, request)
+
+    changed_plan = copy.deepcopy(plan)
+    changed_plan["recipe"]["max_steps"] += 1
+    assert changed_plan["runtime_variant"] == plan["runtime_variant"]
+    assert changed_plan["run_name"] == plan["run_name"]
+    assert not is_qwen38_262k_4node_candidate(changed_plan, request)
+
+    changed_request = copy.deepcopy(request)
+    changed_request["title"] += "-drifted"
+    assert changed_request["name"] == request["name"]
+    assert not is_qwen38_262k_4node_candidate(plan, changed_request)
 
 
 def test_candidate_scientific_or_gate_drift_fails_closed():
@@ -140,19 +187,114 @@ def test_candidate_allows_preview_and_zero_gpu_preflight_but_blocks_gpu_submit()
         cli._external_action_gate(plan, "submit")
 
 
-def test_candidate_zero_gpu_preflight_job_has_immediate_terminal_ttl(tmp_path):
-    plan = candidate()
-    request = compiler.job_request(plan)
-    prepared = tmp_path / "prepared"
-    cli._prepare(prepared, plan, request)
-    package = build_sft_cpu_preflight_job(
-        prepared,
-        source_commit="a" * 40,
-        attempt=1,
-    )
+def test_candidate_zero_gpu_preflight_job_has_immediate_terminal_ttl(exact_preflight_package):
+    package = exact_preflight_package
+    plan = package.plan
+    resources = package.job["spec"]["template"]["spec"]["containers"][0]["resources"]
+    assert resources["requests"]["memory"] == "16Gi"
+    assert resources["limits"]["memory"] == "48Gi"
     assert package.job["spec"]["ttlSecondsAfterFinished"] == 0
     assert "nvidia.com/gpu" not in json.dumps(package.job)
     assert plan["qualification"]["submission_gate"]["submission_authorized"] is False
+    assert (
+        validate_sft_cpu_preflight_job_node_fit(package, node_inventory(memory="16Gi"))[
+            "fitting_nodes"
+        ]
+        == 1
+    )
+    with pytest.raises(ValueError, match="cannot fit"):
+        validate_sft_cpu_preflight_job_node_fit(package, node_inventory(memory="15Gi"))
+
+
+@pytest.mark.parametrize(
+    ("resource_type", "value"),
+    [("requests", "15Gi"), ("limits", "47Gi")],
+)
+def test_candidate_server_response_rejects_memory_drift(
+    exact_preflight_package, resource_type, value
+):
+    actual = copy.deepcopy(exact_preflight_package.job)
+    actual["spec"]["template"]["spec"]["containers"][0]["resources"][resource_type]["memory"] = (
+        value
+    )
+    with pytest.raises(ValueError, match="differs from the reviewed manifest"):
+        validate_sft_cpu_preflight_job_response(
+            actual,
+            exact_preflight_package,
+            require_uid=False,
+        )
+
+
+def test_candidate_collects_strict_bounded_peak_memory_evidence(exact_preflight_package):
+    package = exact_preflight_package
+    peak_memory_bytes = 12 * 1024**3
+    body = {
+        "schema": "cyber_sft_cpu_preflight_v1",
+        "status": "passed",
+        "gpus": 0,
+        "plan_sha256": digest(package.plan),
+        "request_sha256": digest(package.request),
+        "checked": ["native_sources"],
+        "peak_memory_bytes": peak_memory_bytes,
+        "peak_memory_source": PEAK_MEMORY_SOURCE,
+    }
+    receipt = {**body, "sha256": digest(body)}
+    job, workloads, pods, _ = completed_objects(package, {})
+    job["spec"]["suspend"] = False
+    assignment = workloads["items"][0]["status"]["admission"]["podSetAssignments"][0]
+    requests = package.job["spec"]["template"]["spec"]["containers"][0]["resources"]["requests"]
+    assignment["resourceUsage"] = copy.deepcopy(requests)
+    assignment["flavors"] = {name: "cpu-head" for name in requests}
+    image_digest = package.request["image"].rsplit("@", 1)[-1]
+    pods["items"][0]["status"]["containerStatuses"][0]["imageID"] = (
+        "docker-pullable://registry/image@" + image_digest
+    )
+    proof = validate_sft_cpu_preflight_job_package(package)
+    envelope = {
+        "schema": "cyber_sft_cpu_preflight_observation_v1",
+        "status": "passed",
+        "gpus": 0,
+        "job_name": job["metadata"]["name"],
+        "observed_at_unix": 1.0,
+        "bundle_sha256": proof["bundle_sha256"],
+        "driver_sha256": proof["driver_sha256"],
+        "plan_sha256": proof["plan_sha256"],
+        "request_sha256": proof["request_sha256"],
+        "peak_memory_bytes": peak_memory_bytes,
+        "peak_memory_source": PEAK_MEMORY_SOURCE,
+        "preflight": receipt,
+    }
+
+    def collect(value):
+        logs = LOG_PREFIX + json.dumps(value, sort_keys=True, separators=(",", ":"))
+        return collect_sft_cpu_preflight_receipt(
+            package,
+            job,
+            workloads,
+            pods,
+            service_account(),
+            logs,
+        )
+
+    assert collect(envelope) == receipt
+    for invalid in (None, True, 0, MAX_PEAK_MEMORY_BYTES + 1):
+        changed = copy.deepcopy(envelope)
+        if invalid is None:
+            changed.pop("peak_memory_bytes")
+        else:
+            changed["peak_memory_bytes"] = invalid
+        with pytest.raises(ValueError, match="peak-memory evidence"):
+            collect(changed)
+    changed = copy.deepcopy(envelope)
+    changed_body = {key: value for key, value in changed["preflight"].items() if key != "sha256"}
+    changed_body["peak_memory_bytes"] += 1
+    changed["preflight"] = {**changed_body, "sha256": digest(changed_body)}
+    with pytest.raises(ValueError, match="native receipt failed its binding"):
+        collect(changed)
+    changed = copy.deepcopy(envelope)
+    changed["peak_memory_source"] = "process_rss"
+    with pytest.raises(ValueError, match="peak-memory evidence"):
+        collect(changed)
 
 
 def test_candidate_standard_jobs_rail_matches_runtime_watchdog():

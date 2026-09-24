@@ -66,7 +66,10 @@ def test_package_is_exact_alert_off_c1_q1_zero_gpu_read_only(package):
         "readOnly": True,
     }
     assert pod["volumes"][0]["persistentVolumeClaim"]["readOnly"] is True
-    assert "nvidia.com/gpu" not in json.dumps(pod["containers"][0]["resources"])
+    resources = pod["containers"][0]["resources"]
+    assert resources["requests"]["memory"] == "32Gi"
+    assert resources["limits"]["memory"] == "48Gi"
+    assert "nvidia.com/gpu" not in json.dumps(resources)
     assert "envFrom" not in pod["containers"][0]
     assert "wandb-api" not in json.dumps(job)
     assert proof["source_commit"] == SOURCE_COMMIT
@@ -119,6 +122,35 @@ def test_driver_output_absence_fails_closed_on_symlink_and_inspection_error(tmp_
         driver._require_output_absent(target)
 
 
+def test_driver_reads_only_bounded_cgroup_v2_peak_memory(tmp_path):
+    cgroup = tmp_path / "cgroup"
+    cgroup.write_text("0::/kubepods/pod/container\n")
+    assert driver._cgroup_v2_memory_peak_path(cgroup, tmp_path) == (
+        tmp_path / "kubepods/pod/container/memory.peak"
+    )
+    cgroup.write_text("11:memory:/kubepods/pod/container\n")
+    with pytest.raises(ValueError, match="unavailable"):
+        driver._cgroup_v2_memory_peak_path(cgroup, tmp_path)
+
+    peak = tmp_path / "memory.peak"
+    peak.write_text("123456789\n")
+    assert driver._cgroup_v2_peak_memory_bytes(peak) == 123456789
+
+    for malformed in (
+        "",
+        "max\n",
+        "-1\n",
+        "0\n",
+        f"{driver.MAX_PEAK_MEMORY_BYTES + 1}\n",
+        "1" * 33,
+    ):
+        peak.write_text(malformed)
+        with pytest.raises(ValueError, match="peak-memory evidence"):
+            driver._cgroup_v2_peak_memory_bytes(peak)
+    with pytest.raises(ValueError, match="unavailable"):
+        driver._cgroup_v2_peak_memory_bytes(tmp_path / "missing")
+
+
 @pytest.mark.parametrize(
     "fault",
     [
@@ -127,6 +159,8 @@ def test_driver_output_absence_fails_closed_on_symlink_and_inspection_error(tmp_
         "ttl",
         "priority",
         "gpu",
+        "memory-request",
+        "memory-limit",
         "secret-env",
         "secret-volume",
         "extra-pull-secret",
@@ -154,6 +188,10 @@ def test_server_response_rejects_security_resource_and_placement_drift(package, 
         pod["priority"] = 0
     elif fault == "gpu":
         container["resources"]["limits"]["nvidia.com/gpu"] = "1"
+    elif fault == "memory-request":
+        container["resources"]["requests"]["memory"] = "31Gi"
+    elif fault == "memory-limit":
+        container["resources"]["limits"]["memory"] = "47Gi"
     elif fault == "secret-env":
         container["envFrom"] = [{"secretRef": {"name": "unreviewed"}}]
     elif fault == "secret-volume":
@@ -236,17 +274,22 @@ def test_collect_binds_terminal_job_workload_pod_image_and_native_receipt(packag
         "preflight": receipt,
     }
     logs = LOG_PREFIX + json.dumps(envelope, sort_keys=True, separators=(",", ":"))
-    assert (
-        collect_sft_cpu_preflight_receipt(
+
+    def collect(value):
+        return collect_sft_cpu_preflight_receipt(
             package,
             job,
             workloads,
             pods,
             service_account(),
-            logs,
+            value,
         )
-        == receipt
-    )
+
+    assert collect(logs) == receipt
+    envelope["peak_memory_bytes"] = 1
+    logs = LOG_PREFIX + json.dumps(envelope, sort_keys=True, separators=(",", ":"))
+    with pytest.raises(ValueError, match="peak-memory evidence is unexpected"):
+        collect(logs)
 
 
 def test_collect_rejects_admission_resource_drift(package):
