@@ -544,6 +544,30 @@ def test_render_changes_only_reviewed_identity_secret_and_root_annotation():
     assert proof["manifest_sha256"] == digest(rendered)
 
 
+def test_render_accepts_exact_api_root_alert_off_but_rejects_any_other_value():
+    source = manifest()
+    source["metadata"]["annotations"]["fleet.ai/failure-alerts"] = "off"
+    rendered, proof = render_sft_rayjob(
+        plan(),
+        request(),
+        preview(source),
+        kubernetes_context=SFT_PRODUCTION_CONTEXT,
+        run_id=RUN_ID,
+    )
+    assert rendered["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+    assert proof["source_root_failure_alerts"] == "off"
+
+    source["metadata"]["annotations"]["fleet.ai/failure-alerts"] = "on"
+    with pytest.raises(JobsError, match="failure-alert annotation is not off"):
+        render_sft_rayjob(
+            plan(),
+            request(),
+            preview(source),
+            kubernetes_context=SFT_PRODUCTION_CONTEXT,
+            run_id=RUN_ID,
+        )
+
+
 def test_dev_render_adds_cluster_enforced_deadline_without_production_selector():
     source = manifest()
     rendered, proof = render_sft_rayjob(
@@ -615,7 +639,6 @@ def test_lr30_render_is_exact_one_gpu_root_annotated_and_secret_free():
 @pytest.mark.parametrize(
     "fault",
     [
-        "already-annotated",
         "wrong-priority",
         "wrong-numeric-priority",
         "not-suspended",
@@ -656,9 +679,7 @@ def test_render_fails_closed_on_preview_drift(fault):
     response = preview(obj)
     head = obj["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]
     container = head["spec"]["containers"][0]
-    if fault == "already-annotated":
-        obj["metadata"]["annotations"]["fleet.ai/failure-alerts"] = "off"
-    elif fault == "wrong-priority":
+    if fault == "wrong-priority":
         head["spec"]["priorityClassName"] = "c0"
     elif fault == "wrong-numeric-priority":
         head["spec"]["priority"] = 0

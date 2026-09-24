@@ -784,13 +784,18 @@ def _assert_source_preview_surface(obj: dict, request: dict) -> None:
         "kueue.x-k8s.io/priority-class": "q1",
         "kueue.x-k8s.io/queue-name": "training-lq",
     }
-    if metadata["labels"] != expected_labels or set(metadata["annotations"]) != {
+    expected_annotations = {
         "fleet.ai/job-image",
         "fleet.ai/run-dir",
         "fleet.ai/run-id",
         "fleet.ai/submitted-by",
         "fleet.ai/submitted-by-profile",
-    }:
+    }
+    if metadata["annotations"].get(FAILURE_ALERT_ANNOTATION) == FAILURE_ALERT_OFF:
+        expected_annotations.add(FAILURE_ALERT_ANNOTATION)
+    if metadata["labels"] != expected_labels or set(metadata["annotations"]) != (
+        expected_annotations
+    ):
         raise JobsError("preview root scheduling or annotation surface drift")
     spec = _require_preview_keys(
         obj["spec"],
@@ -979,8 +984,9 @@ def _render_rayjob(
             raise JobsError("preview root run-name label drift")
         if annotations.get("fleet.ai/run-id") != ZERO_RUN_ID:
             raise JobsError("preview root run ID annotation drift")
-        if FAILURE_ALERT_ANNOTATION in annotations:
-            raise JobsError("preview already carries an alert setting; use the normal API rail")
+        source_failure_alerts = annotations.get(FAILURE_ALERT_ANNOTATION)
+        if source_failure_alerts not in (None, FAILURE_ALERT_OFF):
+            raise JobsError("preview root failure-alert annotation is not off")
         if annotations.get("fleet.ai/job-image") != request["image"]:
             raise JobsError("preview root image annotation drift")
         if annotations.get("fleet.ai/run-dir") != request["run_dir"]:
@@ -1128,6 +1134,7 @@ def _render_rayjob(
         "name": run_name,
         "removed_api_fleet_secrets": removed,
         "bound_gpu_cluster_templates": bound_gpu_cluster_templates,
+        "source_root_failure_alerts": source_failure_alerts or "absent",
     }
 
 
