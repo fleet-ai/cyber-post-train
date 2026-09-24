@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import fcntl
 import hashlib
 import json
@@ -715,3 +716,43 @@ def step(state: Path, *, execute: bool = False) -> dict[str, Any]:
         except Exception as exc:
             errors.append({"experiment_key": target["experiment_key"], "error": type(exc).__name__})
     return {"advanced": advanced, "errors": errors, **status(state)}
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Run the small campaign controller without changing the shared project CLI."""
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    prepare_parser = subparsers.add_parser("prepare")
+    prepare_parser.add_argument("config", type=Path)
+    prepare_parser.add_argument("--output", required=True, type=Path)
+    status_parser = subparsers.add_parser("status")
+    status_parser.add_argument("directory", type=Path)
+    step_parser = subparsers.add_parser("step")
+    step_parser.add_argument("directory", type=Path)
+    step_parser.add_argument("--execute", action="store_true")
+    record_parser = subparsers.add_parser("record")
+    record_parser.add_argument("directory", type=Path)
+    record_parser.add_argument("--experiment-key", required=True)
+    record_parser.add_argument("--phase", choices=PHASES, required=True)
+    record_parser.add_argument("--action", choices=ACTIONS, required=True)
+    record_parser.add_argument("--receipt", required=True, type=Path)
+    args = parser.parse_args(argv)
+    if args.command == "prepare":
+        result = prepare(args.config, args.output)
+    elif args.command == "status":
+        result = status(args.directory)
+    elif args.command == "step":
+        result = step(args.directory, execute=args.execute)
+    else:
+        result = record(
+            args.directory,
+            args.experiment_key,
+            args.phase,
+            args.action,
+            args.receipt,
+        )
+    print(json.dumps(result, indent=2, sort_keys=True))
+
+
+if __name__ == "__main__":
+    main()

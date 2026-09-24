@@ -1736,59 +1736,6 @@ def eval_status() -> None:
         _fail(exc)
 
 
-@eval_app.command("campaign-prepare")
-def eval_campaign_prepare(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
-    """Expand one exact base/checkpoint evaluation matrix. No network or execution."""
-    from evals.campaign import prepare
-
-    try:
-        _print(prepare(config, output))
-    except Exception as exc:
-        _fail(exc)
-
-
-@eval_app.command("campaign-status")
-def eval_campaign_status(directory: Path) -> None:
-    """Report every cell without opening traces, prompts, answers, or scores."""
-    from evals.campaign import status
-
-    try:
-        _print(status(directory))
-    except Exception as exc:
-        _fail(exc)
-
-
-@eval_app.command("campaign-record")
-def eval_campaign_record(
-    directory: Path,
-    experiment_key: Annotated[str, typer.Option("--experiment-key")],
-    phase: Annotated[str, typer.Option("--phase")],
-    action: Annotated[str, typer.Option("--action")],
-    receipt: Annotated[Path, typer.Option("--receipt")],
-) -> None:
-    """Import one identity-bound driver receipt without repeating remote work."""
-    from evals.campaign import record
-
-    try:
-        _print(record(directory, experiment_key, phase, action, receipt))
-    except Exception as exc:
-        _fail(exc)
-
-
-@eval_app.command("campaign-step")
-def eval_campaign_step(
-    directory: Path,
-    execute: Annotated[bool, typer.Option("--execute")] = False,
-) -> None:
-    """Advance each independent cell once; creation requires --execute."""
-    from evals.campaign import step
-
-    try:
-        _print(step(directory, execute=execute))
-    except Exception as exc:
-        _fail(exc)
-
-
 @eval_app.command("heldout-create")
 def eval_heldout_create(
     packet: Path,

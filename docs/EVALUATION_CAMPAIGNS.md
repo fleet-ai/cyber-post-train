@@ -1,6 +1,6 @@
 # Resumable evaluation campaigns
 
-`cyber-post-train eval campaign-*` is a small controller above the existing
+`python -m evals.campaign` is a small controller above the existing
 benchmark adapters. It does not know how to run WebExploitBench, Fleet held-out,
 or another benchmark. It gives those adapters one immutable plan and one state
 machine, so `baseline + checkpoints × targets × pass@4` can resume without
@@ -125,23 +125,23 @@ split and lets another judge repair scoring without replaying the rollout.
 Prepare once:
 
 ```sh
-cyber-post-train eval campaign-prepare exact-campaign.json \
+python -m evals.campaign prepare exact-campaign.json \
   --output /restricted/eval-campaign
 ```
 
 Generate previews and observe already-created work without permitting a create:
 
 ```sh
-cyber-post-train eval campaign-step /restricted/eval-campaign
+python -m evals.campaign step /restricted/eval-campaign
 ```
 
 After reviewing the frozen plan and previews, permit bounded creates:
 
 ```sh
-cyber-post-train eval campaign-step /restricted/eval-campaign --execute
+python -m evals.campaign step /restricted/eval-campaign --execute
 ```
 
-Run `campaign-step` repeatedly. `campaign-status` reports score-blind aggregate
-states and experiment keys. `campaign-record` can import one already-produced,
+Run `step` repeatedly. `status` reports score-blind aggregate states and
+experiment keys. `record` can import one already-produced,
 identity-bound receipt; it never creates work. Reconcile `*_launch_uncertain`
 against the provider and import the recovered receipt—never replay the POST.
