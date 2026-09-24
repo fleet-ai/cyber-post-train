@@ -144,12 +144,11 @@ manual command drift. `seal-binding` validates the exact
 launch plan, task, model artifact, serving-route and live-parity receipts,
 OpenCode harness, sampling, runtime-budget digest, deterministic sandbox name,
 state paths, and deferred-score draft without a provider call. Collection
-serving evidence also has one reviewed signed mapping to the plan's complete
-public student identity; a base arm must supply the canonical standalone route
-proof plus a fresh paired live-parity receipt, while a checkpoint arm must use
-the exact registration and parity files already validated by its plan.
-Collection
-launch delegates to `CollectionLauncher`; terminal preservation delegates to
+serving evidence must match the complete student identity already validated by
+the collection plan: a base arm supplies the standalone route proof plus fresh
+paired live parity, while a checkpoint arm supplies the exact registration and
+parity files named by its accepted provenance. Collection launch delegates to
+`CollectionLauncher`; terminal preservation delegates to
 the replica-pump supervisor; scoring delegates to `deferred_score`. Immediately
 before a provider create, launch requires the live owner selected by the latest
 bound capacity marker, so an older packet source cannot reject a valid
@@ -161,11 +160,27 @@ rollout bundle. The adapter does not invent a second export implementation.
 
 ## Commands
 
-Prepare once:
+Generate the two driver blocks, copy their JSON into the reviewed campaign
+config, then prepare once:
 
 ```sh
+python -m evals.webexploitbench.tensorlake.campaign_adapter \
+  driver-spec --phase rollout
+python -m evals.webexploitbench.tensorlake.campaign_adapter \
+  driver-spec --phase score
 python -m evals.campaign prepare exact-campaign.json \
   --output /restricted/eval-campaign
+```
+
+Seal one binding beside each generated `packet.json`. The binding draft names
+that cell's already-sealed collection plan, route evidence, state directory,
+export draft, shared-capacity receipts, and deferred-score draft.
+
+```sh
+python -m evals.webexploitbench.tensorlake.campaign_adapter seal-binding \
+  --packet /restricted/eval-campaign/targets/<key>/packet.json \
+  --draft /restricted/bindings/<key>.json \
+  --output /restricted/eval-campaign/targets/<key>/web-binding.json
 ```
 
 Generate previews and observe already-created work without permitting a create:
@@ -174,13 +189,8 @@ Generate previews and observe already-created work without permitting a create:
 python -m evals.campaign step /restricted/eval-campaign
 ```
 
-After reviewing the frozen plan and previews, permit bounded creates:
-
-```sh
-python -m evals.campaign step /restricted/eval-campaign --execute
-```
-
-For a foreground fire-and-forget run, use the same explicit execution gate:
+After reviewing the frozen plan, bindings, and previews, start the foreground
+loop with the same explicit execution gate:
 
 ```sh
 python -m evals.campaign run /restricted/eval-campaign --execute
