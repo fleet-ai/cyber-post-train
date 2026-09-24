@@ -83,6 +83,56 @@ def _output(root: Path) -> tuple[Path, str]:
     return source, release["sha256"]
 
 
+def _process_artifacts(source: Path) -> None:
+    traces = [
+        ([{"type": "step_finish", "part": {"reason": "stop"}}], 1),
+        ([{"type": "step_finish", "part": {"reason": "length"}}], 1),
+        ([{"type": "error"}, {"type": "step_finish", "part": {"reason": "stop"}}], 1),
+        ([{"type": "step_start"}], 1),
+        (
+            [
+                {"type": "step_finish", "part": {"reason": "stop"}},
+                {"type": "step_start"},
+            ],
+            1,
+        ),
+        ([{"type": "step_finish", "part": {"reason": "stop"}}], 137),
+        ([{"type": "step_finish", "part": {"reason": "stop"}}, "malformed"], 1),
+        ([], 1),
+    ]
+    for index, (events, exit_code) in enumerate(traces):
+        attempt = source / "attempts" / str(index)
+        result_path = attempt / "result.json"
+        result = json.loads(result_path.read_text())
+        result.update(agent_exit_code=exit_code, agent_termination="process_error")
+        _write(result_path, result)
+        _write(
+            attempt / "agent-process.json",
+            {"harness": "opencode", "exit_code": exit_code, "timed_out": False},
+        )
+        agent_output = attempt / "agent-output"
+        agent_output.mkdir()
+        trace = agent_output / "opencode-stream.jsonl"
+        with trace.open("w") as stream:
+            for event in events:
+                if isinstance(event, str):
+                    stream.write(event + "\n")
+                else:
+                    stream.write(json.dumps(event, sort_keys=True) + "\n")
+        event_count = sum(isinstance(event, dict) for event in events)
+        malformed = len(events) - event_count
+        _write(
+            attempt / "trace-manifest.json",
+            {
+                "canonical_trace": "agent-output/opencode-stream.jsonl",
+                "event_count": event_count,
+                "malformed_line_count": malformed,
+                "agent_termination": "process_error",
+            },
+        )
+        _write(attempt / "session-ingest.json", {"status": "completed"})
+
+
 def test_diagnosis_reports_variation_without_values(tmp_path: Path, monkeypatch) -> None:
     source, release_sha256 = _output(tmp_path)
     monkeypatch.setattr(diagnosis, "RECEIPT", source / "SIGNAL_DIAGNOSIS.json")
@@ -221,4 +271,55 @@ def test_predicate_packet_has_silent_zero_gpu_root_job() -> None:
     assert job["spec"]["suspend"] is True
     assert job["spec"]["template"]["spec"]["priorityClassName"] == "c1"
     assert job["spec"]["template"]["spec"]["containers"][0]["command"][-1] == ("--predicate-probe")
+    assert "nvidia.com/gpu" not in json.dumps(job)
+
+
+def test_process_probe_emits_only_aggregate_categories(tmp_path: Path, monkeypatch) -> None:
+    source, release_sha256 = _output(tmp_path)
+    _process_artifacts(source)
+    monkeypatch.setattr(diagnosis, "PROCESS_RECEIPT", source / "SIGNAL_PROCESS_CLASSIFICATION.json")
+    monkeypatch.setattr(diagnosis, "RELEASE_SHA256", release_sha256)
+    receipt = diagnosis.process_probe(source)
+    assert receipt["process_error_count"] == 8
+    assert receipt["exit_category_counts"] == {"generic_failure": 7, "sigkill_or_oom": 1}
+    assert receipt["structural_trace_category_counts"] == {
+        "completed": 2,
+        "empty_trace": 1,
+        "harness_error": 1,
+        "incomplete_terminal_step": 1,
+        "malformed_trace": 1,
+        "missing_terminal_step": 1,
+        "output_limit": 1,
+    }
+    assert receipt["repair_category_counts"] == {
+        "malformed_trace": 1,
+        "nonzero_exit_after_gradeable_trace": 2,
+        "signal_or_resource_exit": 1,
+        "startup_or_cli_failure": 1,
+        "structured_harness_error": 1,
+        "unfinished_trace": 2,
+    }
+    assert receipt["session_ingest_category_counts"] == {"completed": 8}
+    assert receipt["result_process_exit_binding_count"] == 8
+    assert receipt["trace_manifest_binding_count"] == 8
+    assert receipt["scoring_result_present_count"] == 8
+    assert receipt["exact_cleanup_count"] == 8
+    assert receipt["stderr_or_log_text_read"] is False
+    assert receipt["identifiers_reward_values_or_private_content_included"] is False
+    encoded = json.dumps(receipt)
+    assert all(value not in encoded for value in ("execution-0", "cell-0", "stop", "length"))
+
+
+def test_process_packet_has_silent_zero_gpu_root_job() -> None:
+    value = diagnosis.process_packet()
+    job = value["bundle"]["items"][1]
+    assert value["sha256"] == diagnosis.digest(
+        {key: item for key, item in value.items() if key != "sha256"}
+    )
+    assert job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+    assert job["spec"]["template"]["metadata"]["annotations"]["fleet.ai/failure-alerts"] == ("off")
+    assert job["spec"]["backoffLimit"] == 0
+    assert job["spec"]["suspend"] is True
+    assert job["spec"]["template"]["spec"]["priorityClassName"] == "c1"
+    assert job["spec"]["template"]["spec"]["containers"][0]["command"][-1] == ("--process-probe")
     assert "nvidia.com/gpu" not in json.dumps(job)

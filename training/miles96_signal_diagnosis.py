@@ -15,6 +15,7 @@ SOURCE = Path("/mnt/sfs/jobs/chris-q38-m96-signal-a2")
 RECEIPT = SOURCE / "SIGNAL_DIAGNOSIS.json"
 HEADER_RECEIPT = SOURCE / "SIGNAL_HEADER_PROBE.json"
 PREDICATE_RECEIPT = SOURCE / "SIGNAL_QUALIFICATION_PROBE.json"
+PROCESS_RECEIPT = SOURCE / "SIGNAL_PROCESS_CLASSIFICATION.json"
 SOURCE_JOB_UID = "d3388003-61ce-4b5d-95cf-5b85d7e6ac8b"
 PLAN_SHA256 = "a4cca0bc9af5f8cd47d572c02bf7d513759a8b7c7ee4e912aada087c439261c0"
 TASK_VERSION_ID = "0920e798-c7e7-4da6-9d5e-ebeba45ec05a"
@@ -28,6 +29,8 @@ HEADER_JOB_NAME = "chris-q38-m96-signal-a2-header-a1"
 HEADER_CM_NAME = HEADER_JOB_NAME + "-code"
 PREDICATE_JOB_NAME = "chris-q38-m96-signal-a2-diagnosis-a4"
 PREDICATE_CM_NAME = PREDICATE_JOB_NAME + "-code"
+PROCESS_JOB_NAME = "chris-q38-m96-signal-a2-diagnosis-a5"
+PROCESS_CM_NAME = PROCESS_JOB_NAME + "-code"
 NAMESPACE = "fleet-train-jobs"
 IMAGE = (
     "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:"
@@ -339,6 +342,180 @@ def predicate_probe(source: Path = SOURCE) -> dict[str, Any]:
     return receipt
 
 
+def _exit_category(value: Any) -> str:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return "invalid"
+    return {
+        0: "zero",
+        1: "generic_failure",
+        2: "usage_or_configuration",
+        124: "timeout_wrapper",
+        126: "cannot_execute",
+        127: "command_not_found",
+        137: "sigkill_or_oom",
+        143: "sigterm_or_external_stop",
+    }.get(value, "other_signal_style" if value < 0 or 128 <= value <= 255 else "other_nonzero")
+
+
+def _structural_trace(path: Path) -> tuple[str, int, int]:
+    """Classify only documented event types/reasons; never retain event content."""
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("canonical trace is absent or unsafe")
+    event_count = 0
+    malformed = 0
+    has_error = False
+    last_finish: tuple[int, str] | None = None
+    step_after_finish = False
+    with path.open(errors="replace") as stream:
+        for line in stream:
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                malformed += 1
+                continue
+            if not isinstance(event, dict):
+                malformed += 1
+                continue
+            event_count += 1
+            event_type = event.get("type")
+            if event_type == "error":
+                has_error = True
+            if event_type == "step_finish" and isinstance(event.get("part"), dict):
+                reason = event["part"].get("reason")
+                last_finish = (
+                    event_count,
+                    reason if reason in {"stop", "length"} else "other",
+                )
+                step_after_finish = False
+            elif event_type == "step_start" and last_finish is not None:
+                step_after_finish = True
+    if event_count == 0:
+        return "empty_trace", event_count, malformed
+    if malformed:
+        return "malformed_trace", event_count, malformed
+    if has_error:
+        return "harness_error", event_count, malformed
+    if last_finish is None:
+        return "missing_terminal_step", event_count, malformed
+    if step_after_finish:
+        return "incomplete_terminal_step", event_count, malformed
+    if last_finish[1] == "stop":
+        return "completed", event_count, malformed
+    if last_finish[1] == "length":
+        return "output_limit", event_count, malformed
+    return "incomplete_terminal_step", event_count, malformed
+
+
+def process_probe(source: Path = SOURCE) -> dict[str, Any]:
+    """Explain process_error using aggregate process and trace-shape categories only."""
+    receipt_path = source / PROCESS_RECEIPT.name
+    if source.is_symlink() or not source.is_dir() or receipt_path.exists():
+        raise ValueError("source output is absent, unsafe, or already classified")
+    release = _read(source / "LEAK_RECONCILED.json")
+    if (
+        release.get("sha256") != RELEASE_SHA256
+        or release.get("sha256") != digest({k: v for k, v in release.items() if k != "sha256"})
+        or release.get("source_job_uid") != SOURCE_JOB_UID
+        or release.get("all_instances_released_after") is not True
+        or release.get("live_instance_count_after") != 0
+    ):
+        raise ValueError("instance release receipt differs")
+    terminal_path = source / "EVAL_TERMINAL.json"
+    terminal = _read(terminal_path)
+    if (
+        terminal.get("schema") != "fleet_eval_campaign_terminal_v1"
+        or not _terminal_digests_match(terminal)
+        or terminal.get("plan_sha256") != PLAN_SHA256
+    ):
+        raise ValueError("evaluation terminal differs")
+
+    attempts = sorted((source / "attempts").iterdir())
+    if len(attempts) != 8 or any(path.is_symlink() or not path.is_dir() for path in attempts):
+        raise ValueError("bounded campaign attempt count differs")
+    exit_categories: collections.Counter[str] = collections.Counter()
+    trace_categories: collections.Counter[str] = collections.Counter()
+    repair_categories: collections.Counter[str] = collections.Counter()
+    ingest_categories: collections.Counter[str] = collections.Counter()
+    process_error_count = 0
+    exit_binding_count = 0
+    manifest_binding_count = 0
+    scoring_result_count = 0
+    cleanup_exact_count = 0
+    for attempt in attempts:
+        result = _read(attempt / "result.json")
+        process = _read(attempt / "agent-process.json")
+        manifest = _read(attempt / "trace-manifest.json")
+        cleanup = _read(attempt / "cleanup.json")
+        ingest = _read(attempt / "session-ingest.json")
+        exit_code = process.get("exit_code")
+        exit_category = _exit_category(exit_code)
+        exit_categories[exit_category] += 1
+        process_error_count += result.get("agent_termination") == "process_error"
+        exit_binding_count += result.get("agent_exit_code") == exit_code
+
+        relative = Path(str(manifest.get("canonical_trace") or ""))
+        if not relative.parts or relative.is_absolute() or ".." in relative.parts:
+            raise ValueError("canonical trace manifest path is unsafe")
+        trace_path = (attempt / relative).resolve()
+        trace_path.relative_to(attempt.resolve())
+        trace_category, event_count, malformed_count = _structural_trace(trace_path)
+        trace_categories[trace_category] += 1
+        manifest_binding_count += (
+            manifest.get("event_count") == event_count
+            and manifest.get("malformed_line_count") == malformed_count
+            and manifest.get("agent_termination") == result.get("agent_termination")
+        )
+        ingest_status = ingest.get("status")
+        ingest_categories[
+            ingest_status if ingest_status in {"completed", "failed"} else "other"
+        ] += 1
+        scoring_result_count += (attempt / "reward-result.json").is_file()
+        cleanup_exact_count += cleanup == {
+            "instance_created": True,
+            "instance_closed": True,
+            "containers_removed": True,
+        }
+
+        if exit_category in {"sigkill_or_oom", "sigterm_or_external_stop"}:
+            repair_categories["signal_or_resource_exit"] += 1
+        elif trace_category in {"completed", "output_limit"}:
+            repair_categories["nonzero_exit_after_gradeable_trace"] += 1
+        elif trace_category == "harness_error":
+            repair_categories["structured_harness_error"] += 1
+        elif trace_category == "malformed_trace":
+            repair_categories["malformed_trace"] += 1
+        elif trace_category == "empty_trace":
+            repair_categories["startup_or_cli_failure"] += 1
+        else:
+            repair_categories["unfinished_trace"] += 1
+
+    body = {
+        "schema": "cyber_qwen38_miles96_process_error_classification_v1",
+        "source_identity_sha256": digest(
+            {"source_job_uid": SOURCE_JOB_UID, "plan_sha256": PLAN_SHA256}
+        ),
+        "terminal_file_sha256": "sha256:" + hashlib.sha256(terminal_path.read_bytes()).hexdigest(),
+        "episode_count": 8,
+        "process_error_count": process_error_count,
+        "exit_category_counts": dict(sorted(exit_categories.items())),
+        "structural_trace_category_counts": dict(sorted(trace_categories.items())),
+        "repair_category_counts": dict(sorted(repair_categories.items())),
+        "session_ingest_category_counts": dict(sorted(ingest_categories.items())),
+        "result_process_exit_binding_count": exit_binding_count,
+        "trace_manifest_binding_count": manifest_binding_count,
+        "scoring_result_present_count": scoring_result_count,
+        "exact_cleanup_count": cleanup_exact_count,
+        "all_instances_released": True,
+        "release_receipt_sha256": RELEASE_SHA256,
+        "stderr_or_log_text_read": False,
+        "identifiers_reward_values_or_private_content_included": False,
+        "prompts_traces_flags_answers_or_scores_included": False,
+    }
+    receipt = {**body, "sha256": digest(body)}
+    _write_once(receipt_path, receipt)
+    return receipt
+
+
 def packet() -> dict[str, Any]:
     source = Path(__file__).read_text()
     bundle = {
@@ -557,6 +734,28 @@ def predicate_packet() -> dict[str, Any]:
     return {**body, "sha256": digest(body)}
 
 
+def process_packet() -> dict[str, Any]:
+    base = packet()
+    config_map, job = base["bundle"]["items"]
+    config_map["metadata"]["name"] = PROCESS_CM_NAME
+    job["metadata"]["name"] = PROCESS_JOB_NAME
+    job["metadata"]["labels"]["cyber-post-train.fleet.ai/role"] = "miles96-process-error-classifier"
+    job["spec"]["template"]["spec"]["containers"][0]["command"].append("--process-probe")
+    job["spec"]["template"]["spec"]["volumes"][0]["configMap"]["name"] = PROCESS_CM_NAME
+    body = {
+        "schema": "cyber_qwen38_miles96_process_error_packet_v1",
+        "job_name": PROCESS_JOB_NAME,
+        "config_map_name": PROCESS_CM_NAME,
+        "source_identity_sha256": digest(
+            {"source_job_uid": SOURCE_JOB_UID, "plan_sha256": PLAN_SHA256}
+        ),
+        "bundle": base["bundle"],
+        "create_counts": {"config_map": 1, "job": 1, "retry": 0, "patch": 0},
+        "expected": base["expected"],
+    }
+    return {**body, "sha256": digest(body)}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--packet", action="store_true")
@@ -564,6 +763,8 @@ def main() -> None:
     parser.add_argument("--header-probe", action="store_true")
     parser.add_argument("--predicate-packet", action="store_true")
     parser.add_argument("--predicate-probe", action="store_true")
+    parser.add_argument("--process-packet", action="store_true")
+    parser.add_argument("--process-probe", action="store_true")
     args = parser.parse_args()
     selected = sum(
         (
@@ -572,11 +773,17 @@ def main() -> None:
             args.header_probe,
             args.predicate_packet,
             args.predicate_probe,
+            args.process_packet,
+            args.process_probe,
         )
     )
     if selected > 1:
         parser.error("select at most one operation")
-    if args.predicate_packet:
+    if args.process_packet:
+        value = process_packet()
+    elif args.process_probe:
+        value = process_probe()
+    elif args.predicate_packet:
         value = predicate_packet()
     elif args.predicate_probe:
         value = predicate_probe()
