@@ -25,6 +25,8 @@ from cyber_post_train.sfs_output_job import build_sfs_output_job
 from training import dev_cleanup_observer as cleanup
 from training import miles96_mechanics_canary as mechanics
 from training import miles96_mechanics_launch as launch
+from training import miles96_signal_qualification as signal_qualification
+from training import miles_signal_wave
 
 
 def _sha(char: str) -> str:
@@ -32,15 +34,33 @@ def _sha(char: str) -> str:
 
 
 def _plan() -> dict:
-    authority = {
-        "task_key": "synthetic-blackbox-v1",
-        "task_version_id": str(uuid.UUID("11111111-1111-4111-8111-111111111111")),
-        "verifier_version_id": str(uuid.UUID("22222222-2222-4222-8222-222222222222")),
-        "task_set_sha256": _sha("b"),
-        "tool_catalog_sha256": _sha("c"),
+    wave = miles_signal_wave.load()
+    candidate = wave["candidates"][0]
+    authority = miles_signal_wave.task_binding(wave, candidate)
+    task_binding = {
+        **authority,
+        "authority_receipt_sha256": candidate["authority_receipt_sha256"],
     }
+    phase1 = signal_qualification.build_plan(
+        name=candidate["identity"]["name"],
+        model_root=signal_qualification.HF_MODEL_ROOT,
+        model_binding_sha256=signal_qualification.HF_MODEL_BINDING_SHA256,
+        task_binding=task_binding,
+        authority_config_sha256=wave["sha256"],
+        current_binding_sha256=candidate["live_binding_receipt_sha256"],
+        production_split_sha256=wave["authorities"]["production_split"]["self_sha256"],
+    )
     signal_body = {
         "schema": mechanics.TASK_SIGNAL_EVIDENCE_SCHEMA,
+        "phase1_plan_sha256": "sha256:" + mechanics.digest(phase1),
+        "phase1_run_name": candidate["identity"]["name"],
+        "model_revision": signal_qualification.HF_MODEL_REVISION,
+        "model_binding_sha256": signal_qualification.HF_MODEL_BINDING_SHA256,
+        **phase1["selection_authority"],
+        "planned_slot_count": 8,
+        "terminal_slot_count": 8,
+        "excluded_slot_count": 0,
+        "outer_replacement_count": 0,
         **authority,
         "max_turns": 32,
         "max_tokens_per_turn": 8192,
@@ -50,16 +70,20 @@ def _plan() -> dict:
         "reward_variation": True,
         "all_instances_released": True,
         "source_receipt_sha256": _sha("7"),
+        "native_terminal_sha256": _sha("9"),
+        "optimizer_steps": 0,
+        "checkpoint_artifacts_absent": True,
+        "runtime_source_manifest_sha256": "sha256:" + mechanics.digest(phase1["runtime_sources"]),
+        "runtime_bundle_sha256": _sha("8"),
+        "request_binding_sha256": _sha("6"),
+        "runtime_preflight_sha256": _sha("5"),
     }
     return mechanics.build_plan(
         name="chris-q38-m96-canary-a1",
         reload_name="chris-q38-m96-reload-a1",
         model_root="/mnt/sfs/jobs/q38-prepared-model-v1",
         model_binding_sha256=_sha("a"),
-        task_binding={
-            **authority,
-            "authority_receipt_sha256": "sha256:" + mechanics.digest(authority),
-        },
+        task_binding=task_binding,
         task_signal_evidence={
             **signal_body,
             "sha256": "sha256:" + mechanics.digest(signal_body),
@@ -157,6 +181,7 @@ def _bundle(request: dict) -> dict:
                 (int(key.rsplit("_", 1)[1]), value)
                 for key, value in values.items()
                 if key.startswith("CYBER_RUNTIME_BUNDLE_")
+                and key.removeprefix("CYBER_RUNTIME_BUNDLE_").isdigit()
             )
         )
         encoded = "".join(value for _, value in chunks)
@@ -331,20 +356,20 @@ def test_pinned_miles_wandb_patch_binds_primary_and_live_secondaries(
         wandb_utils.init_wandb_primary(NS(wandb_run_id="chris-q38-m96-canary-a1"))
 
 
-def test_runtime_bundle_executes_in_an_isolated_interpreter(tmp_path: Path) -> None:
+def test_phase2_runtime_bundle_validates_closed_sources_in_isolated_interpreter(
+    tmp_path: Path,
+) -> None:
     bundle = _bundle(mechanics.job_request(_plan()))
     runtime = tmp_path / "runtime"
     for name, content in bundle["files"].items():
         path = runtime / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
-    module_source = (runtime / "training/miles96_mechanics_canary.py").read_text()
-    assert "cyber_post_train" not in module_source.split("def job_request", 1)[0]
     code = (
-        "import runpy,sys;"
+        "import json,sys;"
         f"sys.path.insert(0,{str(runtime)!r});"
-        "sys.argv=['training.miles96_mechanics_canary','--help'];"
-        "runpy.run_module('training.miles96_mechanics_canary',run_name='__main__')"
+        "from training import miles96_mechanics_canary as m;"
+        f"m.validate_plan(json.load(open({str(runtime / 'plan.json')!r})))"
     )
     result = subprocess.run(
         [sys.executable, "-I", "-c", code],
@@ -354,7 +379,105 @@ def test_runtime_bundle_executes_in_an_isolated_interpreter(tmp_path: Path) -> N
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert "--train" in result.stdout and "--reload" in result.stdout
+    signal_path = runtime / "training/miles96_signal_qualification.py"
+    signal_path.write_text(signal_path.read_text() + "\n# drift\n")
+    changed = subprocess.run(
+        [sys.executable, "-I", "-c", code],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert changed.returncode != 0
+    assert "custom runtime source manifest drift" in changed.stderr
+
+
+def test_phase2_rereads_exact_phase1_source_and_zero_update_filesystem(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan = _plan()
+    signal = plan["task_signal_evidence"]
+    phase1 = signal_qualification.build_plan(
+        name=signal["phase1_run_name"],
+        model_root=signal_qualification.HF_MODEL_ROOT,
+        model_binding_sha256=signal["model_binding_sha256"],
+        task_binding=plan["task_binding"],
+        authority_config_sha256=signal["authority_config_sha256"],
+        current_binding_sha256=signal["current_binding_sha256"],
+        production_split_sha256=signal["production_split_sha256"],
+    )
+    root = tmp_path / signal["phase1_run_name"]
+    private_dir = root / mechanics.PRIVATE_EVIDENCE_DIR
+    private_dir.mkdir(parents=True)
+    preflight_body = {
+        "schema": signal_qualification.RUNTIME_PREFLIGHT_SCHEMA,
+        "plan_sha256": "sha256:" + mechanics.digest(phase1),
+        "image": mechanics.IMAGE,
+        "fti_v1_sha256": "sha256:" + signal_qualification.FTI_V1_SHA256,
+        "miles_eval_sha256": "sha256:" + signal_qualification.MILES_INFERENCE_EVAL_SHA256,
+        "sample_index_start": 0,
+        "sample_index_end": 7,
+        "sample_count": 8,
+        "max_concurrent_envs": 2,
+        "shielded_close": True,
+        "release_absence_http_status": 404,
+        "tool_catalog_sha256": plan["task_binding"]["tool_catalog_sha256"],
+        "live_tool_schema_gate_at_session_open": True,
+        "outer_episode_replacements": 0,
+    }
+    preflight = {
+        **preflight_body,
+        "sha256": "sha256:" + mechanics.digest(preflight_body),
+    }
+    signal["runtime_preflight_sha256"] = preflight["sha256"]
+    private_body = {
+        "schema": signal_qualification.PRIVATE_GROUP_SCHEMA,
+        "plan_sha256": signal["phase1_plan_sha256"],
+        "runtime_source_manifest_sha256": signal["runtime_source_manifest_sha256"],
+        "runtime_bundle_sha256": signal["runtime_bundle_sha256"],
+        "request_binding_sha256": signal["request_binding_sha256"],
+        "runtime_preflight_sha256": signal["runtime_preflight_sha256"],
+        "episode_receipts": [_sha("1")] * 8,
+        "claim_receipts": [_sha("2")] * 8,
+        "attempt_receipts": [_sha("3")] * 24,
+        "slot_receipts": [_sha("4")] * 8,
+        "verifier_execution_ids": [str(uuid.UUID(int=index + 1)) for index in range(8)],
+        "instance_ids": [str(uuid.UUID(int=index + 101)) for index in range(8)],
+        "rewards": [float(index % 2) for index in range(8)],
+        "admitted_episode_bindings": [{"sample_index": index} for index in range(8)],
+    }
+    private = {**private_body, "sha256": "sha256:" + mechanics.digest(private_body)}
+    native_body = {
+        "schema": signal_qualification.NATIVE_TERMINAL_SCHEMA,
+        "plan_sha256": signal["phase1_plan_sha256"],
+        "status": "succeeded",
+        "returncode": 0,
+        "optimizer_steps": 0,
+        "checkpoint_artifacts_absent": True,
+        "runtime_source_manifest_sha256": signal["runtime_source_manifest_sha256"],
+        "runtime_bundle_sha256": signal["runtime_bundle_sha256"],
+        "request_binding_sha256": signal["request_binding_sha256"],
+        "runtime_preflight_sha256": signal["runtime_preflight_sha256"],
+    }
+    native = {**native_body, "sha256": "sha256:" + mechanics.digest(native_body)}
+    signal.update(
+        source_receipt_sha256=private["sha256"],
+        native_terminal_sha256=native["sha256"],
+    )
+    signal_body = {key: value for key, value in signal.items() if key != "sha256"}
+    signal["sha256"] = "sha256:" + mechanics.digest(signal_body)
+    (root / signal_qualification.EVIDENCE_FILE).write_text(json.dumps(signal))
+    (private_dir / signal_qualification.PRIVATE_GROUP_FILE).write_text(json.dumps(private))
+    (root / signal_qualification.NATIVE_TERMINAL_FILE).write_text(json.dumps(native))
+    (root / signal_qualification.RUNTIME_PREFLIGHT_FILE).write_text(json.dumps(preflight))
+    monkeypatch.setattr(mechanics, "SFS_JOBS_ROOT", tmp_path)
+
+    mechanics._task_signal_source_exists(plan)
+    checkpoint = root / "model-output/checkpoints/unexpected.bin"
+    checkpoint.parent.mkdir(parents=True)
+    checkpoint.write_bytes(b"unexpected-update")
+    with pytest.raises(ValueError, match="source evidence is invalid"):
+        mechanics._task_signal_source_exists(plan)
 
 
 def test_server_preview_proves_root_alert_annotation_and_no_retry() -> None:
@@ -423,6 +546,8 @@ def test_selected_group_keeps_exact_execution_ids_private(
             "instance_id": str(uuid.UUID(int=index + 100)),
             "verifier_execution_id": str(uuid.UUID(int=index + 200)),
             "reward": float(index % 2),
+            "done_reason": "submitted",
+            "tool_calls": 3,
             "cleanup_confirmed": True,
         }
         value = {**body, "sha256": "sha256:" + mechanics.digest(body)}
@@ -672,12 +797,12 @@ def test_live_preview_absence_and_exactly_one_post_are_durably_journaled(
             "context": plan["execution"]["kubernetes_context"],
             "namespace": plan["execution"]["namespace"],
             "run_name_prefix": request["name"],
-            "generated_name_pattern": "^" + request["name"] + "-[a-f0-9]{8}$",
+            "generated_name_pattern": "^" + launch.re.escape(request["name"]) + "-[a-f0-9]{8}$",
             "run_dir": request["run_dir"],
             "image": request["image"],
             "plan_sha256": "sha256:" + mechanics.digest(plan),
             "manifest_sha256": preview["manifest_sha256"],
-            "maximum_seconds": 7200,
+            "maximum_seconds": launch._maximum_seconds(plan, request),
             "expected_gpus": 8,
             "armed_at": now,
             "observer_pid": os.getpid(),

@@ -43,6 +43,7 @@ COMPLETE_MODEL_SCHEMA = "cyber_qwen38_miles96_complete_model_v1"
 CHECKPOINT_MANIFEST_SCHEMA = "cyber_qwen38_miles96_checkpoint_manifest_v1"
 PREPARED_MODEL_SCHEMA = "cyber_qwen38_miles96_prepared_model_inventory_v1"
 TASK_SIGNAL_EVIDENCE_SCHEMA = "cyber_qwen38_miles96_task_signal_evidence_v1"
+NORMAL_DONE_REASONS = {"answered", "submitted", "boundary_stop", "max_turns"}
 IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:"
     "5bdf98161971959295b24efa54d0ad91445e6d6e409d9f1384cb886992dbb064"
@@ -93,6 +94,7 @@ FROZEN_TENSOR_PREFIXES = ("model.visual.", "mtp.")
 PROD_JOBS_API = "https://api.ft.flt.build"
 PROD_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 NAMESPACE = "fleet-train-jobs"
+SFS_JOBS_ROOT = Path("/mnt/sfs/jobs")
 
 
 def digest(value: Any) -> str:
@@ -186,6 +188,8 @@ def build_plan(
     inside this canary's bounded episode.  This function intentionally cannot
     infer a task, reuse a predecessor, or stage a private row from history.
     """
+    from training import miles96_signal_qualification as signal_qualification
+
     plan = {
         "schema": SCHEMA,
         "identity": {
@@ -211,6 +215,7 @@ def build_plan(
             "miles_hf_export_sha256": MILES_HF_EXPORT_SHA256,
             "miles_wandb_utils_sha256": MILES_WANDB_UTILS_SHA256,
         },
+        "runtime_sources": signal_qualification.runtime_source_manifest(),
         "execution": {
             "cluster_target": "prod",
             "jobs_api_base_url": PROD_JOBS_API,
@@ -239,7 +244,7 @@ def build_plan(
         "episode": {
             "max_turns": 32,
             "max_tokens_per_turn": 8192,
-            "max_concurrent_envs": 8,
+            "max_concurrent_envs": 2,
             "request_timeout_s": 120,
             "ready_timeout_s": 600,
             "episode_timeout_s": 2400,
@@ -292,6 +297,7 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "schema",
         "identity",
         "trainer",
+        "runtime_sources",
         "execution",
         "prepared_model",
         "task_binding",
@@ -335,6 +341,10 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     }
     if value["trainer"] != expected_trainer:
         raise ValueError("maintained 96K Miles trainer binding drift")
+    from training import miles96_signal_qualification as signal_qualification
+
+    if value["runtime_sources"] != signal_qualification.runtime_source_manifest():
+        raise ValueError("custom runtime source manifest drift")
     if value["execution"] != {
         "cluster_target": "prod",
         "jobs_api_base_url": PROD_JOBS_API,
@@ -381,6 +391,17 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     signal = value["task_signal_evidence"]
     signal_fields = {
         "schema",
+        "phase1_plan_sha256",
+        "phase1_run_name",
+        "model_revision",
+        "model_binding_sha256",
+        "authority_config_sha256",
+        "current_binding_sha256",
+        "production_split_sha256",
+        "planned_slot_count",
+        "terminal_slot_count",
+        "excluded_slot_count",
+        "outer_replacement_count",
         "task_key",
         "task_version_id",
         "verifier_version_id",
@@ -394,6 +415,13 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "reward_variation",
         "all_instances_released",
         "source_receipt_sha256",
+        "native_terminal_sha256",
+        "optimizer_steps",
+        "checkpoint_artifacts_absent",
+        "runtime_source_manifest_sha256",
+        "runtime_bundle_sha256",
+        "request_binding_sha256",
+        "runtime_preflight_sha256",
         "sha256",
     }
     if not isinstance(signal, dict) or set(signal) != signal_fields:
@@ -402,6 +430,21 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     if (
         signal.get("schema") != TASK_SIGNAL_EVIDENCE_SCHEMA
         or signal.get("sha256") != "sha256:" + digest(signal_body)
+        or signal.get("model_revision") != "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+        or signal.get("model_binding_sha256")
+        != "sha256:dcfdcd6ecb6661741cd3a4b24dc5af7259642c8a6824773e0de70d55d7501179"
+        or signal.get("authority_config_sha256")
+        != "sha256:8c3c029c45b0a40832b66a6c9fff02f68b9ccd3805e9e12c9afd551375415a93"
+        or signal.get("production_split_sha256")
+        != "sha256:1f0da5054df25a7d67476f591d8c9c8d42d44de65c0b9d4b542ba9e33b132472"
+        or signal.get("planned_slot_count") != 8
+        or signal.get("terminal_slot_count") != 8
+        or type(signal.get("excluded_slot_count")) is not int
+        or type(signal.get("completed_episode_count")) is not int
+        or signal["excluded_slot_count"] != 8 - signal.get("completed_episode_count", -1)
+        or not 2 <= signal["completed_episode_count"] <= 8
+        or not 0 <= signal["excluded_slot_count"] <= 6
+        or signal.get("outer_replacement_count") != 0
         or any(signal.get(field) != task[field] for field in authority)
         or type(signal.get("max_turns")) is not int
         or not 1 <= signal["max_turns"] <= 32
@@ -414,9 +457,40 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         or signal.get("finite_rewards") is not True
         or signal.get("reward_variation") is not True
         or signal.get("all_instances_released") is not True
+        or signal.get("optimizer_steps") != 0
+        or signal.get("checkpoint_artifacts_absent") is not True
+        or signal.get("runtime_source_manifest_sha256")
+        != "sha256:" + digest(value["runtime_sources"])
     ):
         raise ValueError("task lacks exact bounded mixed-signal evidence")
+    _name(signal["phase1_run_name"], "phase-1 run name")
+    for field in (
+        "phase1_plan_sha256",
+        "model_binding_sha256",
+        "authority_config_sha256",
+        "current_binding_sha256",
+        "production_split_sha256",
+        "native_terminal_sha256",
+        "runtime_source_manifest_sha256",
+        "runtime_bundle_sha256",
+        "request_binding_sha256",
+        "runtime_preflight_sha256",
+    ):
+        _sha256(signal[field], field)
     _sha256(signal["source_receipt_sha256"], "task signal source receipt")
+    from training import miles96_signal_qualification as signal_qualification
+
+    phase1 = signal_qualification.build_plan(
+        name=signal["phase1_run_name"],
+        model_root=signal_qualification.HF_MODEL_ROOT,
+        model_binding_sha256=signal["model_binding_sha256"],
+        task_binding=task,
+        authority_config_sha256=signal["authority_config_sha256"],
+        current_binding_sha256=signal["current_binding_sha256"],
+        production_split_sha256=signal["production_split_sha256"],
+    )
+    if signal["phase1_plan_sha256"] != "sha256:" + digest(phase1):
+        raise ValueError("task signal evidence is not bound to the exact phase-1 plan")
 
     if value["provenance"] != {
         "mechanics_reference": {
@@ -436,7 +510,7 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     expected_episode = {
         "max_turns": 32,
         "max_tokens_per_turn": 8192,
-        "max_concurrent_envs": 8,
+        "max_concurrent_envs": 2,
         "request_timeout_s": 120,
         "ready_timeout_s": 600,
         "episode_timeout_s": 2400,
@@ -699,10 +773,14 @@ def native_arguments(plan: dict[str, Any]) -> list[str]:
 
 
 def _runtime_files(plan: dict[str, Any]) -> dict[str, str]:
+    from training import miles96_signal_qualification as signal_qualification
+
+    files = signal_qualification.runtime_source_files()
+    if signal_qualification.runtime_source_manifest() != plan["runtime_sources"]:
+        raise ValueError("custom runtime source manifest drift")
     return {
+        **files,
         "sitecustomize.py": SITECUSTOMIZE,
-        "training/__init__.py": "",
-        "training/miles96_mechanics_canary.py": Path(__file__).read_text(),
         "plan.json": json.dumps(plan, sort_keys=True, separators=(",", ":")),
     }
 
@@ -743,16 +821,20 @@ def job_request(plan: dict[str, Any]) -> dict[str, Any]:
             "CYBER_PLAN_SHA256": digest(plan),
             "CYBER_MODEL_BINDING_SHA256": plan["prepared_model"]["binding_sha256"],
             "CYBER_TASK_BINDING_SHA256": "sha256:" + digest(plan["task_binding"]),
+            "CYBER_RUNTIME_SOURCE_MANIFEST_SHA256": "sha256:" + digest(plan["runtime_sources"]),
             "TOKENIZERS_PARALLELISM": "false",
             "PYTHONUNBUFFERED": "1",
         },
     }
-    return bundled_request(
+    request = bundled_request(
         request,
         _runtime_files(plan),
         "training.miles96_mechanics_canary",
         ["--train", "--plan", "plan.json", "--sha256", digest(plan)],
     )
+    from training import miles96_signal_qualification as signal_qualification
+
+    return signal_qualification._seal_runtime_request(request)
 
 
 def _runtime_recipe_binding() -> None:
@@ -844,6 +926,73 @@ def _prepared_model_exists(plan: dict[str, Any]) -> None:
         raise ValueError("prepared model bytes differ from the immutable binding")
 
 
+def _task_signal_source_exists(plan: dict[str, Any]) -> None:
+    """Re-read the exact phase-1 public/private/zero-update receipts from SFS."""
+    from training import miles96_signal_qualification as qualification
+
+    signal = plan["task_signal_evidence"]
+    root = SFS_JOBS_ROOT / signal["phase1_run_name"]
+    paths = {
+        "public": root / qualification.EVIDENCE_FILE,
+        "private": root / PRIVATE_EVIDENCE_DIR / qualification.PRIVATE_GROUP_FILE,
+        "native": root / qualification.NATIVE_TERMINAL_FILE,
+        "preflight": root / qualification.RUNTIME_PREFLIGHT_FILE,
+    }
+    if root.is_symlink() or any(path.is_symlink() or not path.is_file() for path in paths.values()):
+        raise ValueError("exact phase-1 signal source evidence is absent or unsafe")
+    public = json.loads(paths["public"].read_text())
+    private = json.loads(paths["private"].read_text())
+    native = json.loads(paths["native"].read_text())
+    preflight = json.loads(paths["preflight"].read_text())
+    phase1 = qualification.build_plan(
+        name=signal["phase1_run_name"],
+        model_root=qualification.HF_MODEL_ROOT,
+        model_binding_sha256=signal["model_binding_sha256"],
+        task_binding=plan["task_binding"],
+        authority_config_sha256=signal["authority_config_sha256"],
+        current_binding_sha256=signal["current_binding_sha256"],
+        production_split_sha256=signal["production_split_sha256"],
+    )
+    qualification._validate_runtime_preflight(phase1, preflight)
+    private_body = {key: item for key, item in private.items() if key != "sha256"}
+    native_body = {key: item for key, item in native.items() if key != "sha256"}
+    checkpoint_dir = root / "model-output" / "checkpoints"
+    if (
+        public != signal
+        or private.get("schema") != qualification.PRIVATE_GROUP_SCHEMA
+        or private.get("sha256") != "sha256:" + digest(private_body)
+        or private.get("sha256") != signal["source_receipt_sha256"]
+        or private.get("plan_sha256") != signal["phase1_plan_sha256"]
+        or private.get("runtime_source_manifest_sha256") != signal["runtime_source_manifest_sha256"]
+        or private.get("runtime_bundle_sha256") != signal["runtime_bundle_sha256"]
+        or private.get("request_binding_sha256") != signal["request_binding_sha256"]
+        or private.get("runtime_preflight_sha256") != signal["runtime_preflight_sha256"]
+        or not isinstance(private.get("episode_receipts"), list)
+        or len(private["episode_receipts"]) != signal["completed_episode_count"]
+        or not isinstance(private.get("admitted_episode_bindings"), list)
+        or len(private["admitted_episode_bindings"]) != signal["completed_episode_count"]
+        or not isinstance(private.get("claim_receipts"), list)
+        or len(private["claim_receipts"]) != signal["planned_slot_count"]
+        or not isinstance(private.get("slot_receipts"), list)
+        or len(private["slot_receipts"]) != signal["terminal_slot_count"]
+        or native.get("schema") != qualification.NATIVE_TERMINAL_SCHEMA
+        or native.get("sha256") != "sha256:" + digest(native_body)
+        or native.get("sha256") != signal["native_terminal_sha256"]
+        or native.get("plan_sha256") != signal["phase1_plan_sha256"]
+        or native.get("status") != "succeeded"
+        or native.get("returncode") != 0
+        or native.get("optimizer_steps") != 0
+        or native.get("checkpoint_artifacts_absent") is not True
+        or native.get("runtime_source_manifest_sha256") != signal["runtime_source_manifest_sha256"]
+        or native.get("runtime_bundle_sha256") != signal["runtime_bundle_sha256"]
+        or native.get("request_binding_sha256") != signal["request_binding_sha256"]
+        or native.get("runtime_preflight_sha256") != signal["runtime_preflight_sha256"]
+        or preflight.get("sha256") != signal["runtime_preflight_sha256"]
+        or (checkpoint_dir.exists() and any(path.is_file() for path in checkpoint_dir.rglob("*")))
+    ):
+        raise ValueError("exact phase-1 signal source evidence is invalid")
+
+
 def _runtime_paths(plan: dict[str, Any]) -> tuple[Path, Path, Path]:
     run_dir = Path(plan["identity"]["run_dir"])
     data_dir = run_dir / "data"
@@ -873,7 +1022,14 @@ def _stage_train_inputs(plan: dict[str, Any], expected_digest: str) -> None:
         raise ValueError("prepared model binding drift")
     if os.environ.get("CYBER_TASK_BINDING_SHA256") != "sha256:" + digest(plan["task_binding"]):
         raise ValueError("task binding drift")
+    if os.environ.get("CYBER_RUNTIME_SOURCE_MANIFEST_SHA256") != "sha256:" + digest(
+        plan["runtime_sources"]
+    ):
+        raise ValueError("runtime source manifest binding drift")
+    for field in ("CYBER_RUNTIME_BUNDLE_SHA256", "CYBER_REQUEST_BINDING_SHA256"):
+        _sha256(os.environ.get(field), field)
     _runtime_recipe_binding()
+    _task_signal_source_exists(plan)
     _prepared_model_exists(plan)
     data_dir.mkdir(mode=0o700)
     output_dir.mkdir(mode=0o700)
@@ -909,7 +1065,13 @@ def _load_runtime_plan() -> dict[str, Any]:
     if not runtime_dir.is_dir():
         raise ValueError("Miles worker runtime source is absent")
     plan = json.loads((runtime_dir / "plan.json").read_text())
-    return validate_plan(plan)
+    if plan.get("schema") == SCHEMA:
+        return validate_plan(plan)
+    # Signal qualification uses the same exact V1 task/session adapter but
+    # deliberately has no optimizer or checkpoint contract.
+    from training import miles96_signal_qualification as signal
+
+    return signal.validate_plan(plan)
 
 
 _EVIDENCE_SESSION_CLASS: type | None = None
@@ -989,6 +1151,9 @@ def _evidence_episode_metadata(session: Any, result: Any, stats: Any) -> dict[st
         or not session.deleted
         or session.cleanup_error is not None
         or result.grade is None
+        or result.done_reason not in NORMAL_DONE_REASONS
+        or type(stats.tool_calls) is not int
+        or stats.tool_calls < 1
     ):
         raise ValueError("V1 episode authority or cleanup evidence is incomplete")
     reward = float(result.grade.reward)
@@ -1003,8 +1168,18 @@ def _evidence_episode_metadata(session: Any, result: Any, stats: Any) -> dict[st
         "instance_id": _uuid(session.instance.instance_id, "instance identity"),
         "verifier_execution_id": session.verifier_execution_id,
         "reward": reward,
+        "done_reason": result.done_reason,
+        "tool_calls": stats.tool_calls,
         "cleanup_confirmed": True,
     }
+    if hasattr(session, "_signal_slot_id"):
+        body.update(
+            {
+                "sample_index": session._signal_sample_index,
+                "slot_id": session._signal_slot_id,
+                "attempt_id": session._signal_attempt_id,
+            }
+        )
     payload = {**body, "sha256": "sha256:" + digest(body)}
     evidence_dir = _private_directory(
         Path(os.environ.get("CYBER_EVIDENCE_RUN_DIR", plan["identity"]["run_dir"]))
@@ -1088,6 +1263,9 @@ def record_selected_reward_group(args: Any, data: list[Any]) -> None:
             or value.get("task_key") != plan["task_binding"]["task_key"]
             or value.get("task_version_id") != plan["task_binding"]["task_version_id"]
             or value.get("verifier_version_id") != plan["task_binding"]["verifier_version_id"]
+            or value.get("done_reason") not in NORMAL_DONE_REASONS
+            or type(value.get("tool_calls")) is not int
+            or value["tool_calls"] < 1
             or value.get("cleanup_confirmed") is not True
         ):
             raise ValueError("private episode authority evidence is invalid")
