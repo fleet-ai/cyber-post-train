@@ -24,10 +24,27 @@ def _signal_plan() -> dict:
     }
 
 
+def _mechanics_plan() -> dict:
+    return {
+        "schema": launch.mechanics.SCHEMA,
+        "identity": {"reload_name": "chris-q38-m96-reload-test-a1"},
+        "optimization": {"prompt_groups": 1, "samples_per_prompt": 8},
+        "episode": _signal_plan()["episode"],
+    }
+
+
 def test_signal_active_deadline_covers_four_bounded_serial_waves() -> None:
     expected = 1800 + 4 * (600 + 2400 + 900 + 2 * 120 + 60) + 300
     assert launch._maximum_seconds(_signal_plan(), {}) == expected == 18900
-    assert launch._maximum_seconds({"schema": "mechanics"}, {}) == 7200
+
+
+def test_mechanics_active_deadline_adds_update_checkpoint_and_export_grace() -> None:
+    expected = (
+        1800 + 4 * (600 + 2400 + 900 + 2 * 120 + 60) + 1800 + 1800 + 3600 + 300
+    )
+    plan = _mechanics_plan()
+    assert launch._maximum_seconds(plan, {"name": "train"}) == expected == 26100
+    assert launch._maximum_seconds(plan, {"name": plan["identity"]["reload_name"]}) == 7200
 
 
 def test_final_prepost_gate_rechecks_observer_jobs_and_kubernetes(monkeypatch, tmp_path) -> None:

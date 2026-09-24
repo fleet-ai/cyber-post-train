@@ -42,6 +42,9 @@ CAPACITY_MAX_AGE_SECONDS = 120
 SIGNAL_MODEL_STARTUP_GRACE_SECONDS = 1800
 SIGNAL_SLOT_CLOSE_GRACE_SECONDS = 60
 SIGNAL_RELEASE_GRACE_SECONDS = 300
+MECHANICS_OPTIMIZER_GRACE_SECONDS = 1800
+MECHANICS_CHECKPOINT_GRACE_SECONDS = 1800
+MECHANICS_HF_EXPORT_GRACE_SECONDS = 3600
 POST_RECONCILIATION_SECONDS = 600
 PROJECT_OWNER_PREFIXES = ("chris-q38-",)
 PROJECT_MAX_NODES = 10
@@ -109,19 +112,34 @@ def _paths(directory: Path) -> dict[str, Path]:
 def _maximum_seconds(plan: dict[str, Any], request: dict[str, Any]) -> int:
     """Return the active-allocation bound; queue time starts no clock.
 
-    The mechanics canary has one episode and retains its reviewed two-hour
-    bound.  Signal qualification has eight immutable slots but admits only two
-    environments at once.  Its four serial waves therefore need their own
-    deterministic envelope instead of inheriting the shorter mechanics bound.
+    Signal qualification and the mechanics update each have eight immutable
+    slots but admit only two environments at once.  Their four serial waves
+    therefore need a deterministic envelope.  Mechanics also reserves bounded
+    post-rollout time for its one update, checkpoint and HF export.  The
+    separate one-GPU reload retains its reviewed two-hour bound.
     """
     from training import miles96_signal_qualification as signal
 
-    if plan.get("schema") != signal.SCHEMA:
+    schema = plan.get("schema")
+    if schema == mechanics.SCHEMA and request.get("name") == plan["identity"]["reload_name"]:
+        return 7200
+    if schema == signal.SCHEMA:
+        samples = plan["qualification"]["samples"]
+        post_rollout = 0
+    elif schema == mechanics.SCHEMA:
+        samples = (
+            plan["optimization"]["prompt_groups"]
+            * plan["optimization"]["samples_per_prompt"]
+        )
+        post_rollout = (
+            MECHANICS_OPTIMIZER_GRACE_SECONDS
+            + MECHANICS_CHECKPOINT_GRACE_SECONDS
+            + MECHANICS_HF_EXPORT_GRACE_SECONDS
+        )
+    else:
         return 7200
     episode = plan["episode"]
-    waves = math.ceil(
-        plan["qualification"]["samples"] / episode["max_concurrent_envs"]
-    )
+    waves = math.ceil(samples / episode["max_concurrent_envs"])
     per_wave = (
         episode["ready_timeout_s"]
         + episode["episode_timeout_s"]
@@ -132,6 +150,7 @@ def _maximum_seconds(plan: dict[str, Any], request: dict[str, Any]) -> int:
     maximum = (
         SIGNAL_MODEL_STARTUP_GRACE_SECONDS
         + waves * per_wave
+        + post_rollout
         + SIGNAL_RELEASE_GRACE_SECONDS
     )
     if not 7200 < maximum <= 24 * 60 * 60:
