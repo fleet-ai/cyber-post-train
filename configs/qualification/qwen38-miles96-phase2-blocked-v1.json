@@ -1,0 +1,438 @@
+{
+  "acceptance_contract": {
+    "checkpoint_export_receipt_valid": true,
+    "exactly_one_optimizer_update": true,
+    "finite_optimizer_metrics": true,
+    "four_phase1_signal_receipts_revalidated_from_sfs": true,
+    "prepared_model_rehashed_before_and_after_training": true,
+    "reload_gpus_released": true,
+    "reload_receipt_valid": true,
+    "train_gpus_released": true,
+    "train_instances_released": true
+  },
+  "authority": {
+    "adapter_commit": "978df19a1f6b344e2f88d9502060700a59294681",
+    "fti_version": "0.10.27",
+    "image_source_commit": "d23116f018cb9213f0a3ee6c228d213abcd85d80",
+    "miles_commit": "9e178ca16839b0600155f3927f57ce0670b8f453",
+    "model_binding_sha256": "sha256:dcfdcd6ecb6661741cd3a4b24dc5af7259642c8a6824773e0de70d55d7501179",
+    "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "model_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+    "production_split_sha256": "sha256:1f0da5054df25a7d67476f591d8c9c8d42d44de65c0b9d4b542ba9e33b132472",
+    "runtime_source_closure_sha256": "sha256:de52b39f55e92a079bef1c0ea14b9e823e4af5096318dca5cf48cc800225fd15",
+    "score_blind_review_commit": "7858ead1f2c498850816168fded1be9d3927fa32",
+    "score_blind_review_file_sha256": "sha256:5becf0b6486cacfc04990bdadc3ed03e5cbd20ce08fad33faea5a070315b9cb1",
+    "score_blind_review_sha256": "sha256:380fffe94ded5d345f35eda72d1c3ea461f55a76526d5d5e6221911c48f1313a",
+    "task_set_sha256": "sha256:5de88eada94119fd21ac715bb1956a745376d775c13ce7d5584936e70b3a003a",
+    "theseus_commit": "68da13aa9c226d1bfed0ad59b990b99321d44239",
+    "trainer_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:5bdf98161971959295b24efa54d0ad91445e6d6e409d9f1384cb886992dbb064",
+    "wave_sha256": "sha256:8c3c029c45b0a40832b66a6c9fff02f68b9ccd3805e9e12c9afd551375415a93"
+  },
+  "candidate_bindings": [
+    {
+      "authority_receipt_sha256": "sha256:747f5373a65c30c9a8025efbd8f943d051431007f795eb23c96c53999c6f2632",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "live_binding_receipt_sha256": "sha256:82ef6b246236bec7da87ef07171b3da43d671e9a2665e9a983aa2fc9a81872dd",
+      "name": "chris-q38-m96-sig-2c50-a1",
+      "phase1_plan_sha256": "sha256:b2602c42bc638db104ee2789b86d572d0e963ca81d5953c890b53455a7c2ca3a",
+      "phase1_run_dir": "/mnt/sfs/jobs/chris-q38-m96-sig-2c50-a1",
+      "split": "train",
+      "task_family": "cyber/atoms/fakelook/search-history-retention-bypass@0",
+      "task_key": "cysec1-2-fakelook-gen_blackbox-2c504442adc773ca9a82c247__blackbox_ctf_v1",
+      "task_version_id": "53d2f089-6502-4208-9795-d6ba7277fa9a",
+      "verifier_version_id": "b0738f59-3dd6-464b-b7f6-633cab4496b4"
+    },
+    {
+      "authority_receipt_sha256": "sha256:057739c6b6a9783b60a464b6e8bc861d8975d928311564df316bc1ed7eb7f8b3",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "live_binding_receipt_sha256": "sha256:0fde4cf8fff30ebe8d4bdf773b0910728dabfa4695f076756598d3a65cb035a5",
+      "name": "chris-q38-m96-sig-7317-a1",
+      "phase1_plan_sha256": "sha256:3ef5adf0333105b38547bde7fe9c43386e0b9751a55bde9df88016256ab052fd",
+      "phase1_run_dir": "/mnt/sfs/jobs/chris-q38-m96-sig-7317-a1",
+      "split": "train",
+      "task_family": "cyber/atoms/fakelook/user-signature-read-owner-check-dropped@0",
+      "task_key": "cysec1-2-fakelook-gen_blackbox-7317189e8fefb9033c5be097__blackbox_ctf_v1",
+      "task_version_id": "2fdc9511-f5fe-4386-a4a5-a5a16a30f359",
+      "verifier_version_id": "928e5c13-b15a-412d-a037-fbed7389572a"
+    },
+    {
+      "authority_receipt_sha256": "sha256:f8bd8eec65f54ed92b29bba6788c581f2fcaa6ea834ce5df355490307f7b078c",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "live_binding_receipt_sha256": "sha256:d924dce44727e7de2fb63b5ddbe707a442cdbcf6081f10779cb6208c9e2fe9d9",
+      "name": "chris-q38-m96-sig-8095-a1",
+      "phase1_plan_sha256": "sha256:c8217f49fe853b3ce74eaa1690c785c1ad19f1348cbc3e88444bc04c0e843969",
+      "phase1_run_dir": "/mnt/sfs/jobs/chris-q38-m96-sig-8095-a1",
+      "split": "train",
+      "task_family": "cyber/atoms/fakelook/signature-merge-second-pass@0",
+      "task_key": "cysec1-2-fakelook-gen_blackbox-8095d44c3871865064a0702c__blackbox_ctf_v1",
+      "task_version_id": "e13f62eb-170a-40c6-86bf-3c3f3829e3d8",
+      "verifier_version_id": "0c51f20b-1c7e-4f02-b06a-7e84bc6b2b59"
+    },
+    {
+      "authority_receipt_sha256": "sha256:579de08a8b7cda20ad502442bd4f3a4a93c552935ea8763272929b0a862fa888",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "live_binding_receipt_sha256": "sha256:337cd69b006907c45b4d6f159b8151ce0d6c1edb4a7e1c6addb54c91e61c4ae4",
+      "name": "chris-q38-m96-sig-f294-a1",
+      "phase1_plan_sha256": "sha256:dc576b653c44e2cf5a638dc02cf813fbccddacc5ad8a4c60342cc0415c001a01",
+      "phase1_run_dir": "/mnt/sfs/jobs/chris-q38-m96-sig-f294-a1",
+      "split": "train",
+      "task_family": "cyber/atoms/current/event-snapshot-live-object-hydrate@0",
+      "task_key": "cysec1-2-current-gen_blackbox-f294215ad60b41799b9f7bac__blackbox_ctf_v1",
+      "task_version_id": "e4068901-ba6e-4faf-b30c-7535aa11f0fc",
+      "verifier_version_id": "e99e97eb-5ad6-49d6-bcd9-40cedb863c97"
+    }
+  ],
+  "checkpoint_export_acceptance": {
+    "all_output_files_hashed": true,
+    "all_trained_tensors_finite": true,
+    "complete_hf_one_update_export_create_once": true,
+    "forced_terminal_checkpoint_after_bounded_update": true,
+    "frozen_tensor_prefixes": [
+      "model.visual.",
+      "mtp."
+    ],
+    "frozen_tensors_byte_exact_from_base": true,
+    "minimum_changed_trained_tensors": 1,
+    "native_checkpoint_nonempty_and_manifested": true,
+    "optimizer_updates": 1,
+    "periodic_checkpoint_interval_remains_v004_value_four": true,
+    "raw_hf_one_update_export_complete": true,
+    "train_receipt_required": true
+  },
+  "cyber_only_deviations_from_v004": [
+    {
+      "cyber": "two deterministic prompt groups for each of four exact train-only Fleet cyber tasks",
+      "field": "data",
+      "reason": "make one 8x4 wave from the four independently qualified task bindings without adding unqualified tasks",
+      "v004": "eight distinct easy dataminer prompts per wave"
+    },
+    {
+      "cyber": "exactly one optimizer update",
+      "field": "training_horizon",
+      "reason": "phase two is the smallest real mechanics and checkpoint qualification, not a full research run",
+      "v004": "80 optimizer updates"
+    },
+    {
+      "cyber": "keep interval four and force a final save/export after the single bounded update",
+      "field": "terminal_checkpoint",
+      "reason": "one update never reaches the first periodic save but must prove a reloadable artifact",
+      "v004": "periodic saves every four updates"
+    },
+    {
+      "cyber": "all eight groups must be complete, finite, reward-varying, uniquely graded, and released before update",
+      "field": "task_signal_gate",
+      "reason": "do not spend the only update on constant, fabricated, incomplete, or leaked reward",
+      "v004": "aborted groups are dynamically filtered"
+    },
+    {
+      "cyber": "frozen current FTI/Miles cyber adapter, exact task/env/verifier/tool bindings, and exact immutable cyber image",
+      "field": "runtime_binding",
+      "reason": "Fleet cyber tasks require the maintained FTI session and verifier contract",
+      "v004": "historical dataminer Miles image and harness"
+    },
+    {
+      "cyber": "32 turns, 8192 tokens per turn, 2400 seconds, no compaction",
+      "field": "episode_envelope",
+      "reason": "reuse the already bounded phase-one signal envelope for this mechanics qualification",
+      "v004": "dataminer agent loop"
+    },
+    {
+      "cyber": "compose a complete HF model with byte-exact frozen visual/MTP tensors, then run a separate zero-update reload",
+      "field": "model_export",
+      "reason": "prove the exported multimodal checkpoint is complete and actually reloadable",
+      "v004": "Megatron checkpoint followed by offline conversion"
+    },
+    {
+      "cyber": "c1/q1 plus root failure-alert opt-out, create-once identities, exact previews, receipts, and UID-bound release",
+      "field": "operational_safety",
+      "reason": "current cluster policy and auditable create-once operation",
+      "v004": "historical c1/q1 Job"
+    }
+  ],
+  "future_identity": {
+    "phase1_signal_evidence_sha256s": null,
+    "phase2_plan_sha256": null,
+    "reload_name": "chris-q38-m96-p2-v004-reload-a1",
+    "reload_request_sha256": null,
+    "reload_run_dir": "/mnt/sfs/jobs/chris-q38-m96-p2-v004-reload-a1",
+    "train_name": "chris-q38-m96-p2-v004-oneupd-a1",
+    "train_request_sha256": null,
+    "train_run_dir": "/mnt/sfs/jobs/chris-q38-m96-p2-v004-oneupd-a1",
+    "wandb_run_id": "chris-q38-m96-p2-v004-oneupd-a1"
+  },
+  "known_adapter_gap": {
+    "adapter_extension_required": true,
+    "current_first_qualification_shape": {
+      "checkpoint_interval": 1,
+      "learning_rate": 1e-06,
+      "max_concurrent_episodes": 2,
+      "max_train_tokens_per_gpu": 49152,
+      "optimizer_cpu_offload": false,
+      "prompt_groups": 1,
+      "samples_per_prompt": 8
+    },
+    "exact_image_runtime_preflight_required": true,
+    "must_bind_all_four_task_tuples_and_eight_prompt_groups": true,
+    "must_prove_forced_terminal_save_without_changing_periodic_interval": true,
+    "must_render_and_validate_v004_optimizer_and_offload_flags": true,
+    "required_successor_shape": "train_contract"
+  },
+  "launchable": false,
+  "optimizer_gate": {
+    "all_episodes_used_task_tools": true,
+    "all_task_instances_released_before_update": true,
+    "episodes_per_group": 4,
+    "every_group_all_four_normally_completed_and_gradeable": true,
+    "every_group_all_rewards_finite": true,
+    "every_group_minimum_distinct_reward_values": 2,
+    "prompt_group_count": 8,
+    "selected_episode_count": 32,
+    "unique_task_instance_ids": 32,
+    "unique_verifier_execution_ids": 32,
+    "update_if_any_group_gate_fails": false
+  },
+  "phase1_prerequisite": {
+    "each_lane_minimum_completed_gradeable_episodes": 2,
+    "each_lane_requires_all_instances_released": true,
+    "each_lane_requires_distinct_finite_rewards": true,
+    "each_lane_requires_eight_terminal_slots": true,
+    "each_lane_requires_no_checkpoint_artifacts": true,
+    "each_lane_requires_unique_verifier_executions": true,
+    "each_lane_requires_zero_optimizer_steps": true,
+    "fallback_or_task_substitution": false,
+    "historical_reward_magnitudes_used": false,
+    "historical_scores_used": false,
+    "required_qualified_lanes": 4,
+    "required_terminal_phase1_lanes": 4
+  },
+  "phase2_prompt_schedule": [
+    {
+      "candidate_name": "chris-q38-m96-sig-2c50-a1",
+      "prompt_group_index": 0,
+      "replicate_index": 0,
+      "samples": 4
+    },
+    {
+      "candidate_name": "chris-q38-m96-sig-7317-a1",
+      "prompt_group_index": 1,
+      "replicate_index": 0,
+      "samples": 4
+    },
+    {
+      "candidate_name": "chris-q38-m96-sig-8095-a1",
+      "prompt_group_index": 2,
+      "replicate_index": 0,
+      "samples": 4
+    },
+    {
+      "candidate_name": "chris-q38-m96-sig-f294-a1",
+      "prompt_group_index": 3,
+      "replicate_index": 0,
+      "samples": 4
+    },
+    {
+      "candidate_name": "chris-q38-m96-sig-2c50-a1",
+      "prompt_group_index": 4,
+      "replicate_index": 1,
+      "samples": 4
+    },
+    {
+      "candidate_name": "chris-q38-m96-sig-7317-a1",
+      "prompt_group_index": 5,
+      "replicate_index": 1,
+      "samples": 4
+    },
+    {
+      "candidate_name": "chris-q38-m96-sig-8095-a1",
+      "prompt_group_index": 6,
+      "replicate_index": 1,
+      "samples": 4
+    },
+    {
+      "candidate_name": "chris-q38-m96-sig-f294-a1",
+      "prompt_group_index": 7,
+      "replicate_index": 1,
+      "samples": 4
+    }
+  ],
+  "privacy": {
+    "credentials_included": false,
+    "environment_values_included": false,
+    "prompt_text_included": false,
+    "reward_values_included": false,
+    "trajectory_content_included": false,
+    "verifier_code_included": false
+  },
+  "purpose": "After all four exact train tasks independently prove fresh reward signal, run one v004-shaped 32-rollout wave, one finite optimizer update, one complete checkpoint/HF export, and a separate zero-update reload check.",
+  "reload_contract": {
+    "context_tokens": 98304,
+    "engine_stop_required": true,
+    "exact_complete_model_manifest_required": true,
+    "finite_reward_required": true,
+    "fresh_gradeable_episode_required": true,
+    "gpus_per_node": 1,
+    "jobs_api_failure_alerts": false,
+    "nodes": 1,
+    "optimizer_steps": 0,
+    "priority_class": "c1",
+    "queue_priority": "q1",
+    "reload_receipt_required": true,
+    "requeue_if_preempted": false,
+    "root_annotations": {
+      "fleet.ai/failure-alerts": "off"
+    },
+    "source_optimizer_updates": 1,
+    "starts_only_after_train_gpu_release": true,
+    "task_cleanup_required": true,
+    "tool_call_required": true
+  },
+  "schema": "cyber_qwen38_miles96_phase2_blocked_v1",
+  "sha256": "sha256:b7b35ce27874e1e4ce3015adac44471c2b314ae138b995e9d2e48b22bd162b25",
+  "state": "blocked_pending_four_task_signal_and_v004_adapter",
+  "stop_conditions": [
+    "any_phase1_lane_is_not_terminally_accounted",
+    "any_of_the_four_exact_phase1_tasks_lacks_fresh_reward_variation",
+    "any_task_environment_verifier_or_tool_binding_drifts",
+    "any_phase1_public_private_native_or_runtime_receipt_is_missing_or_invalid",
+    "any_phase1_lane_contains_an_optimizer_or_checkpoint_artifact",
+    "the_successor_adapter_does_not_exactly_render_the_v004_shape",
+    "any_of_eight_phase2_group_reward_gates_fails",
+    "optimizer_update_count_would_differ_from_one",
+    "optimizer_loss_gradient_norm_or_updated_tensors_are_nonfinite",
+    "forced_terminal_checkpoint_or_complete_export_proof_fails",
+    "train_or_reload_identity_preview_duplicate_capacity_or_observer_gate_fails",
+    "train_allocation_is_not_released_before_reload",
+    "reload_model_episode_cleanup_or_zero_update_proof_fails",
+    "any_terminal_gpu_release_is_unverified"
+  ],
+  "train_contract": {
+    "accelerator": "B300",
+    "adam_betas": [
+      0.9,
+      0.98
+    ],
+    "advantage_estimator": "grpo",
+    "checkpoint_interval": 4,
+    "compaction": false,
+    "context_parallel": 2,
+    "context_tokens": 98304,
+    "cpu_limit": "64",
+    "cpu_request": "48",
+    "episode_timeout_seconds": 2400,
+    "force_terminal_checkpoint_after_one_update": true,
+    "fresh_rollout_count": 32,
+    "full_parameter_training": true,
+    "global_batch_size": 32,
+    "gpus_per_node": 8,
+    "grpo_std_normalization": false,
+    "jobs_api_failure_alerts": false,
+    "kl_loss_coefficient": 0.001,
+    "kl_loss_type": "low_var_kl",
+    "learning_rate": 2e-06,
+    "lr_decay_style": "constant",
+    "max_concurrent_episodes": 32,
+    "max_tokens_per_turn": 8192,
+    "max_train_tokens_per_gpu": 8192,
+    "max_turns": 32,
+    "memory_limit": "2650Gi",
+    "memory_request": "1500Gi",
+    "nodes": 1,
+    "optimizer": "adam",
+    "optimizer_cpu_offload": true,
+    "optimizer_steps": 1,
+    "per_token_loss": true,
+    "pipeline_parallel": 1,
+    "ppo_clip_high": 0.28,
+    "ppo_clip_low": 0.2,
+    "priority_class": "c1",
+    "prompt_groups": 8,
+    "queue_priority": "q1",
+    "requeue_if_preempted": false,
+    "response_tokens": 81920,
+    "reward_filter": "fti.trainers.miles.filters.check_no_aborted_and_nonzero_std",
+    "rollout_iterations": 1,
+    "root_annotations": {
+      "fleet.ai/failure-alerts": "off"
+    },
+    "samples_per_prompt": 4,
+    "sampling_temperature": 0.7,
+    "sampling_top_k": 20,
+    "sampling_top_p": 0.8,
+    "seed": 20260924,
+    "sequence_parallel": true,
+    "tensor_parallel": 4,
+    "topology_mode": "preferred_single_host",
+    "weight_decay": 0.1
+  },
+  "unresolved_launch_gates": [
+    "four_fresh_phase1_terminal_and_signal_receipts",
+    "successor_adapter_implements_and_tests_exact_v004_train_contract",
+    "exact_four_task_eight_group_phase2_plan_and_request_digests",
+    "fresh_task_get_and_live_tool_schema_receipts_for_all_four_tasks",
+    "fresh_prepared_model_inventory_rehash",
+    "genuine_exact_image_runtime_preflight_for_v004_phase2_and_reload",
+    "fresh_jobs_kubernetes_sfs_and_wandb_duplicate_absence",
+    "two_identical_train_server_previews_with_root_alert_off_c1_q1_and_backoff_zero",
+    "fresh_eight_gpu_capacity_gate_and_prearmed_train_cleanup_observer",
+    "durable_single_post_intent_and_independent_train_approval",
+    "accepted_train_receipt_and_uid_bound_train_gpu_release",
+    "two_identical_reload_server_previews_with_root_alert_off_c1_q1_and_backoff_zero",
+    "fresh_one_gpu_capacity_gate_and_prearmed_reload_cleanup_observer",
+    "durable_single_post_intent_and_independent_reload_approval"
+  ],
+  "v004_reference": {
+    "commit": "10afa8d064bb3dd1c11c50768590e432dfa69097",
+    "grounding_notes": [
+      "The checked-in Job passes --lr 2e-6 and overrides --max-seq-len to 98304.",
+      "run_v004.py sets TP4, CP2 on one colocated 8-GPU node, dynamic 8192 train tokens per GPU, optimizer CPU offload, Adam betas, and sampling values.",
+      "protocol.md registers the wave-synchronous 8-prompt by 4-sample shape, concurrency 32, and save every four updates.",
+      "state.md records that the base-easy arm completed 80 updates and wrote periodic checkpoints through iteration 79."
+    ],
+    "historical_image": "radixark/miles@sha256:a7ef79b5c0d0cb1a5d6ab0f39a2693ea63ea369d9339d04b7b3e0b7ec23b5dfe",
+    "proven_recipe_shape": {
+      "accelerator": "B300",
+      "adam_betas": [
+        0.9,
+        0.98
+      ],
+      "checkpoint_interval": 4,
+      "context_parallel": 2,
+      "effective_context_tokens": 98304,
+      "full_parameter_training": true,
+      "global_batch_size": 32,
+      "gpus_per_node": 8,
+      "learning_rate": 2e-06,
+      "max_concurrent_episodes": 32,
+      "max_train_tokens_per_gpu": 8192,
+      "nodes": 1,
+      "optimizer": "adam",
+      "optimizer_cpu_offload": true,
+      "prompt_groups": 8,
+      "samples_per_prompt": 4,
+      "sampling_temperature": 0.7,
+      "sampling_top_k": 20,
+      "sampling_top_p": 0.8,
+      "tensor_parallel": 4,
+      "weight_decay": 0.1
+    },
+    "repository": "fleet-ai/dataminer_v2",
+    "sources": {
+      "base_easy_job": {
+        "git_blob": "5ece2def0ca5cb41787cb6205e09b1a8636586ad",
+        "path": "experiments/rl-transfer-v004/jobs/neeraj-dataminer-transfer-v004-base-easy.yaml"
+      },
+      "launcher": {
+        "git_blob": "60de44aac4659b0f48f0c876eb01c0d45b625486",
+        "path": "experiments/rl-transfer-v004/run_v004.py"
+      },
+      "protocol": {
+        "git_blob": "dcc2cc3004526397b2904975bd61ef8211d8224a",
+        "path": "experiments/rl-transfer-v004/protocol.md"
+      },
+      "state": {
+        "git_blob": "37ca36b187adab965c483f50f5e5abd74e72e922",
+        "path": "experiments/rl-transfer-v004/state.md"
+      }
+    }
+  }
+}
