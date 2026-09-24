@@ -1,0 +1,84 @@
+{
+  "classification": "infrastructure-invalid",
+  "namespace": "fleet-train-jobs",
+  "objects": {
+    "config_map": {
+      "name": "chris-q38-m96-signal-a2-diagnosis-a4-code",
+      "uid": "c83fc2b6-ca6e-4b93-a09e-5ce9e692d6fc"
+    },
+    "job": {
+      "failure_alerts": "off",
+      "name": "chris-q38-m96-signal-a2-diagnosis-a4",
+      "priority_class": "c1",
+      "queue_priority": "q1",
+      "terminal": "Complete",
+      "terminal_at": "2026-09-24T06:51:20Z",
+      "uid": "f8c933d7-3a9d-4968-bc2c-020d6e173d08"
+    },
+    "pod": {
+      "exit_code": 0,
+      "name": "chris-q38-m96-signal-a2-diagnosis-a4-r6z98",
+      "phase": "Succeeded",
+      "requested_gpus": 0,
+      "restarts": 0,
+      "runtime_image_id": "ghcr.io/astral-sh/uv@sha256:85d4cb1afa769a7338e095b927bee941cf5ec92266c7424b3f6c0f2748567248",
+      "uid": "4e89f8d4-35a3-4d70-8356-185e5409a6ee"
+    },
+    "workload": {
+      "name": "job-chris-q38-m96-signal-a2-diagnosis-a4-6dbb0",
+      "terminal": "Succeeded",
+      "uid": "11610957-49d1-4cf5-bc11-d0d0310c98bc"
+    }
+  },
+  "observed_at": "2026-09-24T06:52:01Z",
+  "one_update_miles_recommendation": "HOLD",
+  "packet": {
+    "bundle_sha256": "sha256:903a77f21e2f50b17e3a60af76be785a5d26f8089645d896a300be313d5841bc",
+    "file_sha256": "sha256:8cab39985f608ee74e26f4216828ee84dcd781f79c78f992fe19b9965efdefa5",
+    "internal_sha256": "sha256:e77ad47a74d5d354e240173e0f62995730cf32a3fcb47d616b9bb692cfd2d7d1",
+    "path": "/private/tmp/q38-m96-signal-a2-diagnosis-a4.packet.json",
+    "server_preview_sha256": "sha256:ed05c41d9af1378ef5c63d97f9fcdf58dda3eb3b2e7e7a2b33ae4e9a6d537518",
+    "source_sha256": "sha256:a90ef6c5333fed4ae40b49d6720b84ac5b15f10ab3590dfbe4c62a5768430376"
+  },
+  "qualification": {
+    "all_instances_released": true,
+    "complete_contract_count": 0,
+    "distinct_reward_count": 1,
+    "episode_count": 8,
+    "failed_predicate_counts": {
+      "binding_model_revision": 0,
+      "binding_served_model": 0,
+      "binding_task_identity": 0,
+      "binding_verifier_identity": 0,
+      "completed_termination": 8,
+      "exact_cleanup": 0,
+      "execution_identity_equal": 0,
+      "execution_identity_present": 0,
+      "finite_unit_reward": 0,
+      "result_reward_equal": 0,
+      "result_task_identity": 0
+    },
+    "finite_reward_count": 8,
+    "receipt_sha256": "sha256:0e342297a6f4d7e1029ce338e998ccee67463f0a4eb9f8fda461d0f6e354ee9d",
+    "reward_multiplicities": [
+      8
+    ],
+    "reward_variation": false,
+    "schema": "cyber_qwen38_miles96_signal_qualification_probe_v1",
+    "termination_category_counts": {
+      "completed": 0,
+      "execution_timeout": 0,
+      "harness_error": 0,
+      "incomplete_terminal_step": 0,
+      "malformed_trace": 0,
+      "missing_terminal_step": 0,
+      "other": 0,
+      "output_limit": 0,
+      "process_error": 8
+    }
+  },
+  "raw_reward_values_or_private_content_included": false,
+  "reason": "all_attempts_terminated_process_error_and_the_finite_rewards_had_no_variation",
+  "schema": "cyber_qwen38_miles96_signal_diagnosis_a4_terminal_v1",
+  "sha256": "sha256:d2c322bc03f80f5666e5ed1bf7783686288780eaa76fd34f099adc815b7d019e"
+}
