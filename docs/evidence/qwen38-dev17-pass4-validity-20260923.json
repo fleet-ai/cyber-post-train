@@ -1,0 +1,57 @@
+{
+  "schema": "cyber_qwen38_dev17_pass4_sanitized_validity_v1",
+  "recorded_at": "2026-09-24T05:02:46Z",
+  "status": "valid_for_descriptive_aggregate",
+  "scope": {
+    "benchmark": "fleet_development_dev17",
+    "arms": [
+      "base",
+      "step1000"
+    ],
+    "retained_seeds": [
+      48,
+      54,
+      61,
+      62
+    ],
+    "task_count": 17,
+    "attempts_per_task_arm": 4,
+    "attempts_per_arm": 68
+  },
+  "shared_protocol": {
+    "task_selection_sha256": "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
+    "task_set_file_sha256": "sha256:e510ef15756146a0692ba7a59950e8dbe7cc94169b4834ff4b165dc2c3609300",
+    "harness": "opencode",
+    "harness_version": "1.18.27",
+    "context_window_tokens": 262144,
+    "context_compaction": "native_opencode_compaction_with_automatic_continuation",
+    "model_request_limit": 600,
+    "wall_time_limit_seconds": 28800,
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "base_model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "step1000_checkpoint_revision": "sha256:023c5f8b0559ba050f0d672a6bc27aabecec7d5837595f8ea5bc914446d26db5"
+  },
+  "completion_gate": {
+    "arm_count": 8,
+    "expected_records_per_arm": 17,
+    "accepted_records_per_arm": 17,
+    "records_needing_review_per_arm": 0,
+    "locally_preserved_results_per_arm": 17,
+    "completed_runs_per_arm": 17,
+    "stale_active_records_per_arm": 0,
+    "all_arms_match": true,
+    "duplicate_within_arm_detected": false
+  },
+  "source_evidence": {
+    "private_validity_receipt_file_sha256": "sha256:387d205024fc3f43fb17a9afb56ce82259a11da62babad6027953fd1a6626dee",
+    "score_data_opened_during_validity_check": false
+  },
+  "privacy": {
+    "per_task_results_included": false,
+    "private_run_identifiers_included": false,
+    "prompts_responses_flags_or_traces_included": false,
+    "credentials_included": false
+  },
+  "sha256": "sha256:54ad5666d0a8d757949b0413876880b68ef8b2ddd3eb9ded06c6010f48a57d4e"
+}
