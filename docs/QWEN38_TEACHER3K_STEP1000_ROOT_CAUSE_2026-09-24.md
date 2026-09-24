@@ -21,10 +21,11 @@ loss alongside worse task performance:
    examples (80.64%).
 2. **The training and evaluation tool interfaces differed.** Training targets
    used bare `bash` and `submit_report` names and were rendered without the
-   formal tool catalog. OpenCode exposed `fleet_bash` and
-   `fleet_submit_report`. In the matched evaluation, the trained checkpoint
-   emitted the learned but invalid bare `bash` name in 24 of 68 attempts and
-   never emitted `fleet_submit_report`.
+   formal tool catalog. OpenCode registered those tools through its `fleet`
+   MCP client and supplied the full schemas. The precise model-facing name
+   versus stored normalized name is under independent reconciliation; the
+   unambiguous behavioral fact is that the trained checkpoint never attempted
+   the required report-submission action.
 
 These are real training-contract defects, not merely speculative differences.
 They were measured in the exact corpus consumed by the checkpoint and in its
@@ -52,18 +53,22 @@ an intermediate checkpoint, not the one-epoch final model.
 
 ## What the matched evaluation showed
 
-The independently reviewed Fleet development comparison used the same 17 task
+The Fleet development comparison used the same 17 task
 versions, four seeds per task, OpenCode 1.18.27, sampling settings, context and
 time limits, environment bindings, verifier bindings, and serving settings.
 
-| Model | Task-level pass@4 | Successful attempts |
+| Model | Raw observed task success | Successful attempts |
 |---|---:|---:|
-| Exact base | 7 / 17 | 15 / 68 |
-| Teacher3K step 1000 | 0 / 17 | 0 / 68 |
+| Exact base | 7 / 17 tasks | 15 / 68 attempts |
+| Teacher3K step 1000 | 0 / 17 tasks | 0 / 68 attempts |
 
-The paired task-level difference was -41.18 percentage points. The paired
-bootstrap 95% interval was approximately -64.71 to -17.65 points. This is a
-large measured regression under this harness, not normal sampling noise.
+Those raw denominators must not be published as a scientifically valid pass@4
+estimate. The project protocol requires output-limit and process-error attempts
+to be held rather than scored as capability failures. The candidate had 49
+output-limit and one process-error attempt; base had 15 and one. All 18 normally
+completed candidate attempts nevertheless scored zero and none attempted the
+report tool, so a serious regression signal remains, but missing valid attempts
+must be reacquired before calculating pass@4 or a confidence interval.
 
 The candidate also behaved differently from base:
 
@@ -71,8 +76,9 @@ The candidate also behaved differently from base:
 - 18/68 ended normally without solving;
 - 1/68 had a process error;
 - candidate tool-call volume was much lower than base;
-- candidate emitted 32 bare `bash` calls across 24 attempts;
-- candidate emitted zero valid `fleet_submit_report` calls.
+- one structural census represented 32 calls as bare `bash` across 24 attempts,
+  but model-facing versus normalized stored naming is being reconciled;
+- candidate emitted zero report-submission calls.
 
 ## Primary defect 1: malformed, anchorless windows
 
@@ -120,7 +126,10 @@ OpenCode's coding-agent system prompt, reasoning mode, long context and native
 compaction. Training used heterogeneous teacher prompts, no formal tool catalog,
 visible actions only, 32K windows and raw truncation.
 
-The mismatch is observable in model behavior, not only in source code:
+The interface difference is observable in source code and tokenization. The
+table below records the current aggregate trace representation; the `bash`
+name row must not be treated as causal until model-facing versus normalized
+stored names are reconciled:
 
 | Aggregate | Base | Step 1000 |
 |---|---:|---:|
@@ -129,9 +138,10 @@ The mismatch is observable in model behavior, not only in source code:
 | attempts with a bare `bash` call | 0 / 68 | 24 / 68 |
 | `fleet_submit_report` calls | 20 | 0 |
 
-The base and candidate saw the same evaluation interface. The candidate alone
-leaked the training-only tool name. That is direct evidence that SFT taught an
-interface incompatible with the evaluator.
+The base and candidate saw the same evaluation interface. Zero report actions
+from the candidate is mechanically important because Fleet grading requires a
+submission, but the causal contribution of the tool-name prefix requires the
+pending name-path reconciliation.
 
 ## Additional material problems
 
