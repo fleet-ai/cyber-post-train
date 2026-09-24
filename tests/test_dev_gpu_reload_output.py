@@ -150,6 +150,10 @@ def test_validator_accepts_only_the_known_api_server_toleration_additions() -> N
     with pytest.raises(ValueError, match="unreviewed drift"):
         validate_direct_dev_gpu_reload_output(pod)
 
+    pod["spec"]["tolerations"] = [None]
+    with pytest.raises(ValueError, match="unreviewed drift"):
+        validate_direct_dev_gpu_reload_output(pod)
+
 
 def test_create_rejects_known_v1_top_level_output_before_kubectl(monkeypatch) -> None:
     calls = []

@@ -202,7 +202,9 @@ def validate_direct_dev_gpu_reload_output(manifest: dict) -> None:
     if spec.get("nodeSelector") != DEV_GPU_NODE_SELECTOR:
         raise ValueError("direct dev GPU reload must select the reviewed GPU pool")
     tolerations = spec.get("tolerations")
-    if not isinstance(tolerations, list) or DEV_GPU_TOLERATIONS[0] not in tolerations:
+    if not isinstance(tolerations, list) or any(not isinstance(item, dict) for item in tolerations):
+        raise ValueError("direct dev GPU reload tolerations contain unreviewed drift")
+    if DEV_GPU_TOLERATIONS[0] not in tolerations:
         raise ValueError("direct dev GPU reload must tolerate the reviewed GPU-pool taint")
     allowed_tolerations = DEV_GPU_TOLERATIONS + DEV_GPU_ADMISSION_TOLERATIONS
     if len(tolerations) != len({repr(sorted(item.items())) for item in tolerations}) or any(
