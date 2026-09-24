@@ -1,0 +1,76 @@
+{
+  "schema": "cyber_qwen38_miles96_phase2_prepare_review_v1",
+  "status": "review_ready_not_submitted",
+  "decision": {
+    "summary": "Use the maintained FTI 0.10.27 converter on exactly one eight-GPU B300 node, then release the GPU allocation and assemble plus hash the final project-owned HF and torch_dist sibling tree on CPU.",
+    "why_not_zero_gpu": "The maintained converter automatically partitions the model across eight ranks. Keeping pipeline parallelism at one would construct one whole model per rank and exceeds the qualified per-GPU memory envelope.",
+    "peer_checkpoint_tree_used": false,
+    "optimizer_steps": 0
+  },
+  "source_audit": {
+    "fti_version": "0.10.27",
+    "fti_source_commit": "d23116f018cb9213f0a3ee6c228d213abcd85d80",
+    "fti_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:5bdf98161971959295b24efa54d0ad91445e6d6e409d9f1384cb886992dbb064",
+    "run_fleet_sha256": "ae82e3f03d14c81e52009bc2cbff857d9e844baf07a9d82d8266608cb8cba2b1",
+    "native_converter_sha256": "0c2541d30073777a30344273a3773844a70ca1961287520c0496a1cec18d43f6",
+    "miles_upstream_commit": "9e178ca16839b0600155f3927f57ce0670b8f453",
+    "base_hf_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+    "base_hf_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "base_hf_safetensor_shards": 18,
+    "base_hf_weight_bytes": 55563006776,
+    "base_hf_weight_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+    "base_model_binding_sha256": "dcfdcd6ecb6661741cd3a4b24dc5af7259642c8a6824773e0de70d55d7501179"
+  },
+  "conversion": {
+    "name": "chris-q38-m96-p2-convert-v1",
+    "output": "/mnt/sfs/jobs/chris-q38-m96-p2-convert-v1/torch-dist",
+    "nodes": 1,
+    "gpus": 8,
+    "priority_class": "c1",
+    "queue_priority_class": "q1",
+    "root_failure_alerts_off": true,
+    "live_duplicate_count_at_review": 0,
+    "plan_sha256": "sha256:73888d6a981d2ded3c65a208d4b3f117961c9f78f3d90b17fd3e74e24770a795",
+    "request_sha256": "sha256:586dd11734f88ff67da9d0717276406c88f6e95f9f34001d619797e0db426bfe",
+    "jobs_api_preview_manifest_sha256": "sha256:beac1b81c84f74b958b80ae54df88e89f8a64127815e122075dd13930edfa135"
+  },
+  "cpu_stage": {
+    "name": "chris-q38-m96-p2-stage-v1",
+    "destination": "/mnt/sfs/jobs/chris-q38-m96-p2-prepared-v1",
+    "hf_child": "Qwen3.8-27B",
+    "torch_dist_child": "qwen3.8-27B_torch_dist",
+    "gpus": 0,
+    "priority_class": "c1",
+    "queue_priority_class": "q1",
+    "root_failure_alerts_off": true,
+    "full_byte_inventory": true,
+    "atomic_create_once_promotion": true,
+    "packet_sha256": "sha256:a1906285b516e838a347eb0b6c62e3d2add3a283359d2103f706646543df48e2",
+    "bundle_sha256": "sha256:78f58d83478c60512786741a59c2f8fdae10a43ba82e0aa51c0e902a4efc1676",
+    "server_dry_runs": 2,
+    "stable_server_dry_run_sha256": "sha256:3ade078a8391f2b41b8c1115bbb0c0a4d94e7eaedf101d8de3b3e58d41cc983a"
+  },
+  "source_files": {
+    "training/miles96_phase2_conversion.py": "sha256:ecac35acd348c9828626de1ecf859b49f65e5757c643edff54eff5fdb9a7763b",
+    "training/miles96_model_stage.py": "sha256:23e396ee226cf0bdc8787cfe0802084a81bb9b0a37fb9296dd17975a294f9aa4",
+    "training/miles_conversion.py": "sha256:df7916887a1edf0f3f217dcc907fb514f38cf1409e07a144bab78b491120d8f0",
+    "tests/test_miles96_phase2_conversion.py": "sha256:7c707df90dbe46ea0c2a0e614f1621954e0a04c594532b2baa9aae7ce9063f0c",
+    "tests/test_miles96_model_stage.py": "sha256:82fcef1293ceb7ec29a1381d80f296b1cebeb8c255a95d7e159b876ab25fd10c"
+  },
+  "verification": {
+    "tests": "142 passed, 2 skipped",
+    "commands": [
+      "uv run pytest -q tests/test_miles_conversion.py tests/test_miles_training.py tests/test_miles96_model_stage.py tests/test_miles96_phase2_conversion.py tests/test_cluster_failure_alert_opt_out.py",
+      "uv run python -m compileall -q training/miles96_phase2_conversion.py training/miles96_model_stage.py",
+      "git diff --check"
+    ],
+    "jobs_api_preview_non_creating": true,
+    "kubernetes_server_dry_run_non_creating": true
+  },
+  "remaining_live_gates": [
+    "Prove the conversion name and output are still absent immediately before its single create request.",
+    "After conversion success, independently prove the eight GPUs are released before creating the CPU stage job.",
+    "Prove the final destination and partial destination are absent immediately before the CPU stage create request."
+  ],
+  "external_mutation_performed": false
+}

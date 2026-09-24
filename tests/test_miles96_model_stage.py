@@ -22,6 +22,24 @@ def _sources(root: Path) -> tuple[Path, Path]:
     return hf, megatron
 
 
+def _bind_conversion(megatron: Path, root: Path, monkeypatch) -> None:
+    plan = {"schema": "synthetic-zero-step-conversion"}
+    plan_path = root / "conversion-plan.json"
+    plan_path.write_text(json.dumps(plan))
+    inventory = stage._source_inventory(megatron, hf=False)
+    body = {
+        "status": "native_conversion_complete",
+        "optimizer_steps": 0,
+        "plan_sha256": stage.digest(plan),
+        "files": [{"path": row["path"], "size": row["bytes"]} for row in inventory["files"]],
+    }
+    receipt_path = root / "CONVERSION_COMPLETE.json"
+    receipt_path.write_text(json.dumps({**body, "sha256": stage.digest(body)}))
+    monkeypatch.setattr(stage, "CONVERSION_PLAN", plan_path)
+    monkeypatch.setattr(stage, "CONVERSION_RECEIPT", receipt_path)
+    monkeypatch.setattr(stage.conversion, "_validate_plan", lambda value: None)
+
+
 def test_stage_copies_exact_sources_and_atomically_completes(tmp_path: Path, monkeypatch) -> None:
     hf, megatron = _sources(tmp_path)
     destination = tmp_path / "prepared"
@@ -32,6 +50,7 @@ def test_stage_copies_exact_sources_and_atomically_completes(tmp_path: Path, mon
     monkeypatch.setattr(stage, "DESTINATION", destination)
     monkeypatch.setattr(stage, "PARTIAL", partial)
     monkeypatch.setattr(stage, "RETIRED_A2_PARTIAL", retired)
+    _bind_conversion(megatron, tmp_path, monkeypatch)
     monkeypatch.setattr(
         stage.mechanics,
         "_hf_index",
@@ -77,7 +96,7 @@ def test_packet_is_zero_gpu_create_once_alerts_off_and_source_read_only() -> Non
     assert packet["expected"]["root_access_justification"] == stage.ROOT_ACCESS_JUSTIFICATION
     mounts = {item["name"]: item for item in container["volumeMounts"]}
     assert mounts["hf"]["readOnly"] is True
-    assert mounts["megatron"]["readOnly"] is True
+    assert mounts["conversion"]["readOnly"] is True
     assert mounts["jobs"].get("readOnly") is not True
     assert all(
         "nvidia.com/gpu" not in values
@@ -89,6 +108,10 @@ def test_packet_is_zero_gpu_create_once_alerts_off_and_source_read_only() -> Non
 def test_embedded_stager_is_exact() -> None:
     config_map = stage.build_packet()["bundle"]["items"][0]
     assert config_map["data"]["stage_module.py"] == Path(stage.__file__).read_text()
+    assert config_map["data"]["phase2_conversion.py"] == Path(
+        stage.conversion.__file__
+    ).read_text()
+    assert "chris-cpt-cleanup" not in json.dumps(config_map)
     assert config_map["data"]["driver.py"] == stage.DRIVER
 
 
@@ -102,6 +125,7 @@ def test_stage_reports_the_exact_failed_phase(tmp_path: Path, monkeypatch) -> No
     monkeypatch.setattr(stage, "DESTINATION", destination)
     monkeypatch.setattr(stage, "PARTIAL", partial)
     monkeypatch.setattr(stage, "RETIRED_A2_PARTIAL", retired)
+    _bind_conversion(megatron, tmp_path, monkeypatch)
     monkeypatch.setattr(
         stage.mechanics,
         "_hf_index",
@@ -122,7 +146,11 @@ def test_stage_reports_the_exact_failed_phase(tmp_path: Path, monkeypatch) -> No
         pass
     else:
         raise AssertionError("synthetic failure was not raised")
-    assert observed == ["preflight", "hf_inventory_before"]
+    assert observed == [
+        "preflight",
+        "conversion_receipt",
+        "hf_inventory_before",
+    ]
 
 
 def test_stage_rejects_retired_partial_before_reading_sources(tmp_path: Path, monkeypatch) -> None:

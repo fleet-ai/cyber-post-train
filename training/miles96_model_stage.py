@@ -1,4 +1,4 @@
-"""Render one create-once CPU Job that pairs exact HF and Megatron inputs."""
+"""Pair the exact HF source with our own FTI 0.10.27 conversion on CPU."""
 
 from __future__ import annotations
 
@@ -12,20 +12,24 @@ from pathlib import Path
 from typing import Any
 
 from training import miles96_mechanics_canary as mechanics
+from training import miles96_phase2_conversion as conversion
 
-SCHEMA = "cyber_qwen38_miles96_model_stage_packet_v3"
-RECEIPT_SCHEMA = "cyber_qwen38_miles96_model_stage_receipt_v2"
+SCHEMA = "cyber_qwen38_miles96_model_stage_packet_v4"
+RECEIPT_SCHEMA = "cyber_qwen38_miles96_model_stage_receipt_v3"
 LOG_PREFIX = "CYBER_MILES96_MODEL_STAGE="
 CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 NAMESPACE = "fleet-train-jobs"
-JOB_NAME = "chris-q38-m96-model-stage-a3"
+JOB_NAME = "chris-q38-m96-p2-stage-v1"
 CONFIG_MAP_NAME = JOB_NAME + "-code"
-IMAGE = mechanics.IMAGE
+IMAGE = conversion.IMAGE
 HF_SOURCE = Path("/source/hf")
-MEGATRON_SOURCE = Path("/source/megatron")
-DESTINATION = Path("/mnt/sfs/jobs/chris-q38-m96-prepared-v1")
-PARTIAL = Path("/mnt/sfs/jobs/.chris-q38-m96-prepared-v1.partial-a3")
-RETIRED_A2_PARTIAL = Path("/mnt/sfs/jobs/.chris-q38-m96-prepared-v1.partial-a2")
+CONVERSION_SOURCE = Path("/source/conversion")
+MEGATRON_SOURCE = CONVERSION_SOURCE / "torch-dist"
+CONVERSION_RECEIPT = CONVERSION_SOURCE / "CONVERSION_COMPLETE.json"
+CONVERSION_PLAN = Path("/stage/conversion_plan.json")
+DESTINATION = Path("/mnt/sfs/jobs/chris-q38-m96-p2-prepared-v1")
+PARTIAL = Path("/mnt/sfs/jobs/.chris-q38-m96-p2-prepared-v1.partial-v1")
+RETIRED_A2_PARTIAL = Path("/mnt/sfs/jobs/.chris-q38-m96-p2-prepared-v1.partial-retired")
 MANIFEST = "PREPARED_MODEL.json"
 COMPLETE = ".complete"
 DRIVER = "from training.miles96_model_stage import runtime_main;runtime_main()\n"
@@ -35,6 +39,7 @@ ROOT_ACCESS_JUSTIFICATION = (
 )
 PHASES = (
     "preflight",
+    "conversion_receipt",
     "hf_inventory_before",
     "megatron_inventory_before",
     "create_partial",
@@ -85,6 +90,28 @@ def _source_inventory(root: Path, *, hf: bool) -> dict[str, Any]:
     }
 
 
+def _conversion_receipt(megatron: dict[str, Any]) -> dict[str, Any]:
+    if CONVERSION_RECEIPT.is_symlink() or not CONVERSION_RECEIPT.is_file():
+        raise ValueError("owned conversion receipt is absent or unsafe")
+    if CONVERSION_PLAN.is_symlink() or not CONVERSION_PLAN.is_file():
+        raise ValueError("reviewed conversion plan is absent or unsafe")
+    receipt = json.loads(CONVERSION_RECEIPT.read_text())
+    plan = json.loads(CONVERSION_PLAN.read_text())
+    plan_sha256 = digest(plan)
+    conversion._validate_plan(plan)
+    if (
+        receipt.get("sha256") != digest({k: v for k, v in receipt.items() if k != "sha256"})
+        or receipt.get("status") != "native_conversion_complete"
+        or receipt.get("optimizer_steps") != 0
+        or receipt.get("plan_sha256") != plan_sha256
+    ):
+        raise ValueError("owned conversion receipt does not match the reviewed plan")
+    expected = [{"path": row["path"], "size": row["bytes"]} for row in megatron["files"]]
+    if receipt.get("files") != expected:
+        raise ValueError("owned conversion receipt inventory differs from source bytes")
+    return {"sha256": receipt["sha256"], "plan_sha256": plan_sha256}
+
+
 def _copy_tree(source: Path, destination: Path) -> None:
     if destination.exists() or destination.is_symlink():
         raise FileExistsError("staging child already exists")
@@ -107,10 +134,15 @@ def stage(*, set_phase: Any = lambda _phase: None) -> dict[str, Any]:
         raise FileExistsError("prepared-model partial destination already exists")
     if RETIRED_A2_PARTIAL.exists() or RETIRED_A2_PARTIAL.is_symlink():
         raise FileExistsError("retired A2 partial destination still exists")
+    set_phase("conversion_receipt")
+    # Hash before trusting the conversion's size-only completion inventory.
+    megatron_before = _source_inventory(MEGATRON_SOURCE, hf=False)
+    conversion_receipt = _conversion_receipt(megatron_before)
     set_phase("hf_inventory_before")
     hf_before = _source_inventory(HF_SOURCE, hf=True)
     set_phase("megatron_inventory_before")
-    megatron_before = _source_inventory(MEGATRON_SOURCE, hf=False)
+    if _source_inventory(MEGATRON_SOURCE, hf=False) != megatron_before:
+        raise ValueError("Megatron source changed after receipt validation")
     set_phase("create_partial")
     PARTIAL.mkdir(mode=0o755)
     set_phase("copy_hf")
@@ -134,6 +166,10 @@ def stage(*, set_phase: Any = lambda _phase: None) -> dict[str, Any]:
         "prepared_model_binding_sha256": prepared["sha256"],
         "hf_source_inventory_sha256": hf_before["sha256"],
         "megatron_source_inventory_sha256": megatron_before["sha256"],
+        "conversion_receipt_sha256": conversion_receipt["sha256"],
+        "conversion_plan_sha256": conversion_receipt["plan_sha256"],
+        "fti_version": conversion.FTI_VERSION,
+        "fti_image": conversion.IMAGE,
         "hf_file_count": hf_before["file_count"],
         "megatron_file_count": megatron_before["file_count"],
         "hf_bytes": hf_before["bytes"],
@@ -173,6 +209,10 @@ def runtime_main() -> None:
             "manifest_sha256": manifest["sha256"],
             "hf_source_inventory_sha256": manifest["hf_source_inventory_sha256"],
             "megatron_source_inventory_sha256": manifest["megatron_source_inventory_sha256"],
+            "conversion_receipt_sha256": manifest["conversion_receipt_sha256"],
+            "conversion_plan_sha256": manifest["conversion_plan_sha256"],
+            "fti_version": manifest["fti_version"],
+            "fti_image": manifest["fti_image"],
             "hf_file_count": manifest["hf_file_count"],
             "megatron_file_count": manifest["megatron_file_count"],
             "hf_bytes": manifest["hf_bytes"],
@@ -223,6 +263,15 @@ def build_packet() -> dict[str, Any]:
         "training_init.py": "",
         "mechanics.py": Path(mechanics.__file__).read_text(),
         "stage_module.py": Path(__file__).read_text(),
+        "phase2_conversion.py": Path(conversion.__file__).read_text(),
+        "miles_conversion.py": Path(conversion.base.__file__).read_text(),
+        "miles.py": Path(conversion.base.__file__).with_name("miles.py").read_text(),
+        "jobs.py": Path(conversion.__file__).resolve().parents[1]
+        .joinpath("cyber_post_train/jobs.py")
+        .read_text(),
+        "conversion_plan.json": json.dumps(
+            conversion.compile_plan(), sort_keys=True, separators=(",", ":")
+        ),
         "driver.py": DRIVER,
     }
     labels = {
@@ -304,12 +353,10 @@ def build_packet() -> dict[str, Any]:
                                     "subPath": "models/qwen3.8-27b-1d4bf0f2",
                                 },
                                 {
-                                    "name": "megatron",
-                                    "mountPath": str(MEGATRON_SOURCE),
+                                    "name": "conversion",
+                                    "mountPath": str(CONVERSION_SOURCE),
                                     "readOnly": True,
-                                    "subPath": (
-                                        "jobs/chris-cpt-cleanup-q38-miles-base-v1/torch-dist"
-                                    ),
+                                    "subPath": "jobs/chris-q38-m96-p2-convert-v1",
                                 },
                                 {
                                     "name": "jobs",
@@ -353,6 +400,20 @@ def build_packet() -> dict[str, Any]:
                                         "key": "stage_module.py",
                                         "path": "training/miles96_model_stage.py",
                                     },
+                                    {
+                                        "key": "phase2_conversion.py",
+                                        "path": "training/miles96_phase2_conversion.py",
+                                    },
+                                    {
+                                        "key": "miles_conversion.py",
+                                        "path": "training/miles_conversion.py",
+                                    },
+                                    {"key": "miles.py", "path": "training/miles.py"},
+                                    {"key": "jobs.py", "path": "cyber_post_train/jobs.py"},
+                                    {
+                                        "key": "conversion_plan.json",
+                                        "path": "conversion_plan.json",
+                                    },
                                     {"key": "driver.py", "path": "driver.py"},
                                 ],
                             },
@@ -362,7 +423,7 @@ def build_packet() -> dict[str, Any]:
                             "persistentVolumeClaim": {"claimName": "sfs-shared", "readOnly": True},
                         },
                         {
-                            "name": "megatron",
+                            "name": "conversion",
                             "persistentVolumeClaim": {"claimName": "sfs-shared", "readOnly": True},
                         },
                         {
@@ -403,6 +464,7 @@ def build_packet() -> dict[str, Any]:
             "partial_absence_required": True,
             "server_dry_run_count": 2,
             "stable_preview_digests_must_match": True,
+            "server_assigned_identity_fields_excluded_from_stable_digest": True,
             "config_map_create_request_count": 1,
             "config_map_create_retry_allowed": False,
             "job_create_request_count": 1,
@@ -440,7 +502,7 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:
         or job["spec"].get("backoffLimit") != 0
         or pod.get("priorityClassName") != "c1"
         or mounts["hf"].get("readOnly") is not True
-        or mounts["megatron"].get("readOnly") is not True
+        or mounts["conversion"].get("readOnly") is not True
         or container.get("securityContext", {}).get("runAsUser") != 0
         or container.get("securityContext", {}).get("readOnlyRootFilesystem") is not True
         or container.get("securityContext", {}).get("privileged") is not False
