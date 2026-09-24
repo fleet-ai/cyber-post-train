@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "qwen38-miles-signal-reviewed-transition-v1.schema.json",
+  "title": "Fail-closed Miles signal-wave review transition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "state",
+    "launchable",
+    "observed_at",
+    "authority",
+    "future_bindings",
+    "gates",
+    "transition_rule",
+    "sha256"
+  ],
+  "properties": {
+    "schema": {
+      "enum": [
+        "cyber_qwen38_miles_signal_transition_candidate_v1",
+        "cyber_qwen38_miles_signal_reviewed_transition_v1"
+      ]
+    },
+    "state": {"enum": ["parent_review_required", "reviewed_launchable"]},
+    "launchable": {"type": "boolean"},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "config_path",
+        "config_sha256",
+        "source_commit",
+        "task_get_receipt_sha256",
+        "task_get_observed_at"
+      ],
+      "properties": {
+        "config_path": {"const": "configs/qualification/qwen38-miles-signal-wave-v1.json"},
+        "config_sha256": {"$ref": "#/$defs/sha256"},
+        "source_commit": {"$ref": "#/$defs/commit"},
+        "task_get_receipt_sha256": {"$ref": "#/$defs/sha256"},
+        "task_get_observed_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "future_bindings": {"type": "object"},
+    "gates": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "prefixItems": [
+        {"$ref": "#/$defs/gate1"},
+        {"$ref": "#/$defs/gate2"},
+        {"$ref": "#/$defs/gate3"},
+        {"$ref": "#/$defs/gate4"},
+        {"$ref": "#/$defs/gate5"},
+        {"$ref": "#/$defs/gate6"},
+        {"$ref": "#/$defs/gate7"},
+        {"$ref": "#/$defs/gate8"},
+        {"$ref": "#/$defs/gate9"}
+      ]
+    },
+    "transition_rule": {"type": "string", "minLength": 1},
+    "predecessor_candidate_sha256": {"$ref": "#/$defs/sha256"},
+    "parent_review_receipt_sha256": {"$ref": "#/$defs/sha256"},
+    "sha256": {"$ref": "#/$defs/sha256"}
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "schema": {"const": "cyber_qwen38_miles_signal_transition_candidate_v1"}
+        }
+      },
+      "then": {
+        "properties": {
+          "state": {"const": "parent_review_required"},
+          "launchable": {"const": false}
+        },
+        "not": {
+          "anyOf": [
+            {"required": ["predecessor_candidate_sha256"]},
+            {"required": ["parent_review_receipt_sha256"]}
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "schema": {"const": "cyber_qwen38_miles_signal_reviewed_transition_v1"}
+        }
+      },
+      "then": {
+        "properties": {
+          "state": {"const": "reviewed_launchable"},
+          "launchable": {"const": true}
+        },
+        "required": ["predecessor_candidate_sha256", "parent_review_receipt_sha256"]
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "required", "passed"],
+      "properties": {
+        "id": {"type": "string"},
+        "required": {"const": true},
+        "passed": {"type": "boolean"}
+      }
+    },
+    "gate1": {"allOf": [{"$ref": "#/$defs/gate"}, {"properties": {"id": {"const": "frozen_adapter_and_exact_image_preflight"}}}]},
+    "gate2": {"allOf": [{"$ref": "#/$defs/gate"}, {"properties": {"id": {"const": "frozen_operator_commit"}}}]},
+    "gate3": {"allOf": [{"$ref": "#/$defs/gate"}, {"properties": {"id": {"const": "authority_seal_and_fresh_task_gets"}}}]},
+    "gate4": {"allOf": [{"$ref": "#/$defs/gate"}, {"properties": {"id": {"const": "four_immutable_plan_request_digests"}}}]},
+    "gate5": {"allOf": [{"$ref": "#/$defs/gate"}, {"properties": {"id": {"const": "live_server_previews"}}}]},
+    "gate6": {"allOf": [{"$ref": "#/$defs/gate"}, {"properties": {"id": {"const": "duplicate_and_create_once_absence_checks"}}}]},
+    "gate7": {"allOf": [{"$ref": "#/$defs/gate"}, {"properties": {"id": {"const": "observer_armed_and_uid_release_safety"}}}]},
+    "gate8": {"allOf": [{"$ref": "#/$defs/gate"}, {"properties": {"id": {"const": "private_material_cleanup"}}}]},
+    "gate9": {"allOf": [{"$ref": "#/$defs/gate"}, {"properties": {"id": {"const": "parent_review"}}}]}
+  }
+}

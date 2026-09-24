@@ -1,0 +1,63 @@
+{
+  "authority": {
+    "config_path": "configs/qualification/qwen38-miles-signal-wave-v1.json",
+    "config_sha256": "sha256:8c3c029c45b0a40832b66a6c9fff02f68b9ccd3805e9e12c9afd551375415a93",
+    "source_commit": "9859a27d09b4fd881dfe04bbf9a1dcf7413083b8",
+    "task_get_observed_at": "2026-09-24T08:57:15.089419Z",
+    "task_get_receipt_sha256": "sha256:86a2b17c07c09db7d319a257e0bc3c941d35846e06a644939f168e2fb1d565d4"
+  },
+  "future_bindings": {},
+  "gates": [
+    {
+      "id": "frozen_adapter_and_exact_image_preflight",
+      "passed": false,
+      "required": true
+    },
+    {
+      "id": "frozen_operator_commit",
+      "passed": false,
+      "required": true
+    },
+    {
+      "id": "authority_seal_and_fresh_task_gets",
+      "passed": true,
+      "required": true
+    },
+    {
+      "id": "four_immutable_plan_request_digests",
+      "passed": false,
+      "required": true
+    },
+    {
+      "id": "live_server_previews",
+      "passed": false,
+      "required": true
+    },
+    {
+      "id": "duplicate_and_create_once_absence_checks",
+      "passed": false,
+      "required": true
+    },
+    {
+      "id": "observer_armed_and_uid_release_safety",
+      "passed": false,
+      "required": true
+    },
+    {
+      "id": "private_material_cleanup",
+      "passed": false,
+      "required": true
+    },
+    {
+      "id": "parent_review",
+      "passed": false,
+      "required": true
+    }
+  ],
+  "launchable": false,
+  "observed_at": "2026-09-24T08:57:46.817200Z",
+  "schema": "cyber_qwen38_miles_signal_transition_candidate_v1",
+  "sha256": "sha256:e0fa74453c1dcff4476a7d7636db82d6c59f93aa521d9b17f0ceb82dbdaf7fcc",
+  "state": "parent_review_required",
+  "transition_rule": "Only approve_review_candidate may change launchable after all first eight gates pass and a separately sealed parent review binds this exact candidate."
+}
