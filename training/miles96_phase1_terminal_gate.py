@@ -155,7 +155,10 @@ def collect_actual_source(phase2_plan: dict[str, Any]) -> dict[str, Any]:
     if not rewards or not all(math.isfinite(item) for item in rewards):
         raise JobsError("actual phase-1 source has non-finite rewards")
     reward_count = len(set(rewards))
-    checkpoint_dir = root / "model-output" / "checkpoints"
+    model_output = root / "model-output"
+    checkpoint_dir = model_output / "checkpoints"
+    if model_output.is_symlink() or checkpoint_dir.is_symlink():
+        raise JobsError("actual phase-1 checkpoint path is unsafe")
     checkpoint_absent = not (
         checkpoint_dir.exists() and any(path.is_file() for path in checkpoint_dir.rglob("*"))
     )
