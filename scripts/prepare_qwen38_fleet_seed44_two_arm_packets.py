@@ -442,7 +442,7 @@ def _live_parity(
     return value
 
 
-def _job(arm: dict[str, Any], config_name: str) -> dict[str, Any]:
+def _job(arm: dict[str, Any], config_name: str, task_set_name: str) -> dict[str, Any]:
     experiment = arm["job_name"]
     return {
         "apiVersion": "batch/v1",
@@ -529,6 +529,7 @@ def _job(arm: dict[str, Any], config_name: str) -> dict[str, Any]:
                                 {"name": "DOCKER_TLS_CERTDIR", "value": ""},
                                 {"name": "DOCKER_BIND_ROOT", "value": "/docker-bind"},
                                 {"name": "EVAL_CONFIG_NAME", "value": config_name},
+                                {"name": "EVAL_TASK_SET_NAME", "value": task_set_name},
                                 {"name": "EVAL_OUTPUT", "value": arm["output_root"]},
                                 {"name": "EVAL_DATABASE", "value": arm["database"]},
                                 {
@@ -693,7 +694,14 @@ def _prepare_arm(
         "immutable": True,
         "data": data,
     }
-    job = _job(arm, config_name)
+    task_set_name = config.get("task_set")
+    if (
+        not isinstance(task_set_name, str)
+        or not task_set_name
+        or Path(task_set_name).name != task_set_name
+    ):
+        raise ValueError(f"{arm_id} evaluation config task set must be a basename")
+    job = _job(arm, config_name, task_set_name)
     files["config_map"].write_text(yaml.safe_dump(config_map, sort_keys=False), encoding="utf-8")
     files["job"].write_text(yaml.safe_dump(job, sort_keys=False), encoding="utf-8")
     file_digests = {

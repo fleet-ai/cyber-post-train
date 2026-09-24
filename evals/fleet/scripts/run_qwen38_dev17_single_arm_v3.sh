@@ -6,6 +6,7 @@ umask 077
 : "${ROLLOUT_DATABASE_URL:?ROLLOUT_DATABASE_URL is required}"
 : "${DOCKER_BIND_ROOT:?DOCKER_BIND_ROOT is required}"
 : "${EVAL_CONFIG_NAME:?EVAL_CONFIG_NAME is required}"
+: "${EVAL_TASK_SET_NAME:?EVAL_TASK_SET_NAME is required}"
 : "${EVAL_OUTPUT:?EVAL_OUTPUT is required}"
 : "${EVAL_DATABASE:?EVAL_DATABASE is required}"
 
@@ -23,7 +24,8 @@ for name in \
 done
 install -m 0644 /bootstrap/config.json "$root/configs/evaluation/$EVAL_CONFIG_NAME"
 install -m 0644 /bootstrap/task-set.json \
-  "$root/configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json"
+  "$root/configs/evaluation/$EVAL_TASK_SET_NAME"
+test -r "$root/configs/evaluation/$EVAL_TASK_SET_NAME"
 
 for _ in $(seq 1 120); do
   docker info >/dev/null 2>&1 && break
