@@ -413,6 +413,15 @@ def _assert_commit(expected_commit: str) -> None:
     ).stdout.strip()
     if value != expected_commit:
         raise ValueError("integration checkout is not the authorized commit")
+    status = subprocess.run(
+        ["git", "status", "--porcelain=v1", "--untracked-files=all"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout
+    if status:
+        raise ValueError("integration checkout is not clean")
 
 
 def _packet_plan(

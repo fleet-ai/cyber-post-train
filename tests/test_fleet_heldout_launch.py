@@ -241,10 +241,13 @@ def _packet(tmp_path: Path) -> Path:
         "metadata": {"name": CONFIG_MAP_NAME, "namespace": NAMESPACE},
         "immutable": True,
         "data": {
+            **{
+                name: path.read_text(encoding="utf-8")
+                for name, path in packet_renderer.SOURCE_FILES.items()
+            },
             "config.json": config_text,
             "heldout.json": config_text,
             "task-set.json": json.dumps(task_set, sort_keys=True) + "\n",
-            "run.sh": (ROOT / "evals/fleet/scripts/run_qwen38_dev17_single_arm_v3.sh").read_text(),
         },
     }
     job = {
@@ -457,21 +460,28 @@ def test_rendered_bundle_installs_configured_task_set_basename(tmp_path, task_se
         "database": DATABASE,
         "model_revision": "base-revision",
     }
+    prepare_kwargs = {
+        "arm_id": "base",
+        "arm": arm,
+        "config_path": tmp_path / raw["files"]["evaluation_config"]["path"],
+        "config": json.loads((tmp_path / raw["files"]["evaluation_config"]["path"]).read_text()),
+        "task_set_path": tmp_path / raw["files"]["task_set"]["path"],
+        "split_path": tmp_path / raw["files"]["split_manifest"]["path"],
+        "protocol_path": protocol_path,
+        "protocol": json.loads(protocol_path.read_text()),
+        "checkpoint_path": tmp_path / raw["files"]["checkpoint_provenance"]["path"],
+        "proof_path": tmp_path / raw["files"]["serving_route_proof"]["path"],
+        "ledger_path": tmp_path / raw["files"]["evaluation_ledger"]["path"],
+    }
+    missing_jobs = {
+        name: path for name, path in packet_renderer.SOURCE_FILES.items() if name != "jobs.py"
+    }
+    with pytest.raises(ValueError, match="jobs.py"):
+        packet_renderer._prepare_arm(  # noqa: SLF001
+            tmp_path / "missing-jobs", source_files=missing_jobs, **prepare_kwargs
+        )
     rendered = tmp_path / "rendered"
-    packet_renderer._prepare_arm(  # noqa: SLF001
-        rendered,
-        arm_id="base",
-        arm=arm,
-        config_path=tmp_path / raw["files"]["evaluation_config"]["path"],
-        config=json.loads((tmp_path / raw["files"]["evaluation_config"]["path"]).read_text()),
-        task_set_path=tmp_path / raw["files"]["task_set"]["path"],
-        split_path=tmp_path / raw["files"]["split_manifest"]["path"],
-        protocol_path=protocol_path,
-        protocol=json.loads(protocol_path.read_text()),
-        checkpoint_path=tmp_path / raw["files"]["checkpoint_provenance"]["path"],
-        proof_path=tmp_path / raw["files"]["serving_route_proof"]["path"],
-        ledger_path=tmp_path / raw["files"]["evaluation_ledger"]["path"],
-    )
+    packet_renderer._prepare_arm(rendered, **prepare_kwargs)  # noqa: SLF001
 
     package = launch.build_package(rendered / "LAUNCH_PACKET.json")
     environment = launch._container_environment(  # noqa: SLF001
@@ -496,6 +506,40 @@ def test_rendered_bundle_rejects_legacy_hardcoded_task_set_install(tmp_path):
         "install -m 0644 /bootstrap/task-set.json "
         '"$root/configs/evaluation/old-hardcoded-task-set.json"\n'
     )
+    config_map_path.write_text(yaml.safe_dump(config_map), encoding="utf-8")
+    raw["files"]["config_map"]["sha256"] = _sha(config_map_path)
+    _reseal_packet(packet, raw)
+
+    with pytest.raises(launch.HeldoutLaunchError, match="task set is invalid"):
+        launch.build_package(packet)
+
+
+def test_rendered_bundle_rejects_dynamic_install_token_only_in_comment(tmp_path):
+    packet = _packet(tmp_path)
+    raw = json.loads(packet.read_text())
+    config_map_path = packet.parent / raw["files"]["config_map"]["path"]
+    config_map = yaml.safe_load(config_map_path.read_text())
+    dynamic = '"$root/configs/evaluation/$EVAL_TASK_SET_NAME"'
+    config_map["data"]["run.sh"] = (
+        config_map["data"]["run.sh"].replace(
+            dynamic, '"$root/configs/evaluation/old-hardcoded-task-set.json"'
+        )
+        + f"\n# {dynamic}\n"
+    )
+    config_map_path.write_text(yaml.safe_dump(config_map), encoding="utf-8")
+    raw["files"]["config_map"]["sha256"] = _sha(config_map_path)
+    _reseal_packet(packet, raw)
+
+    with pytest.raises(launch.HeldoutLaunchError, match="task set is invalid"):
+        launch.build_package(packet)
+
+
+def test_rendered_bundle_rejects_missing_bootstrap_dependency(tmp_path):
+    packet = _packet(tmp_path)
+    raw = json.loads(packet.read_text())
+    config_map_path = packet.parent / raw["files"]["config_map"]["path"]
+    config_map = yaml.safe_load(config_map_path.read_text())
+    config_map["data"].pop("jobs.py")
     config_map_path.write_text(yaml.safe_dump(config_map), encoding="utf-8")
     raw["files"]["config_map"]["sha256"] = _sha(config_map_path)
     _reseal_packet(packet, raw)
@@ -538,6 +582,20 @@ def test_rendered_bundle_rejects_task_set_payload_mismatch(tmp_path):
     config_map_path = packet.parent / raw["files"]["config_map"]["path"]
     config_map = yaml.safe_load(config_map_path.read_text())
     config_map["data"]["task-set.json"] = "{}\n"
+    config_map_path.write_text(yaml.safe_dump(config_map), encoding="utf-8")
+    raw["files"]["config_map"]["sha256"] = _sha(config_map_path)
+    _reseal_packet(packet, raw)
+
+    with pytest.raises(launch.HeldoutLaunchError, match="task set is invalid"):
+        launch.build_package(packet)
+
+
+def test_rendered_bundle_rejects_task_set_line_ending_mismatch(tmp_path):
+    packet = _packet(tmp_path)
+    raw = json.loads(packet.read_text())
+    config_map_path = packet.parent / raw["files"]["config_map"]["path"]
+    config_map = yaml.safe_load(config_map_path.read_text())
+    config_map["data"]["task-set.json"] = config_map["data"]["task-set.json"].replace("\n", "\r\n")
     config_map_path.write_text(yaml.safe_dump(config_map), encoding="utf-8")
     raw["files"]["config_map"]["sha256"] = _sha(config_map_path)
     _reseal_packet(packet, raw)
