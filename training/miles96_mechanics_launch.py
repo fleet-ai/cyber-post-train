@@ -32,7 +32,11 @@ from cyber_post_train.jobs import (
     validate_preview,
     validate_request,
 )
-from cyber_post_train.sfs_output import SFS_JOBS_ROOT, prove_output_absent
+from cyber_post_train.sfs_output import (
+    SFS_JOBS_ROOT,
+    prove_output_absent,
+    validate_output_absence_receipt,
+)
 from training import dev_cleanup_observer as cleanup
 from training import miles96_mechanics_canary as mechanics
 
@@ -64,6 +68,7 @@ PROJECT_MAX_NODES = 10
 PROJECT_MAX_GPUS = 80
 COORDINATOR_RESULT_SCHEMA = "cyber_miles96_cleanup_coordinator_v1"
 CAPACITY_GATE_SCHEMA = "cyber_miles96_capacity_gate_v1"
+POST_BUNDLE_SCHEMA = "cyber_miles96_signal_post_receipt_bundle_v1"
 _SFS_OBSERVER_ROLE = "sfs-output-check"
 _SFS_OBSERVER_NAME = re.compile(
     r"(?P<job>[a-z0-9](?:[-a-z0-9]*[a-z0-9])?-sfs-a[0-9]{2})(?:-[a-z0-9]+)?"
@@ -121,6 +126,11 @@ def _paths(directory: Path) -> dict[str, Path]:
         "plan": directory / "PLAN.json",
         "request": directory / "REQUEST.json",
         "preview": directory / "SERVER_PREVIEW.json",
+        "fresh_absence": directory / "FRESH_ABSENCE.json",
+        "final_prepost": directory / "FINAL_PREPOST_GATE.json",
+        "sfs_absence": directory / "SFS_OUTPUT_ABSENCE.json",
+        "capacity": directory / "CAPACITY_GATE.json",
+        "post_bundle": directory / "POST_RECEIPT_BUNDLE.json",
         "armed": directory / "OBSERVER_ARMED.json",
         "binding": directory / "EXACT_BINDING.json",
         "release": directory / "EXACT_RELEASE_CONTRACT.json",
@@ -373,6 +383,11 @@ def validate_armed_observer(
             "shutdown_after_job_finishes",
             "nodes",
             "gpus",
+            "observed_at_unix",
+            "preview_count",
+            "priority_class",
+            "queue_priority",
+            "requeue_if_preempted",
             "sha256",
         }
         or preview.get("schema") != "cyber_miles96_live_server_preview_v1"
@@ -384,6 +399,12 @@ def validate_armed_observer(
         or preview.get("shutdown_after_job_finishes") is not True
         or preview.get("nodes") != request["workers"]
         or preview.get("gpus") != request["workers"] * request["gpus_per_worker"]
+        or type(preview.get("observed_at_unix")) not in {int, float}
+        or not 0 <= now - preview["observed_at_unix"] <= MAXIMUM_ARM_AGE_SECONDS
+        or preview.get("preview_count") != 2
+        or preview.get("priority_class") != "c1"
+        or preview.get("queue_priority") != "q1"
+        or preview.get("requeue_if_preempted") is not False
         or value.get("schema") != cleanup.JOBS_API_PREFIX_GUARD_SCHEMA
         or value.get("status") != "armed_non_destructive_prefix_guard"
         or value.get("sha256") != "sha256:" + digest(body)
@@ -713,6 +734,210 @@ def _live_preview_proof(request: dict[str, Any], preview: dict[str, Any]) -> dic
     return proof
 
 
+def _live_preview_receipt(
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    client: Any,
+    *,
+    now: Callable[[], float] = time.time,
+) -> dict[str, Any]:
+    """Require two identical server renders before sealing the reviewed preview."""
+    proofs = [_live_preview_proof(request, client.preview(request)) for _ in range(2)]
+    if proofs[0] != proofs[1]:
+        raise JobsError("repeated live server previews are not byte-equivalent")
+    proof = proofs[0]
+    return _seal(
+        {
+            "schema": "cyber_miles96_live_server_preview_v1",
+            "plan_sha256": "sha256:" + mechanics.digest(plan),
+            "request_sha256": "sha256:" + digest(request),
+            "manifest_sha256": "sha256:" + proof["manifest_sha256"],
+            "root_failure_alerts": "off",
+            "backoff_limit": 0,
+            "shutdown_after_job_finishes": True,
+            "nodes": proof["nodes"],
+            "gpus": proof["gpus"],
+            "observed_at_unix": now(),
+            "preview_count": 2,
+            "priority_class": request["priority_class"],
+            "queue_priority": "q" + request["priority_class"][1:],
+            "requeue_if_preempted": request["requeueIfPreempted"],
+        }
+    )
+
+
+def _validate_seal(value: dict[str, Any], schema: str) -> dict[str, Any]:
+    if not isinstance(value, dict) or value.get("schema") != schema:
+        raise JobsError(f"invalid {schema} receipt")
+    body = {key: item for key, item in value.items() if key != "sha256"}
+    if value.get("sha256") != "sha256:" + digest(body):
+        raise JobsError(f"invalid {schema} receipt seal")
+    return value
+
+
+def prepare_signal_post_bundle(
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    client: Any,
+    directory: Path,
+    *,
+    output_absence_receipt: dict[str, Any] | None = None,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+    jobs_root: Path = SFS_JOBS_ROOT,
+    wandb_exists: Callable[[str, str, str], bool] = _wandb_exists_default,
+    capacity_reader: Callable[..., dict[str, Any]] = live_capacity_census,
+    now: Callable[[], float] = time.time,
+    start_observer: Callable[[Path], subprocess.Popen[bytes]] = _start_observer,
+) -> dict[str, Any]:
+    """Prepare the exact read-only receipts a root reviewer must approve."""
+    from training import miles96_signal_qualification as signal
+
+    plan = signal.validate_plan(plan)
+    if request != signal.job_request(plan):
+        raise JobsError("request differs from the exact immutable signal plan")
+    validate_request(request)
+    paths = _paths(directory)
+    if directory.exists() and any(directory.iterdir()):
+        raise JobsError("launch evidence directory is not create-once empty")
+    directory.mkdir(parents=True, exist_ok=True)
+    preview = _live_preview_receipt(plan, request, client, now=now)
+    _write_json_once(paths["plan"], plan)
+    _write_json_once(paths["request"], request)
+    _write_json_once(paths["preview"], preview)
+    observer = start_observer(directory)
+    try:
+        absence = fresh_absence_checks(
+            plan,
+            request,
+            client,
+            directory,
+            runner=runner,
+            jobs_root=jobs_root,
+            output_absence_receipt=output_absence_receipt,
+            wandb_exists=wandb_exists,
+            now=now,
+        )
+        sfs = _prove_sfs_output_absent(
+            plan,
+            request,
+            jobs_root=jobs_root,
+            receipt=output_absence_receipt,
+            observed_at=now(),
+        )
+        capacity = capacity_gate(plan, request, reader=capacity_reader, now=now)
+        final = final_prepost_checks(
+            plan,
+            request,
+            client,
+            directory,
+            runner=runner,
+            now=now,
+        )
+        armed = validate_armed_observer(plan, request, directory, now=now())
+        bundle = _seal(
+            {
+                "schema": POST_BUNDLE_SCHEMA,
+                "name": request["name"],
+                "plan_sha256": "sha256:" + mechanics.digest(plan),
+                "request_sha256": "sha256:" + digest(request),
+                "server_preview": preview,
+                "observer_armed": armed,
+                "fresh_absence": absence,
+                "final_prepost_gate": final,
+                "sfs_output_absence": sfs,
+                "capacity_gate": capacity,
+            }
+        )
+        for key, value in (
+            ("fresh_absence", absence),
+            ("final_prepost", final),
+            ("sfs_absence", sfs),
+            ("capacity", capacity),
+            ("post_bundle", bundle),
+        ):
+            _write_json_once(paths[key], value)
+        return bundle
+    except Exception:
+        observer.terminate()
+        raise
+
+
+def validate_signal_post_bundle(
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    bundle: dict[str, Any],
+    directory: Path,
+    *,
+    now: float,
+) -> dict[str, Any]:
+    """Bind a reviewed lane successor to the exact still-live local receipts."""
+    from training import miles96_signal_qualification as signal
+
+    plan = signal.validate_plan(plan)
+    if request != signal.job_request(plan):
+        raise JobsError("request differs from the exact immutable signal plan")
+    paths = _paths(directory)
+    try:
+        stored = {
+            "server_preview": json.loads(paths["preview"].read_text()),
+            "observer_armed": json.loads(paths["armed"].read_text()),
+            "fresh_absence": json.loads(paths["fresh_absence"].read_text()),
+            "final_prepost_gate": json.loads(paths["final_prepost"].read_text()),
+            "sfs_output_absence": json.loads(paths["sfs_absence"].read_text()),
+            "capacity_gate": json.loads(paths["capacity"].read_text()),
+        }
+        if (
+            json.loads(paths["plan"].read_text()) != plan
+            or json.loads(paths["request"].read_text()) != request
+        ):
+            raise JobsError("prepared launch plan/request drifted")
+    except (OSError, ValueError) as exc:
+        raise JobsError("prepared signal receipt bundle is incomplete") from exc
+    _validate_seal(bundle, POST_BUNDLE_SCHEMA)
+    expected = {
+        "schema": POST_BUNDLE_SCHEMA,
+        "name": request["name"],
+        "plan_sha256": "sha256:" + mechanics.digest(plan),
+        "request_sha256": "sha256:" + digest(request),
+        **stored,
+    }
+    if bundle != _seal(expected):
+        raise JobsError("reviewed post receipt bundle differs from exact local receipts")
+    preview = stored["server_preview"]
+    _validate_seal(preview, "cyber_miles96_live_server_preview_v1")
+    if not 0 <= now - preview["observed_at_unix"] <= MAXIMUM_ARM_AGE_SECONDS:
+        raise JobsError("reviewed server preview is stale")
+    armed = validate_armed_observer(plan, request, directory, now=now)
+    if armed != stored["observer_armed"]:
+        raise JobsError("reviewed observer receipt differs from the live observer")
+    absence = _validate_seal(stored["fresh_absence"], "cyber_miles96_fresh_absence_v1")
+    final = _validate_seal(stored["final_prepost_gate"], "cyber_miles96_final_prepost_gate_v1")
+    for value in (absence, final):
+        if (
+            value.get("status") != "passed"
+            or value.get("plan_sha256") != "sha256:" + mechanics.digest(plan)
+            or value.get("request_sha256") != "sha256:" + digest(request)
+            or value.get("observer_armed_sha256") != armed["sha256"]
+            or not 0 <= now - value.get("observed_at_unix", -1) <= MAXIMUM_ARM_AGE_SECONDS
+        ):
+            raise JobsError("reviewed destination receipt is stale or mismatched")
+    try:
+        validate_output_absence_receipt(stored["sfs_output_absence"], plan, request, now=now)
+    except ValueError as exc:
+        raise JobsError(str(exc)) from None
+    capacity = _validate_seal(stored["capacity_gate"], CAPACITY_GATE_SCHEMA)
+    if (
+        capacity.get("status") != "passed"
+        or capacity.get("plan_sha256") != "sha256:" + mechanics.digest(plan)
+        or capacity.get("request_sha256") != "sha256:" + digest(request)
+        or not 0 <= now - _timestamp(capacity.get("observed_at")) <= CAPACITY_MAX_AGE_SECONDS
+    ):
+        raise JobsError("reviewed capacity receipt is stale or mismatched")
+    if _paths(directory)["journal"].exists():
+        raise JobsError("prepared signal launch already has a POST intent")
+    return bundle
+
+
 def capacity_gate(
     plan: dict[str, Any],
     request: dict[str, Any],
@@ -887,20 +1112,7 @@ def submit_once(
     if directory.exists() and any(directory.iterdir()):
         raise JobsError("launch evidence directory is not create-once empty")
     directory.mkdir(parents=True, exist_ok=True)
-    preview_proof = _live_preview_proof(request, client.preview(request))
-    preview_receipt = _seal(
-        {
-            "schema": "cyber_miles96_live_server_preview_v1",
-            "plan_sha256": "sha256:" + mechanics.digest(plan),
-            "request_sha256": "sha256:" + digest(request),
-            "manifest_sha256": "sha256:" + preview_proof["manifest_sha256"],
-            "root_failure_alerts": "off",
-            "backoff_limit": 0,
-            "shutdown_after_job_finishes": True,
-            "nodes": preview_proof["nodes"],
-            "gpus": preview_proof["gpus"],
-        }
-    )
+    preview_receipt = _live_preview_receipt(plan, request, client, now=now)
     _write_json_once(paths["plan"], plan)
     _write_json_once(paths["request"], request)
     _write_json_once(paths["preview"], preview_receipt)
@@ -1003,6 +1215,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--observe", action="store_true")
+    mode.add_argument("--prepare-review", action="store_true")
     mode.add_argument("--submit", action="store_true")
     mode.add_argument("--sfs-output-job-create", action="store_true")
     mode.add_argument("--sfs-output-job-collect", action="store_true")
@@ -1071,6 +1284,31 @@ def main() -> None:
         if args.output_absence_receipt
         else None
     )
+    if args.prepare_review:
+        if args.output:
+            parser.error("--prepare-review does not accept --output")
+        if any(
+            (
+                args.reviewed_transition,
+                args.transition_candidate,
+                args.parent_review,
+                args.live_task_receipt,
+            )
+        ):
+            parser.error("--prepare-review runs before transition approval")
+        token = os.environ.get("FLEET_API_KEY")
+        if not token:
+            parser.error("--prepare-review requires FLEET_API_KEY")
+        with Jobs(token, base_url=plan["execution"]["jobs_api_base_url"]) as client:
+            result = prepare_signal_post_bundle(
+                plan,
+                request,
+                client,
+                directory,
+                output_absence_receipt=output_absence_receipt,
+            )
+        print(json.dumps(result, sort_keys=True, separators=(",", ":")))
+        return
     transition_paths = (
         args.reviewed_transition,
         args.transition_candidate,

@@ -33,7 +33,7 @@ def _sha(char: str) -> str:
     return "sha256:" + char * 64
 
 
-def _plan() -> dict:
+def _phase1_plan() -> dict:
     wave = miles_signal_wave.load()
     candidate = wave["candidates"][0]
     authority = miles_signal_wave.task_binding(wave, candidate)
@@ -41,7 +41,7 @@ def _plan() -> dict:
         **authority,
         "authority_receipt_sha256": candidate["authority_receipt_sha256"],
     }
-    phase1 = signal_qualification.build_plan(
+    return signal_qualification.build_plan(
         name=candidate["identity"]["name"],
         model_root=signal_qualification.HF_MODEL_ROOT,
         model_binding_sha256=signal_qualification.HF_MODEL_BINDING_SHA256,
@@ -50,6 +50,17 @@ def _plan() -> dict:
         current_binding_sha256=candidate["live_binding_receipt_sha256"],
         production_split_sha256=wave["authorities"]["production_split"]["self_sha256"],
     )
+
+
+def _plan() -> dict:
+    phase1 = _phase1_plan()
+    wave = miles_signal_wave.load()
+    candidate = wave["candidates"][0]
+    authority = miles_signal_wave.task_binding(wave, candidate)
+    task_binding = {
+        **authority,
+        "authority_receipt_sha256": candidate["authority_receipt_sha256"],
+    }
     signal_body = {
         "schema": mechanics.TASK_SIGNAL_EVIDENCE_SCHEMA,
         "phase1_plan_sha256": "sha256:" + mechanics.digest(phase1),
@@ -779,15 +790,7 @@ class _FakeClient:
         }
 
 
-def test_live_preview_absence_and_exactly_one_post_are_durably_journaled(
-    tmp_path: Path,
-) -> None:
-    plan = _plan()
-    request = mechanics.job_request(plan)
-    client = _FakeClient(request)
-    jobs_root = tmp_path / "sfs-jobs"
-    jobs_root.mkdir()
-
+def _fake_start_observer(plan: dict, request: dict):
     def start_observer(directory: Path) -> NS:
         preview = json.loads((directory / "SERVER_PREVIEW.json").read_text())
         now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -803,7 +806,7 @@ def test_live_preview_absence_and_exactly_one_post_are_durably_journaled(
             "plan_sha256": "sha256:" + mechanics.digest(plan),
             "manifest_sha256": preview["manifest_sha256"],
             "maximum_seconds": launch._maximum_seconds(plan, request),
-            "expected_gpus": 8,
+            "expected_gpus": request["workers"] * request["gpus_per_worker"],
             "armed_at": now,
             "observer_pid": os.getpid(),
             "prefix_collision_count_before_post": 0,
@@ -812,6 +815,18 @@ def test_live_preview_absence_and_exactly_one_post_are_durably_journaled(
             json.dumps({**body, "sha256": "sha256:" + jobs_digest(body)})
         )
         return NS(terminate=lambda: None)
+
+    return start_observer
+
+
+def test_live_preview_absence_and_exactly_one_post_are_durably_journaled(
+    tmp_path: Path,
+) -> None:
+    plan = _plan()
+    request = mechanics.job_request(plan)
+    client = _FakeClient(request)
+    jobs_root = tmp_path / "sfs-jobs"
+    jobs_root.mkdir()
 
     def runner(argv: list[str], **_kwargs) -> NS:
         assert argv[:2] == ["kubectl", "--context"]
@@ -838,7 +853,7 @@ def test_live_preview_absence_and_exactly_one_post_are_durably_journaled(
         wandb_exists=lambda *_args: False,
         capacity_reader=capacity_reader,
         now=time.time,
-        start_observer=start_observer,
+        start_observer=_fake_start_observer(plan, request),
     )
     rows = [
         json.loads(line) for line in (tmp_path / "launch/SUBMISSION.jsonl").read_text().splitlines()
@@ -868,6 +883,51 @@ def test_live_preview_absence_and_exactly_one_post_are_durably_journaled(
             },
         )
     ]
+
+
+def test_signal_prepare_builds_exact_review_bundle_without_post(tmp_path: Path) -> None:
+    plan = _phase1_plan()
+    request = signal_qualification.job_request(plan)
+    client = _FakeClient(request)
+    jobs_root = tmp_path / "sfs-jobs"
+    jobs_root.mkdir()
+
+    def runner(_argv: list[str], **_kwargs) -> NS:
+        return NS(returncode=0, stdout='{"items":[]}', stderr="")
+
+    def capacity_reader(_context: str, **kwargs) -> dict:
+        return build_capacity_census(
+            {"items": []},
+            {"items": []},
+            observed_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            **kwargs,
+        )
+
+    directory = tmp_path / "prepared"
+    bundle = launch.prepare_signal_post_bundle(
+        plan,
+        request,
+        client,
+        directory,
+        runner=runner,
+        jobs_root=jobs_root,
+        capacity_reader=capacity_reader,
+        start_observer=_fake_start_observer(plan, request),
+    )
+    assert client.posts == 0
+    assert bundle["schema"] == launch.POST_BUNDLE_SCHEMA
+    assert bundle["server_preview"]["preview_count"] == 2
+    assert bundle["server_preview"]["root_failure_alerts"] == "off"
+    assert bundle["observer_armed"]["maximum_seconds"] == 18_900
+    assert (
+        launch.validate_signal_post_bundle(plan, request, bundle, directory, now=time.time())
+        == bundle
+    )
+    drifted = copy.deepcopy(bundle)
+    drifted["fresh_absence"]["jobs_history_rows_checked"] += 1
+    drifted = launch._seal({key: value for key, value in drifted.items() if key != "sha256"})
+    with pytest.raises(JobsError, match="differs"):
+        launch.validate_signal_post_bundle(plan, request, drifted, directory, now=time.time())
 
 
 def test_capacity_gate_counts_train_and_reload_and_fails_closed() -> None:

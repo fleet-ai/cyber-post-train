@@ -164,6 +164,10 @@ def test_signal_active_deadline_covers_four_bounded_serial_waves() -> None:
     assert launch._maximum_seconds(_signal_plan(), {}) == expected == 18900
 
 
+def test_operator_capacity_ceiling_is_ten_active_nodes() -> None:
+    assert (launch.PROJECT_MAX_NODES, launch.PROJECT_MAX_GPUS) == (10, 80)
+
+
 def test_mechanics_active_deadline_adds_update_checkpoint_and_export_grace() -> None:
     expected = 1800 + 4 * (600 + 2400 + 900 + 2 * 120 + 60) + 1800 + 1800 + 3600 + 300
     plan = _mechanics_plan()
@@ -321,6 +325,11 @@ def test_armed_observer_receipt_binds_preview_pattern_and_deadline(tmp_path, fie
             "shutdown_after_job_finishes": True,
             "nodes": 1,
             "gpus": 8,
+            "observed_at_unix": 100.0,
+            "preview_count": 2,
+            "priority_class": "c1",
+            "queue_priority": "q1",
+            "requeue_if_preempted": False,
         }
     )
     (tmp_path / "SERVER_PREVIEW.json").write_text(json.dumps(preview))
