@@ -101,9 +101,10 @@ that share one model and seed onto one CPU source Job. One declared leader cell
 creates that Job; the other cells reuse its immutable Job UID. This preserves
 per-task failure isolation without creating duplicate Jobs.
 
-The bindings file is immutable JSON. Existing small campaigns use
-`cyber_fleet_campaign_bindings_v1`; a scaled create wave uses
-`cyber_fleet_campaign_bindings_v2`. Both contain:
+The bindings file is immutable JSON. Historical small campaigns used
+`cyber_fleet_campaign_bindings_v1`; it remains readable as evidence but the
+maintained adapter will not execute it. A scaled create wave uses
+`cyber_fleet_campaign_bindings_v2`, which contains:
 
 - today's UTC rollout census: exact receipt digest, already-used count and the
   fixed daily cap of 500;
@@ -133,6 +134,17 @@ record; partial coverage cannot create anything. An exact replay is idempotent, 
 overlapping reservation, or total above 500 fails closed. Use the first
 authoritative census for that UTC day on the controller host and never replace
 it with a later corroborating census.
+
+Every reservation and adapter action also requires one fixed sibling
+`strict-wave-profile.json`. Its self-digested bytes bind the exact v2 bindings,
+campaign plan, reservation id, derived 16-packet set, 16-group/160-cell shape,
+and hashes of the controller, adapter, and launcher source. The reviewed launch
+authorization separately pins this profile's raw file digest and the clean
+source commit. The controller passes that exact raw digest to `reserve-wave`
+and exports it as `CYBER_FLEET_STRICT_PROFILE_FILE_SHA256` for every campaign
+action; the adapter hashes the profile bytes once before parsing them. This
+acyclic binding prevents a caller from replacing the plan, profile, bindings,
+and packet set together or downgrading the run to the legacy v1 path.
 
 The scaled creator is deliberately small: reserve the complete wave once, then
 run the generic campaign step with `--execute --fail-fast` only after every

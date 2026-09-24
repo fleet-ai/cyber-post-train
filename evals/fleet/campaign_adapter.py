@@ -30,6 +30,7 @@ from evals.fleet import opencode_self_hosted as harness
 
 SCHEMA = "cyber_fleet_campaign_bindings_v1"
 WAVE_BINDING_SCHEMA = "cyber_fleet_campaign_bindings_v2"
+STRICT_PROFILE_SCHEMA = "cyber_fleet_strict_wave_profile_v1"
 BUDGET_SCHEMA = "cyber_fleet_daily_rollout_budget_v1"
 RESERVATION_SCHEMA = "cyber_fleet_daily_rollout_reservation_v1"
 WAVE_RESERVATION_SCHEMA = "cyber_fleet_daily_rollout_wave_reservation_v1"
@@ -38,6 +39,7 @@ _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{1,127}")
 _SHA = re.compile(r"sha256:[0-9a-f]{64}")
 WAVE_GROUP_COUNT = 16
 WAVE_CELL_COUNT = 160
+STRICT_PROFILE_DIGEST_ENV = "CYBER_FLEET_STRICT_PROFILE_FILE_SHA256"
 
 
 class AdapterError(ValueError):
@@ -77,8 +79,57 @@ def _packet_set_sha256(groups: dict[str, Any]) -> str:
     )
 
 
+def _strict_profile(path: Path, expected_file_sha256: str) -> dict[str, Any]:
+    expected_file_sha256 = _validate_digest(
+        expected_file_sha256, "strict-wave profile file"
+    )
+    if path.is_symlink() or not path.is_file():
+        raise AdapterError("Fleet strict-wave profile is absent")
+    try:
+        payload = path.read_bytes()
+        file_sha256 = "sha256:" + hashlib.sha256(payload).hexdigest()
+        value = json.loads(payload)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise AdapterError("Fleet strict-wave profile is unreadable") from exc
+    if file_sha256 != expected_file_sha256:
+        raise AdapterError("Fleet strict-wave profile file differs from its authorization")
+    if not isinstance(value, dict):
+        raise AdapterError("Fleet strict-wave profile is invalid")
+    unsigned = {key: item for key, item in value.items() if key != "sha256"}
+    if (
+        set(value)
+        != {
+            "schema",
+            "campaign_id",
+            "binding_schema",
+            "campaign_plan_sha256",
+            "bindings_sha256",
+            "reservation_id",
+            "packet_set_sha256",
+            "group_count",
+            "cell_count",
+            "control_source_sha256",
+            "sha256",
+        }
+        or value.get("schema") != STRICT_PROFILE_SCHEMA
+        or value.get("sha256") != _digest(unsigned)
+    ):
+        raise AdapterError("Fleet strict-wave profile is invalid")
+    for field in (
+        "campaign_plan_sha256",
+        "bindings_sha256",
+        "packet_set_sha256",
+        "control_source_sha256",
+    ):
+        _validate_digest(value.get(field), f"strict-wave profile {field}")
+    return value
+
+
 def _validate_wave_contract(
-    binding: dict[str, Any], plan: dict[str, Any]
+    binding: dict[str, Any],
+    plan: dict[str, Any],
+    strict_profile_path: Path,
+    strict_profile_file_sha256: str,
 ) -> dict[str, Any]:
     binding = _validate_bindings(binding)
     if binding["schema"] != WAVE_BINDING_SCHEMA:
@@ -92,6 +143,7 @@ def _validate_wave_contract(
         raise AdapterError("Fleet wave campaign plan is not the exact 160-cell plan")
     keys = [target.get("experiment_key") for target in targets]
     control_source_sha256 = _control_source_sha256()
+    profile = _strict_profile(strict_profile_path, strict_profile_file_sha256)
     sources = [
         target.get("drivers", {}).get(phase, {}).get("source_sha256")
         for target in targets
@@ -104,6 +156,20 @@ def _validate_wave_contract(
         or plan.get("plan_sha256") != binding["wave"]["campaign_plan_sha256"]
         or binding["wave"]["control_source_sha256"] != control_source_sha256
         or any(source != control_source_sha256 for source in sources)
+        or profile
+        != {
+            "schema": STRICT_PROFILE_SCHEMA,
+            "campaign_id": plan.get("campaign_id"),
+            "binding_schema": WAVE_BINDING_SCHEMA,
+            "campaign_plan_sha256": plan.get("plan_sha256"),
+            "bindings_sha256": binding["sha256"],
+            "reservation_id": binding["wave"]["reservation_id"],
+            "packet_set_sha256": binding["wave"]["packet_set_sha256"],
+            "group_count": WAVE_GROUP_COUNT,
+            "cell_count": WAVE_CELL_COUNT,
+            "control_source_sha256": control_source_sha256,
+            "sha256": profile["sha256"],
+        }
     ):
         raise AdapterError("Fleet wave campaign control contract differs")
     return binding
@@ -259,6 +325,8 @@ def _reservation_index(
 def reserve_wave(
     binding: dict[str, Any],
     plan: dict[str, Any],
+    strict_profile_path: Path,
+    strict_profile_file_sha256: str,
     reservation_id: str,
     *,
     expected_sessions: int,
@@ -268,7 +336,9 @@ def reserve_wave(
     """Atomically reserve every source group in one campaign before any create."""
     if not isinstance(reservation_id, str) or _ID.fullmatch(reservation_id) is None:
         raise AdapterError("Fleet wave reservation id is invalid")
-    binding = _validate_wave_contract(binding, plan)
+    binding = _validate_wave_contract(
+        binding, plan, strict_profile_path, strict_profile_file_sha256
+    )
     packet_set_sha256 = _validate_digest(packet_set_sha256, "wave packet set")
     wave = binding["wave"]
     if (
@@ -753,6 +823,8 @@ def run_action(
     phase: str,
     packet_path: Path,
     bindings_path: Path,
+    strict_profile_path: Path,
+    strict_profile_file_sha256: str,
     context: str,
     preview_receipt: Path | None = None,
     readiness_receipt: Path | None = None,
@@ -765,32 +837,36 @@ def run_action(
     budget_root: Path = BUDGET_ROOT,
 ) -> dict[str, Any]:
     target = _read(packet_path)
+    state = packet_path.resolve().parents[2]
+    plan = campaign.load_plan(state)
+    prebound = load_bindings(bindings_path)
+    _validate_wave_contract(
+        prebound, plan, strict_profile_path, strict_profile_file_sha256
+    )
+    expected_packet = state / "targets" / target["experiment_key"] / "packet.json"
+    planned_target = next(
+        (
+            item
+            for item in plan["targets"]
+            if item["experiment_key"] == target["experiment_key"]
+        ),
+        None,
+    )
+    driver = target.get("drivers", {}).get(phase, {})
+    source_sha256 = _control_source_sha256()
+    if (
+        packet_path.resolve() != expected_packet
+        or planned_target != target
+        or bindings_path.resolve() != state.parent / "fleet-bindings.json"
+        or strict_profile_path.resolve() != state.parent / "strict-wave-profile.json"
+        or duplicate_gate_evidence is None
+        or duplicate_gate_evidence.resolve() != state.parent / "duplicate-gate-evidence.json"
+        or driver.get("source_sha256") != source_sha256
+    ):
+        raise AdapterError("Fleet campaign control plane differs from its strict profile")
     bindings, cell, package, source_packet = _source(bindings_path, target)
-    if bindings["schema"] == WAVE_BINDING_SCHEMA:
-        state = packet_path.resolve().parents[2]
-        plan = campaign.load_plan(state)
-        bindings = _validate_wave_contract(bindings, plan)
-        expected_packet = state / "targets" / target["experiment_key"] / "packet.json"
-        planned_target = next(
-            (
-                item
-                for item in plan["targets"]
-                if item["experiment_key"] == target["experiment_key"]
-            ),
-            None,
-        )
-        driver = target.get("drivers", {}).get(phase, {})
-        source_sha256 = _control_source_sha256()
-        if (
-            packet_path.resolve() != expected_packet
-            or planned_target != target
-            or plan["plan_sha256"] != bindings["wave"]["campaign_plan_sha256"]
-            or bindings_path.resolve() != state.parent / "fleet-bindings.json"
-            or duplicate_gate_evidence is None
-            or duplicate_gate_evidence.resolve() != state.parent / "duplicate-gate-evidence.json"
-            or driver.get("source_sha256") != source_sha256
-        ):
-            raise AdapterError("Fleet campaign control plane differs from its wave binding")
+    if bindings != prebound:
+        raise AdapterError("Fleet strict-wave binding changed during package capture")
     group_id = cell["group"]
     group = bindings["groups"][group_id]
     root = _group_root(packet_path, group_id)
@@ -1099,14 +1175,18 @@ def main(argv: list[str] | None = None) -> None:
         reserve_parser.add_argument("command", choices=["reserve-wave"])
         reserve_parser.add_argument("bindings", type=Path)
         reserve_parser.add_argument("campaign_state", type=Path)
+        reserve_parser.add_argument("strict_profile", type=Path)
         reserve_parser.add_argument("receipt", type=Path)
         reserve_parser.add_argument("--reservation-id", required=True)
         reserve_parser.add_argument("--expected-sessions", required=True, type=int)
         reserve_parser.add_argument("--packet-set-sha256", required=True)
+        reserve_parser.add_argument("--strict-profile-file-sha256", required=True)
         args = reserve_parser.parse_args(argv)
         result = reserve_wave(
             load_bindings(args.bindings),
             campaign.load_plan(args.campaign_state),
+            args.strict_profile,
+            args.strict_profile_file_sha256,
             args.reservation_id,
             expected_sessions=args.expected_sessions,
             packet_set_sha256=args.packet_set_sha256,
@@ -1119,6 +1199,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("packet", type=Path)
     parser.add_argument("receipt", type=Path)
     parser.add_argument("--bindings", required=True, type=Path)
+    parser.add_argument("--strict-profile", required=True, type=Path)
+    parser.add_argument("--strict-profile-file-sha256")
     parser.add_argument("--context", required=True)
     parser.add_argument("--preview-receipt", type=Path)
     parser.add_argument("--readiness-receipt", type=Path)
@@ -1126,11 +1208,20 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--terminal-receipt", type=Path)
     parser.add_argument("--duplicate-gate-evidence", type=Path)
     args = parser.parse_args(argv)
+    strict_profile_file_sha256 = args.strict_profile_file_sha256 or os.environ.get(
+        STRICT_PROFILE_DIGEST_ENV
+    )
+    if strict_profile_file_sha256 is None:
+        parser.error(
+            f"--strict-profile-file-sha256 or {STRICT_PROFILE_DIGEST_ENV} is required"
+        )
     result = run_action(
         action=args.action,
         phase=args.phase,
         packet_path=args.packet,
         bindings_path=args.bindings,
+        strict_profile_path=args.strict_profile,
+        strict_profile_file_sha256=strict_profile_file_sha256,
         context=args.context,
         preview_receipt=args.preview_receipt,
         readiness_receipt=args.readiness_receipt,
