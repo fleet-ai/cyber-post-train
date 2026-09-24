@@ -1,0 +1,508 @@
+{
+  "schema": "cyber_qwen38_top5_multibench_pass4_matrix_v1",
+  "matrix_id": "q38-top5-multibench-pass4-20260923-v1",
+  "prepared_against_main_commit": "0f0bcdb7c6e18fb8a337e287df43bb2188f2899a",
+  "status": "prepared_no_launch",
+  "launchable": false,
+  "purpose": "Freeze one prospective baseline-plus-five checkpoint comparison without using Fleet confirmation-set outcomes or any external benchmark result to choose checkpoints.",
+  "scientific_boundary": {
+    "selection_completed_without_using_fleet_confirmation_outcomes": true,
+    "fleet_confirmation_outcomes_used_for_selection": false,
+    "webexploitbench_outcomes_used_for_selection": false,
+    "cvebench_outcomes_used_for_selection": false,
+    "nyu_ctf_outcomes_used_for_selection": false,
+    "cybench_outcomes_used_for_selection": false,
+    "selection_inputs": [
+      "accepted_artifact_quality",
+      "training_data_and_recipe_completeness",
+      "supervised_token_exposure",
+      "context_length",
+      "pre_frozen_development_evidence"
+    ],
+    "training_data_eligible": false
+  },
+  "fleet_confirmation_exposure_audit": {
+    "path": "docs/evidence/qwen38-fleet-final8-exposure-audit-20260923.json",
+    "file_sha256": "sha256:3e6b56d0e91560e55240efeaad3b1b660698287961e1eae6bc1b7e2df9d89a05",
+    "receipt_sha256": "sha256:dac348e34529ac0185d6cb9943bf6c7ad13c5b28bedf9fc8542bd7e8a2e59073",
+    "disposition": "historically_exposed_locked_confirmation_set",
+    "all_eight_exact_versions_have_prior_quality_certification_metadata": true,
+    "pre_split_model_comparison_exact_versions_with_accepted_execution": 2,
+    "pre_split_model_comparison_exact_versions_with_only_unstarted_cells": 6,
+    "historical_cells_may_substitute_for_new_matched_cells": false,
+    "selection_outcomes_used": false,
+    "integrity_boundary": "The audit uses task identity and execution-state categories, not prompts, traces, flags, answers, or task-level capability values. An unrelated repository search displayed historical aggregate score-related fields; those values were not queried for, copied, persisted, or used for checkpoint selection."
+  },
+  "base_model": {
+    "artifact_id": "qwen38-27b-base-control",
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "weights_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+    "tokenizer_sha256": "sha256:0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+    "chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "serving_model_id": "qwen3.8-27b",
+    "external_clone_serving_model_id": "chris-q38-base-extctf-c1-v1",
+    "promotion_state": "accepted_existing_identity_do_not_mutate",
+    "first_remaining_gate": "fresh_live_readback_and_matched_parity_before_each_campaign"
+  },
+  "selection": {
+    "policy": "Choose broad-data full-weight checkpoints prospectively. Prefer greater accepted supervised-token exposure, then recipe or context diversity that answers a distinct research question. Exclude checkpoint-only LoRA or RL artifacts without an accepted merged full-weight export and reload gate.",
+    "shared_training_corpus": {
+      "sessions": 2886,
+      "training_task_keys": 496,
+      "training_task_versions": 1176,
+      "visible_assistant_responses": 176654,
+      "unique_supervised_target_tokens": 57384881,
+      "split_sha256": "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
+      "final_test_family_overlap": 0
+    },
+    "ranked_candidate_ids": [
+      "q38-teacher3k-32k-step1000",
+      "q38-d32-b16-lr5e6-step300",
+      "q38-t3k64-b8-step285",
+      "q38-t3k32-lr1-step700",
+      "q38-t3k96-b8-step300"
+    ],
+    "excluded_examples": {
+      "q38-sft32-dense-m1-step600": "Same 32K batch-8 learning-rate-3e-6 treatment as the stronger step-1000 anchor, with fewer accepted supervised tokens.",
+      "fresh75_teacher186_self44": "Valid historical artifacts, but trained on much smaller datasets than all five selected broad-data arms.",
+      "lora_or_rl_checkpoint_only": "No accepted merged full-weight export, zero-update reload, immutable stage, and serving identity."
+    }
+  },
+  "arms": [
+    {
+      "rank": 0,
+      "arm_id": "base",
+      "artifact_id": "qwen38-27b-base-control",
+      "kind": "base_control",
+      "promotion_state": "accepted_existing_identity_do_not_mutate",
+      "serving_model_id": "qwen3.8-27b"
+    },
+    {
+      "rank": 1,
+      "arm_id": "step1000",
+      "artifact_id": "q38-teacher3k-32k-step1000",
+      "kind": "full_weight_sft",
+      "research_question": "Best broad-data anchor after the greatest accepted token exposure among the selected checkpoints.",
+      "training_config_path": "configs/runs/qwen38-teacher3k-32k-full-b8-lr3e6-v3.json",
+      "training_config_file_sha256": "sha256:f2de71872423fcdc08ba3139728daf4c2948f2e1fd88a723a128e4568209576f",
+      "recipe": {
+        "context_tokens": 32768,
+        "global_batch_size": 8,
+        "microbatch_per_gpu": 1,
+        "learning_rate": 0.000003,
+        "epochs_planned": 1,
+        "optimizer_step": 1000,
+        "planned_final_step": 1837,
+        "supervised_tokens_seen": 31035607
+      },
+      "checkpoint": {
+        "path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoints/global_step_1000",
+        "receipt_path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoint_receipts/step-001000.json",
+        "receipt_file_sha256": "sha256:378011c8f0c8908d156aaf5dffa4d8a9ffe68b10373dbd4e0eecf14a5155e934",
+        "receipt_sha256": "sha256:bae4b7215a6b9ebd38461555a2de02dfe822013222280ee0ca6498ad27e892b7"
+      },
+      "promotion": {
+        "state": "accepted_through_export_reload_stage_registration_and_live_parity",
+        "evidence_path": "docs/evidence/qwen38-teacher3k32-step1000-promotion-20260922.json",
+        "export_path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/hf-export-step1000-v1",
+        "export_receipt_sha256": "sha256:8a1d9e093fa1f856c35d357cf34861862317491ee83a9268613f1cf86160eef0",
+        "stage_path": "/models/chris-q38-t3k32-s1000-v1",
+        "model_revision": "sha256:023c5f8b0559ba050f0d672a6bc27aabecec7d5837595f8ea5bc914446d26db5",
+        "serving_model_id": "chris-q38-t3k32-s1000-v1",
+        "identity_policy": "keep_existing_accepted_identity_unchanged",
+        "first_remaining_gate": "fresh_live_readback_and_matched_parity_before_each_campaign"
+      },
+      "fallback": null
+    },
+    {
+      "rank": 2,
+      "arm_id": "b16_step300",
+      "artifact_id": "q38-d32-b16-lr5e6-step300",
+      "kind": "full_weight_sft",
+      "research_question": "Test a larger global batch and moderately higher learning rate motivated by the domain-specific CTF recipe.",
+      "training_config_path": "configs/runs/qwen38-27b-sft-32k-dense-b16-lr5e6-domain-v1.json",
+      "training_config_file_sha256": "sha256:b9c695f34b352aff40cef1f0e490ef884237dcfb858c977560ca1c20a8d1bbac",
+      "recipe": {
+        "context_tokens": 32768,
+        "global_batch_size": 16,
+        "microbatch_per_gpu": 1,
+        "learning_rate": 0.000005,
+        "epochs_planned": 1,
+        "optimizer_step": 300,
+        "planned_final_step": 919,
+        "supervised_tokens_seen": 18752000
+      },
+      "checkpoint": {
+        "path": "/mnt/sfs/jobs/chris-q38-d32-b16-lr5e6-v1/checkpoints/global_step_300",
+        "receipt_path": "/mnt/sfs/jobs/chris-q38-d32-b16-lr5e6-v1/checkpoint_receipts/step-000300.json",
+        "receipt_file_sha256": "sha256:908fde2ba60c3ad14a85be1cc9560662b21f34a01a0f88b7f13e523e9a1bf451",
+        "receipt_sha256": "sha256:cf48c5d3542581b84c9ee888b6e77921f2fd469d6dabd4d4f38622a64c1e2e5c"
+      },
+      "promotion": {
+        "state": "native_checkpoint_only",
+        "proposed_export_path": "/mnt/sfs/jobs/chris-q38-d32-b16-lr5e6-v1/hf-export-step300-v1",
+        "proposed_reload_receipt_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/chris-q38-d32-b16-s300-gpu-check-v1/GPU_CHECK.json",
+        "proposed_stage_path": "/models/chris-q38-d32-b16-s300-v1",
+        "proposed_serving_model_id": "chris-q38-d32-b16-s300-v1",
+        "remaining_gates": [
+          "seal_checkpoint_and_prove_source_stability",
+          "create_once_bf16_export",
+          "cpu_exact_layout_and_sidecar_validation",
+          "one_gpu_zero_optimizer_update_finite_reload",
+          "create_once_immutable_stage",
+          "paused_zero_replica_registration",
+          "fresh_live_matched_parity"
+        ]
+      },
+      "fallback": {
+        "state": "none_durably_bound",
+        "note": "The prior roster mentions a step-200 full package but provides no accepted receipt path or digest. It is not an eligible fallback until independently bound."
+      }
+    },
+    {
+      "rank": 3,
+      "arm_id": "context64_step285",
+      "artifact_id": "q38-t3k64-b8-step285",
+      "kind": "full_weight_sft",
+      "research_question": "Measure whether longer packed training context improves long cyber trajectories at comparable batch and learning rate.",
+      "training_config_path": "configs/runs/qwen38-teacher3k-64k-full-b8-lr3e6-v5.json",
+      "training_config_file_sha256": "sha256:d3b97753034d0a6eaee07982606294d15767e0d7ae3dc00cc828ad4c1c448d31",
+      "recipe": {
+        "context_tokens": 65536,
+        "global_batch_size": 8,
+        "microbatch_per_gpu": 1,
+        "learning_rate": 0.000003,
+        "epochs_planned": 1,
+        "optimizer_step": 285,
+        "planned_final_step": 1120,
+        "supervised_tokens_seen": 15380675
+      },
+      "checkpoint": {
+        "path": "/mnt/sfs/jobs/chris-q38-t3k64-b8-v5/checkpoints/global_step_285",
+        "receipt_path": "/mnt/sfs/jobs/chris-q38-t3k64-b8-v5/checkpoint_receipts/step-000285.json",
+        "receipt_file_sha256": "sha256:931cbf2585e64753cf6d8ad9e9978aef84c20e8570998dde402e146b5111b03f",
+        "receipt_sha256": "sha256:fb0068f4d3f60ded3d3a725273343672822eeaeea718f4802edbc33a67e432d0"
+      },
+      "promotion": {
+        "state": "native_checkpoint_only",
+        "proposed_export_path": "/mnt/sfs/jobs/chris-q38-t3k64-b8-v5/hf-export-step285-v1",
+        "proposed_reload_receipt_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/chris-q38-t3k64-s285-gpu-check-v1/GPU_CHECK.json",
+        "proposed_stage_path": "/models/chris-q38-t3k64-s285-v1",
+        "proposed_serving_model_id": "chris-q38-t3k64-s285-v1",
+        "remaining_gates": [
+          "seal_checkpoint_and_prove_source_stability",
+          "create_once_bf16_export",
+          "cpu_exact_layout_and_sidecar_validation",
+          "one_gpu_zero_optimizer_update_finite_reload",
+          "create_once_immutable_stage",
+          "paused_zero_replica_registration",
+          "fresh_live_matched_parity"
+        ]
+      },
+      "fallback": {
+        "artifact_id": "q38-t3k64-b8-step195",
+        "checkpoint_path": "/mnt/sfs/jobs/chris-q38-t3k64-b8-v5/checkpoints/global_step_195",
+        "promotion_evidence_path": "docs/evidence/qwen38-current-nonlead-promotion-20260922.json",
+        "export_path": "/mnt/sfs/jobs/chris-q38-t3k64-b8-v5/hf-export-step195-v1",
+        "stage_path": "/models/chris-q38-t3k64-s195-v1",
+        "serving_model_id": "chris-q38-t3k64-s195-v1",
+        "state": "accepted_through_reload_stage_and_paused_registration",
+        "use_only_if": "step285_fails_a_required_promotion_gate"
+      }
+    },
+    {
+      "rank": 4,
+      "arm_id": "lr1_step700",
+      "artifact_id": "q38-t3k32-lr1-step700",
+      "kind": "full_weight_sft",
+      "research_question": "Isolate the effect of a three-times lower learning rate at substantial broad-data exposure.",
+      "training_config_path": "configs/runs/qwen38-teacher3k-32k-full-b8-lr1e6-v3.json",
+      "training_config_file_sha256": "sha256:dddb9f3f60ed99dc434394e1f3f180148b54710ad31349c332e32c74a09db5ce",
+      "recipe": {
+        "context_tokens": 32768,
+        "global_batch_size": 8,
+        "microbatch_per_gpu": 1,
+        "learning_rate": 0.000001,
+        "epochs_planned": 1,
+        "optimizer_step": 700,
+        "planned_final_step": 1837,
+        "supervised_tokens_seen": 21596883
+      },
+      "checkpoint": {
+        "path": "/mnt/sfs/jobs/chris-q38-t3k32-lr1-v3/checkpoints/global_step_700",
+        "receipt_path": "/mnt/sfs/jobs/chris-q38-t3k32-lr1-v3/checkpoint_receipts/step-000700.json",
+        "receipt_file_sha256": "sha256:25a8cdcc0b3d524ba26379465b52f1c24072a373b1e576e788dade36858a29da",
+        "receipt_sha256": "sha256:fca45725b3ccede801c6fef5f143c51c508a0872413cbd0bbdf734d970fdbe98"
+      },
+      "promotion": {
+        "state": "native_checkpoint_only",
+        "proposed_export_path": "/mnt/sfs/jobs/chris-q38-t3k32-lr1-v3/hf-export-step700-v1",
+        "proposed_reload_receipt_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/chris-q38-t3k32-lr1-s700-gpu-check-v1/GPU_CHECK.json",
+        "proposed_stage_path": "/models/chris-q38-t3k32-lr1-s700-v1",
+        "proposed_serving_model_id": "chris-q38-t3k32-lr1-s700-v1",
+        "remaining_gates": [
+          "seal_checkpoint_and_prove_source_stability",
+          "create_once_bf16_export",
+          "cpu_exact_layout_and_sidecar_validation",
+          "one_gpu_zero_optimizer_update_finite_reload",
+          "create_once_immutable_stage",
+          "paused_zero_replica_registration",
+          "fresh_live_matched_parity"
+        ]
+      },
+      "fallback": {
+        "state": "none_durably_bound"
+      }
+    },
+    {
+      "rank": 5,
+      "arm_id": "context96_step300",
+      "artifact_id": "q38-t3k96-b8-step300",
+      "kind": "full_weight_sft",
+      "research_question": "Test the longest accepted training context, which is uniquely relevant to long exploit trajectories.",
+      "training_config_path": "configs/runs/qwen38-teacher3k-96k-full-b8-lr3e6-v3.json",
+      "training_config_file_sha256": "sha256:fc8422f6dfa7d3493e3352a614aca19aafab8f824b9fa19b9e1d40fc70dcaca1",
+      "recipe": {
+        "context_tokens": 98304,
+        "global_batch_size": 8,
+        "microbatch_per_gpu": 1,
+        "learning_rate": 0.000003,
+        "epochs_planned": 1,
+        "optimizer_step": 300,
+        "planned_final_step": 856,
+        "supervised_tokens_seen": 20234966
+      },
+      "checkpoint": {
+        "path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/checkpoints/global_step_300",
+        "receipt_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/checkpoint_receipts/step-000300.json",
+        "receipt_file_sha256": "sha256:c0c146b342b13da64943e6ae8a46b4ca4b4d14b1355e8950aedeed0d58ba5dfd",
+        "receipt_sha256": "sha256:9f53b7a80a8cecef2164e421ec41f9ea3e3ffab673c486828e1d4a059da3cec8"
+      },
+      "promotion": {
+        "state": "native_checkpoint_only",
+        "proposed_export_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/hf-export-step300-v1",
+        "proposed_reload_receipt_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/chris-q38-t3k96-s300-gpu-check-v1/GPU_CHECK.json",
+        "proposed_stage_path": "/models/chris-q38-t3k96-s300-v1",
+        "proposed_serving_model_id": "chris-q38-t3k96-s300-v1",
+        "remaining_gates": [
+          "seal_checkpoint_and_prove_source_stability",
+          "create_once_bf16_export",
+          "cpu_exact_layout_and_sidecar_validation",
+          "one_gpu_zero_optimizer_update_finite_reload",
+          "create_once_immutable_stage",
+          "paused_zero_replica_registration",
+          "fresh_live_matched_parity"
+        ]
+      },
+      "fallback": {
+        "artifact_id": "q38-t3k96-b8-step100",
+        "state": "accepted_through_cpu_validation_gpu_reload_absent",
+        "checkpoint_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/checkpoints/global_step_100",
+        "checkpoint_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/checkpoint_receipts/step-000100.json",
+        "checkpoint_receipt_file_sha256": "sha256:7714e0ce2eb664f6aa25c6c4a9e5475b994fe824ffcb62030f684225101b6058",
+        "checkpoint_receipt_sha256": "sha256:e1dfd6718926f6d19ec5710ed7ba53e753d81526f95dbd8313cc8a72d564e06d",
+        "seal_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/checkpoint-seals-v1/step-100.json",
+        "seal_file_sha256": "sha256:7215dcd0216e5eb7d1ddd9ae89cfa09c076ea2e5cc85afc4411451626e9d4a26",
+        "seal_receipt_sha256": "sha256:328cdc795f5b107fdc29f8f6324ece89f9df8bc878c3b592616010419aad8194",
+        "export_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/hf-export-step100-v1",
+        "export_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/hf-export-step100-v1/EXPORT.json",
+        "export_receipt_file_sha256": "sha256:af8ab2142a3369932e9eb0e2c3a1da99dabde8e11c481b35c41c1b9f03603c9e",
+        "export_receipt_sha256": "sha256:2de8ce31edf2cb81663657779418581e74cafd719c9273c384a2f652dc8cb2f5",
+        "cpu_check_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/hf-export-step100-v1-cpu-check.json",
+        "cpu_check_file_sha256": "sha256:eb36fd7ac6a8828d44307d06dabb211cf68b27c2fc5139f35308b6ea03be4897",
+        "cpu_check_receipt_sha256": "sha256:166ba0d60b218118c27768d14817c5e4eecacec1e095d52bbae0b1a679f1b635",
+        "proposed_reload_receipt_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/chris-q38-t3k96-s100-gpu-check-v1/GPU_CHECK.json",
+        "proposed_stage_path": "/models/chris-q38-t3k96-s100-v1",
+        "proposed_serving_model_id": "chris-q38-t3k96-s100-v1",
+        "use_only_if": "step300_fails_a_required_promotion_gate",
+        "second_fallback": {
+          "artifact_id": "q38-t3k96-b8-step50",
+          "checkpoint_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/checkpoints/global_step_50",
+          "promotion_evidence_path": "docs/evidence/qwen38-current-nonlead-promotion-20260922.json",
+          "export_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/hf-export-step50-v1",
+          "state": "accepted_through_zero_update_gpu_reload_not_staged_or_registered",
+          "proposed_stage_path": "/models/chris-q38-t3k96-s50-v1",
+          "proposed_serving_model_id": "chris-q38-t3k96-s50-v1",
+          "use_only_if": "step300_and_step100_each_fail_a_required_promotion_gate"
+        }
+      }
+    }
+  ],
+  "evaluation_protocol": {
+    "arms": [
+      "base",
+      "step1000",
+      "b16_step300",
+      "context64_step285",
+      "lr1_step700",
+      "context96_step300"
+    ],
+    "pass_k": 4,
+    "independent_pass1_attempt_indices": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "attempt_labels": [
+      "r00",
+      "r01",
+      "r02",
+      "r03"
+    ],
+    "cross_arm_controls": {
+      "scientific_attempt_retries": 0,
+      "same_task_and_attempt_roster_for_every_arm": true,
+      "same_benchmark_specific_harness_context_and_sampling_for_every_arm": true,
+      "infrastructure_invalid_is_never_model_failure": true
+    },
+    "result_policy": "Preserve every terminal cell. Replace or exclude only a predeclared infrastructure-invalid cell symmetrically; never rerun a valid zero. Keep collection separate from scoring where the benchmark supports it."
+  },
+  "benchmarks": [
+    {
+      "benchmark_id": "webexploitbench",
+      "task_count_official": 15,
+      "task_count_execution_roster": 15,
+      "protocol_path": "configs/evaluation/qwen38-important-checkpoints-opencode-wbe-campaign-v1.json",
+      "protocol_file_sha256": "sha256:5f5070e32bd56d7e4bb4d9c0c5aa049ba9ad9e8b0c4155138a504a5422647506",
+      "benchmark_revision": "7f97d87fa8ab728260c0ba9b09b9c8f00bb82ad5",
+      "task_order_sha256": "sha256:d491b66885c8a379a887ee792d96ade76ffdc34cbfa3e75f9bc61c6975a29610",
+      "harness": "opencode-1.18.27",
+      "sampling": {
+        "temperature": 0.6,
+        "top_p": 0.95,
+        "seed": null,
+        "max_output_tokens": 32768
+      },
+      "context": {
+        "max_context_tokens": 262144,
+        "automatic_compaction": true,
+        "automatic_continuation": true
+      },
+      "scoring": "separate_deferred_gpt_judge",
+      "attempt_indices": [0, 1, 2, 3],
+      "launch_gate": "fresh_model_free_runtime_qualification_plus_route_parity_and_duplicate_absence"
+    },
+    {
+      "benchmark_id": "fleet_final_test8",
+      "task_count_official": 8,
+      "task_count_execution_roster": 8,
+      "split_path": "configs/data/fleet-blackbox-current-study-split-20260914-v2.json",
+      "split_file_sha256": "sha256:28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb",
+      "split_sha256": "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
+      "selection_sha256": "sha256:9623149c4a021bc13ed2cf94ca26e107b30c18816cf3c02d76b5020cab5066f4",
+      "selection_role": "historically_exposed_locked_confirmation_set",
+      "outcomes_state": "outcomes_not_used_for_checkpoint_selection",
+      "exposure_audit_path": "docs/evidence/qwen38-fleet-final8-exposure-audit-20260923.json",
+      "exposure_audit_file_sha256": "sha256:3e6b56d0e91560e55240efeaad3b1b660698287961e1eae6bc1b7e2df9d89a05",
+      "exposure_audit_receipt_sha256": "sha256:dac348e34529ac0185d6cb9943bf6c7ad13c5b28bedf9fc8542bd7e8a2e59073",
+      "historical_execution_boundary": {
+        "exact_versions_with_prior_quality_certification_metadata": 8,
+        "exact_versions_with_accepted_pre_split_model_comparison_execution": 2,
+        "exact_versions_with_only_unstarted_pre_split_model_comparison_cells": 6,
+        "historical_cells_reused": 0,
+        "new_matched_outcomes_required": 192
+      },
+      "harness": "opencode-1.18.27",
+      "sampling": {
+        "temperature": 0.6,
+        "top_p": 0.95,
+        "max_output_tokens": 32768,
+        "seed_binding": "one_exact_seed_per_independent_pass1_attempt"
+      },
+      "context": {
+        "max_context_tokens": 262144,
+        "automatic_compaction": true,
+        "automatic_continuation": true
+      },
+      "seeds": [46, 47, 48, 49],
+      "seed_policy": "No earlier final-test seed contract exists. Freeze the first four seeds from the already reviewed independent seed46-to53 development protocol before opening final-test outcomes.",
+      "launch_gate": "open_once_for_this_prospectively_frozen_six_arm_finalist_family_after_exact_binding_preview"
+    },
+    {
+      "benchmark_id": "cvebench_zero_day",
+      "task_count_official": 40,
+      "task_count_execution_roster": 40,
+      "protocol_path": "configs/evaluation/qwen38-external-ctf-paired-v1.json",
+      "protocol_file_sha256": "sha256:0cb2be1ab5092851f7b034bc9cc749ea261a836e6f4e8a0ada7b7492d4688cde",
+      "protocol_sha256": "sha256:b5e974a4058a97d55c482f07567ef3a68c818b35f72d725358f1a6ce9337d475",
+      "source_commit": "332f0ec0fc95c4a4d35fe7458a73969aad1aa1d4",
+      "harness": "cvebench_inspect_native-2.1.0",
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": null,
+        "seed": null
+      },
+      "scoring": "official_deterministic_exploit_grader",
+      "attempt_indices": [0, 1, 2, 3],
+      "launch_gate": "model_free_task5_positive_control_then_frozen_remaining_roster"
+    },
+    {
+      "benchmark_id": "nyu_ctf_web",
+      "task_count_official": 19,
+      "task_count_execution_roster": 16,
+      "predeclared_execution_unavailable_count": 3,
+      "protocol_path": "configs/evaluation/qwen38-external-ctf-paired-v1.json",
+      "protocol_file_sha256": "sha256:0cb2be1ab5092851f7b034bc9cc749ea261a836e6f4e8a0ada7b7492d4688cde",
+      "source_commit": "1dc13a0dc41a71504f727649679e2b5a6d0cb1b1",
+      "harness": "opencode-1.18.27",
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": null,
+        "seed": null
+      },
+      "scoring": "pinned_manifest_exact_hidden_flag",
+      "attempt_indices": [0, 1, 2, 3],
+      "launch_gate": "adapter_and_model_free_runtime_qualification"
+    },
+    {
+      "benchmark_id": "cybench_web",
+      "task_count_official": 6,
+      "task_count_execution_roster": 5,
+      "predeclared_source_unavailable_count": 1,
+      "protocol_path": "configs/evaluation/qwen38-external-ctf-paired-v1.json",
+      "protocol_file_sha256": "sha256:0cb2be1ab5092851f7b034bc9cc749ea261a836e6f4e8a0ada7b7492d4688cde",
+      "source_commit": "1097a7226eb034d3821208114da38f10b8627ab1",
+      "harness": "opencode-1.18.27",
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": null,
+        "seed": null
+      },
+      "scoring": "official_exact_flag",
+      "attempt_indices": [0, 1, 2, 3],
+      "launch_gate": "adapter_and_model_free_runtime_qualification"
+    }
+  ],
+  "matrix_shape": {
+    "arm_count": 6,
+    "attempts_per_task": 4,
+    "official_task_rows": 88,
+    "execution_roster_task_rows": 84,
+    "official_cells": 2112,
+    "execution_roster_cells_if_all_benchmark_gates_pass": 2016,
+    "formula": "arms times attempts times tasks"
+  },
+  "global_launch_gates": [
+    "revalidate_each_checkpoint_receipt_and_source_stability",
+    "complete_each_arm_specific_promotion_chain_or_bind_its_accepted_fallback",
+    "prove_fresh_route_and_non_weight_serving_parity",
+    "prove_exact_task_rosters_and_benchmark_runtime_qualification",
+    "prove_output_and_live_duplicate_absence",
+    "respect_current_resource_capacity_and_provider_concurrency",
+    "for_every_kubernetes_job_or_rayjob_verify_root_fleet_ai_failure_alerts_off_in_server_preview",
+    "obtain_root_preview_and_capacity_go_before_any_gpu_create"
+  ],
+  "operation": {
+    "checkpoint_promotions_started": 0,
+    "routes_created_or_mutated": 0,
+    "jobs_created": 0,
+    "evaluation_cells_created": 0,
+    "fleet_confirmation_campaigns_created": 0
+  },
+  "sha256": "f4459e4d939f99973ad04ab114b03643073da43b9e767681f375bc0e33685da6"
+}
