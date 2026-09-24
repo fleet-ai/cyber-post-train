@@ -1,0 +1,48 @@
+{
+  "cleanup": {
+    "config_map_absent": true,
+    "job_absent": true,
+    "pods_absent": true,
+    "resource_release_confirmed": true,
+    "workloads_absent": true
+  },
+  "config_map": {
+    "name": "chris-q38-m96-bind-probe-a1-code",
+    "uid": "06549ae6-9c37-470f-a9f1-61c9ba1d4ca3"
+  },
+  "failure": {
+    "error_class": "ModuleNotFoundError",
+    "phase": "isolated_bundle_import",
+    "reason": "probe_module_imported_an_unbundled_local_package"
+  },
+  "job": {
+    "exit_code": 1,
+    "name": "chris-q38-m96-bind-probe-a1",
+    "restart_count": 0,
+    "status": "Failed",
+    "uid": "3099eca1-a5f1-497a-8ac2-35de0bc1248f"
+  },
+  "observed_at": "2026-09-24T04:58:00Z",
+  "packet_sha256": "sha256:72d9ebb510d16927bdce3cb252f1800e6dd0615f18fd9f484e6a5f0fb586d9c0",
+  "pod": {
+    "name": "chris-q38-m96-bind-probe-a1-bvk6w",
+    "uid": "a6c82783-1119-4e58-85c6-c77d5ef57bd9"
+  },
+  "raw_weights_prompts_traces_flags_answers_scores_or_credentials_included": false,
+  "resources": {
+    "failure_alerts": "off",
+    "gpus": 0,
+    "priority": "c1/q1"
+  },
+  "retry_policy": {
+    "a1_retired": true,
+    "automatic_retry": false
+  },
+  "schema": "cyber_qwen38_miles96_binding_probe_terminal_v1",
+  "server_preview_sha256": "sha256:f2fe8c02e17a843656c999119ec01ee633de5f714274cb355434edb550064008",
+  "sha256": "sha256:de12e4ab42b9085ddabaee5c947ffe32472832766581d59f83f50c98593c107e",
+  "workload": {
+    "name": "job-chris-q38-m96-bind-probe-a1-ffb76",
+    "uid": "299be13c-c564-4585-affe-5b63fd0dad72"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "authority": {
+    "authority_receipt_sha256": "sha256:28fa4100bdb7bce9ab4c63952fae91edb4482fc53e50a896414fedd81d1aed13",
+    "task_key": "cysec1-2-fira-gen_blackbox-f8d6badcc03f916a8d15b9d0__blackbox_ctf_v1",
+    "task_set_sha256": "sha256:5de88eada94119fd21ac715bb1956a745376d775c13ce7d5584936e70b3a003a",
+    "task_version_id": "0920e798-c7e7-4da6-9d5e-ebeba45ec05a",
+    "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "verifier_version_id": "9356b7ca-43b4-4926-a871-d9a95b41f6e5"
+  },
+  "environment": {
+    "data_id": "cultivacore",
+    "data_version": "v0.0.61",
+    "id": "cysec1-2-fira-gen",
+    "runtime_seed_content_sha256": "44fa2a84ce1195d69fa1a15683c9b523754d47236af0aea83be833d0091c36da",
+    "ttl_seconds": 32400,
+    "version": "v0.0.3",
+    "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4"
+  },
+  "observed_account": {
+    "team_id": "a1025f0b-ad67-49fc-a023-51800ab43e84",
+    "team_name": "fleet"
+  },
+  "observed_at": "2026-09-24T04:45:28.820180+00:00",
+  "prompts_responses_flags_rewards_or_traces_included": false,
+  "schema": "cyber_qwen38_miles96_task_authority_candidate_v1",
+  "sha256": "sha256:8724c3609b85dc178633d9dfed32b9c545d84127c299b88f3156a888eeec4957",
+  "task_public_binding": {
+    "cyber_contract": {
+      "evidence_schema": "1.0.0",
+      "submission_protocol": "2.0.0",
+      "verifier_contract": "3.0.0"
+    },
+    "env_variables_sha256": "sha256:6edc37d10cf3560d2e35a0d3635fe44517dc9cd3bfb7c09c98a1018279c2389c",
+    "key": "cysec1-2-fira-gen_blackbox-f8d6badcc03f916a8d15b9d0__blackbox_ctf_v1",
+    "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "prompt_sha256": "sha256:db6e5c9d7c5c9d5ef81db8dbb51d1821229e1c6338848f197c05666f2afd3e39",
+    "version_id": "0920e798-c7e7-4da6-9d5e-ebeba45ec05a"
+  },
+  "verifier": {
+    "function_name": "verify",
+    "id": "cd39a98c-e58f-4ab7-92da-50b099660aac",
+    "sha256": "a77c012521464da49eee1cfbd6441038bcf777c0145a63e0864bd46e3712803f",
+    "version": 1,
+    "version_id": "9356b7ca-43b4-4926-a871-d9a95b41f6e5"
+  }
+}
