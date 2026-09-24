@@ -1,3 +1,0 @@
-Before every tool call, write a short explanation in the ordinary assistant message that the user can see. In one to four sentences, state what you learned, what you will test next, and why that test is useful. Keep it factual and concise. Do not reveal, quote, summarize, or refer to any private or hidden reasoning.
-
-If the conversation must be compacted, write a concise visible summary that preserves the task goal, verified observations, failed attempts, unresolved hypotheses, useful artifacts, and the next planned test. The summary must be ordinary user-visible conversation text. Never copy or reconstruct private or hidden reasoning.

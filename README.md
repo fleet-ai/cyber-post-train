@@ -1,132 +1,46 @@
-# cyber-post-train
+# Cyber post-training
 
-Train open-weight models on authorized Fleet cyber tasks, then evaluate exact
-checkpoints with a pinned harness and verifier. Keep training code thin: SkyRL
-and Miles own the optimizers; Fleet owns the challenge environments and grading.
+This repository was reset on 2026-09-24. It now holds a small, dated research
+record and one reusable data-splitting module. The previous training launchers,
+evaluation campaigns, dashboard, generated job configurations, and local model
+copies were retired. This checkout does not submit jobs or serve models.
 
-## Start here
+## What remains
 
-```sh
-uv sync --locked --extra dev --extra train
-uv run --locked cyber-post-train doctor
-uv run --locked cyber-post-train --help
-```
+- [`training/splits.py`](training/splits.py) assigns all versions and attempts
+  from the same application/task family to the same train, development, or test
+  split. The assignment is deterministic. Callers must provide reviewed family
+  identity; the code cannot decide whether two different names describe the
+  same underlying challenge.
+- [`configs/data/`](configs/data/) contains dated, read-only task coverage,
+  qualification, split, and teacher-corpus records. Their counts are explained
+  in [`docs/RESEARCH_SNAPSHOT.md`](docs/RESEARCH_SNAPSHOT.md).
+- [`docs/evidence/qwen38-sft-checkpoint-inventory-20260924.json`](docs/evidence/qwen38-sft-checkpoint-inventory-20260924.json)
+  records checkpoint and model-export identities as observed on 2026-09-24.
+  It is a historical inventory, not a current availability check.
+- [`docs/RESET.md`](docs/RESET.md) explains what was removed and where the old
+  code can be found in Git history.
 
-No credentials or model downloads are needed for local tests. `doctor` checks
-installed modules only, not cluster access or model readiness.
-
-Read the [ready/WIP handoff](docs/CONSOLIDATION.md) before using a training or
-evaluation path. The cleanup goal is paused; publishing code does not authorize
-new cluster submissions or imply that every model/backend is qualified.
-
-## Training
-
-Use one editable YAML file for model/data manifests, hyperparameters, resources
-and W&B. The [training guide](docs/TRAINING.md) explains the fields and gates.
-
-```sh
-uv run cyber-post-train data my-data.yaml
-uv run cyber-post-train train my-sft.yaml --output output/my-sft
-# On a CPU worker with the pinned image and staged inputs mounted:
-uv run cyber-post-train preflight output/my-sft
-# Back on the submitting host, using the same prepared directory:
-uv run cyber-post-train preview output/my-sft
-uv run cyber-post-train submit output/my-sft
-uv run cyber-post-train status <returned-run-name>
-```
-
-Preparation and preflight do not request GPUs. Submission is explicit and
-create-once; never erase a submission journal to retry a timeout. Check current
-authorization and the total experiment-owned resource budget before submitting.
-If the live Jobs API preview omits only the required failed-job alert annotation,
-the reviewed SFT-only fallback is `direct-submit-sft`; follow the exact gate in
-the [training guide](docs/TRAINING.md). It still consumes the live API render,
-requires an explicit Kubernetes context, performs a server dry-run and issues
-one `kubectl create`. It is not an RL or generic manifest launcher.
-
-Current consolidation status: the Qwen SFT runtime comes from a successful
-full-model run; its new wrapper has completed a real one-step run with held-out
-loss, W&B and a native checkpoint. CPU export, native GPU checkpoint recovery,
-resumed optimization and the separate BF16 export's one-GPU synthetic reload
-are independently verified. This does not qualify a production serving engine.
-Full GLM5.3,
-Miles RL and SkyRL RL must pass their exact-model training/reward gates before
-being described as production-ready. GLM Flash is not full GLM5.3.
-
-`rl-data` prepares exact Fleet prompts for Miles or SkyRL. `rl` selects either
-native backend from YAML and uses the same preflight/preview/submit commands.
-Miles additionally needs `miles-convert` and `miles-seal` to prepare its native
-base checkpoint; SkyRL loads the pinned HF base directly. Preparation does not train;
-the [qualification status](docs/CONSOLIDATION.md) distinguishes tested plumbing
-from real reward/optimizer evidence.
-
-SkyRL has a separate development-only topology probe for checking the exact
-one-node, two-TP4-engine setup before any scientific canary is considered:
+Run the checks with Python 3; no packages need to be installed:
 
 ```sh
-uv run --locked cyber-post-train rl-topology-probe \
-  configs/qualification/qwen38-skyrl-topology-probe-dev-v2.json \
-  --output /shared/new-probe-plan
+python3 -m unittest discover -s tests
+python3 scripts/check_size.py
 ```
 
-The sealed probe has a 25-minute process bound and a 30-minute RayJob deadline.
-It receives only Fleet authentication through a named Kubernetes Secret, disables
-W&B, reads no task rows, performs no rollout or optimizer step, and cannot write a
-checkpoint. Its qualification transport is the exact embedded RayJob projected
-to one root RayJob: one eight-GPU head and its unchanged dormant zero-replica
-worker group. The prepared plan is permanently bound to the development
-Kubernetes context, namespace, project, queue, model mount, image and runtime
-user. Server-validate the exact create-once object without creating it:
+The repository limit is fewer than 10,000 physical lines across **all tracked
+text files**, including records, tests, and documentation. The check runs on
+every push and pull request.
 
-```sh
-uv run --locked cyber-post-train rl-topology-probe-rayjob-preview \
-  /shared/new-probe-plan
-```
+## Working from this starting point
 
-Submission remains blocked until the exact-image CPU preflight and an independent
-30-minute cleanup/release observer are recorded. See the
-[probe runbook](docs/QWEN38_SKYRL_TOPOLOGY_PROBE_DEV_V1.md).
+Treat the retained JSON files as dated evidence. Confirm current task quality,
+model availability, and evaluation validity from their original systems before
+using them in a new study. A new training or evaluation tool should start with
+one clear use case, a small test, and the exact job/evaluation record needed to
+interpret its result. Do not copy old launchers forward just because they exist
+in Git history.
 
-## Evaluation
-
-```sh
-uv run cyber-post-train eval prepare my-eval.yaml --output /shared/my-eval
-# On the authorized Docker worker with the exact images staged:
-uv run cyber-post-train eval preflight /shared/my-eval
-uv run cyber-post-train eval init /shared/my-eval
-uv run cyber-post-train eval run /shared/my-eval shared worker-001 --limit 4
-uv run cyber-post-train eval status
-```
-
-`ROLLOUT_DATABASE_URL` and `FLEET_API_KEY` come from your secret manager. Init
-requires a fresh dedicated PostgreSQL database; run only claims its pending rows.
-See the [Fleet guide](evals/fleet/README.md) for configuration and execution scope.
-
-- [Fleet](evals/fleet/README.md): exact task versions, OpenCode, private results,
-  and PostgreSQL coordination for distributed workers.
-- [WebExploitBench](evals/webexploitbench/README.md) and
-  [ExploitGym](evals/exploitgym/README.md): separate, evaluation-only adapters.
-
-The historical 100-task pass@4 campaign remains on its frozen worker revision.
-Do not copy its run names, reinitialize its database or replay accepted attempts
-to start a new experiment. Shared and dedicated serving remain explicit blocks.
-
-## Rules that matter
-
-- Never train, tune prompts/rewards or select checkpoints on external benchmarks.
-- Hold out complete task families across versions, not random windows. State
-  explicitly whether applications are shared or held out.
-- Bind model, tokenizer, dataset, harness, tools, verifier, runtime and budgets.
-- Track held-out loss, supervised tokens and recoverable checkpoints in W&B;
-  do not upload traces, task text or credentials.
-- Use the Jobs API for GPU batch work and the inference control plane for serving.
-  Release broken or idle experiment-owned capacity; never alter peer workloads.
-- A running process is not a valid result. Require optimizer/checkpoint evidence
-  for training and authoritative grading plus cleanup for evaluation.
-
-See [AGENTS.md](AGENTS.md), [CONTRIBUTING.md](CONTRIBUTING.md),
-[scientific controls](docs/SCIENTIFIC_PROTOCOL.md),
-[cluster policy and alerts](docs/CLUSTER_ALERTS_AND_INFERENCE_SERVING.md),
-[operational lessons](docs/OPERATIONAL_LESSONS.md), and
-[consolidation status](docs/CONSOLIDATION.md). Dated evidence is historical, not
-live state. Raw outputs, datasets, checkpoints and secrets belong outside Git.
+Never commit credentials, raw task prompts, private traces, flags, answers,
+model weights, or generated runtime folders. Store large artifacts in their
+designated external stores and keep only verified references here.

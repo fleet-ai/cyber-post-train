@@ -1,1 +1,1 @@
-"""Fleet cyber data and training tools; import the specific module you need."""
+"""Small data helpers retained from the earlier research checkout."""
