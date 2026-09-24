@@ -89,6 +89,7 @@ NAMESPACE = "fleet-train-jobs"
 ZERO_RUN_ID = "00000000-0000-0000-0000-000000000000"
 SFT_SCHEMAS = {"cyber_sft_runtime_v2", "cyber_sft_runtime_dense_v1"}
 SFT_SECRET = "wandb-api"
+QWEN38_262K_RELEASE_VARIANT = "qwen38_sft_262k_4node_v1"
 DIRECT_JOURNAL = "DIRECT_SUBMISSION.jsonl"
 CPU_CHECKPOINT_OPERATION_ANNOTATION = "cyber-post-train.fleet.ai/cpu-checkpoint-operation"
 CPU_CHECKPOINT_OPERATIONS = {"export", "seal", "verify"}
@@ -2067,6 +2068,7 @@ def _direct_submit_once(
     run_id: str | None = None,
     output_absence_gate: Callable[[], dict] | None = None,
     require_readback: bool = False,
+    qwen38_262k_release_guard: Any | None = None,
 ) -> dict:
     """Preview, prove, journal and issue exactly one direct Kubernetes create."""
     if journal.exists() or journal.is_symlink():
@@ -2096,6 +2098,28 @@ def _direct_submit_once(
         [kubectl.list("rayjobs.ray.io"), kubectl.list("jobs.batch")], request, proof
     )
     output_absence_proof = output_absence_gate() if output_absence_gate is not None else None
+    release_intent_evidence = {}
+    if qwen38_262k_release_guard is not None:
+        qwen38_262k_release_guard.arm(plan, request, manifest)
+        release_intent_evidence = qwen38_262k_release_guard.create_intent_evidence()
+        if (
+            set(release_intent_evidence)
+            != {
+                "release_supervisor_pid",
+                "release_supervisor_receipt_sha256",
+                "release_supervision_armed_sha256",
+            }
+            or type(release_intent_evidence["release_supervisor_pid"]) is not int
+            or release_intent_evidence["release_supervisor_pid"] < 1
+            or any(
+                re.fullmatch(r"sha256:[a-f0-9]{64}", release_intent_evidence[key]) is None
+                for key in (
+                    "release_supervisor_receipt_sha256",
+                    "release_supervision_armed_sha256",
+                )
+            )
+        ):
+            raise JobsError("exact release-supervision intent evidence is invalid")
     _write_intent(
         journal,
         {
@@ -2121,19 +2145,66 @@ def _direct_submit_once(
                 if output_absence_proof is not None
                 else {}
             ),
+            **release_intent_evidence,
         },
     )
 
+    if qwen38_262k_release_guard is not None:
+        qwen38_262k_release_guard.prepare_immediately_before_post()
+
     # Never wrap this call in retry logic.  Any error after the durable intent
     # is ambiguous until the exact name/run ID is reconciled read-only.
-    created = kubectl.create_once(manifest)
-    _assert_created_identity(
-        created,
-        proof,
-        request,
-        manifest,
-        require_uid=True,
-    )
+    reconciled_ambiguous_create = False
+    try:
+        created = kubectl.create_once(manifest)
+    except Exception:
+        if qwen38_262k_release_guard is None:
+            raise
+        created = qwen38_262k_release_guard.reconcile_ambiguous_create()
+        if created is None:
+            raise
+        reconciled_ambiguous_create = True
+    else:
+        if qwen38_262k_release_guard is not None:
+            # The API response is not the ownership authority. Re-read only
+            # the one journaled exact name so validation, binding, and any
+            # cleanup branch all operate on the persisted root.
+            persisted = qwen38_262k_release_guard.reconcile_ambiguous_create()
+            if persisted is None:
+                raise JobsError("created exact-candidate root was not readable by exact name")
+            created = persisted
+    try:
+        _assert_created_identity(
+            created,
+            proof,
+            request,
+            manifest,
+            require_uid=True,
+        )
+    except JobsError as validation_error:
+        if qwen38_262k_release_guard is None:
+            raise
+        try:
+            qwen38_262k_release_guard.cleanup_rejected_created(created)
+        except Exception as cleanup_error:
+            raise JobsError(
+                "created exact-candidate root was rejected and cleanup is uncertain"
+            ) from cleanup_error
+        raise JobsError(
+            "created exact-candidate root was rejected and exact UID cleanup was requested"
+        ) from validation_error
+    release_response_evidence = {}
+    if qwen38_262k_release_guard is not None:
+        release_response_evidence = qwen38_262k_release_guard.accept_created(created)
+        if set(release_response_evidence) != {
+            "release_binding_sha256",
+            "release_authorization_sha256",
+            "release_takeover_sha256",
+        } or any(
+            re.fullmatch(r"sha256:[a-f0-9]{64}", value) is None
+            for value in release_response_evidence.values()
+        ):
+            raise JobsError("exact release-supervision response evidence is invalid")
     if require_readback:
         readback = kubectl.get_rayjob(proof["name"])
         _assert_created_identity(
@@ -2154,6 +2225,8 @@ def _direct_submit_once(
         "manifest_sha256": proof["manifest_sha256"],
         "submitted": True,
         "transport": "direct-kubectl-create",
+        **({"create_response_reconciled": True} if reconciled_ambiguous_create else {}),
+        **release_response_evidence,
     }
     _append_journal(journal, {"state": "KUBECTL_CREATE_RESPONSE", **result})
     return result
@@ -2169,6 +2242,7 @@ def direct_submit_sft_once(
     run_id: str | None = None,
     jobs_root: Path = SFS_JOBS_ROOT,
     output_absence_receipt: dict | None = None,
+    qwen38_262k_release_guard: Any | None = None,
 ) -> dict:
     """Create one source-bound SFT RayJob through the maintained fallback."""
     _assert_sft_contract(plan, request)
@@ -2178,6 +2252,18 @@ def direct_submit_sft_once(
 
     if compiler_for_plan(plan).job_request(plan) != request:
         raise JobsError("saved SFT request differs from the current source-bound renderer")
+    exact_release_candidate = plan.get("runtime_variant") == QWEN38_262K_RELEASE_VARIANT
+    if exact_release_candidate:
+        from training.qwen38_262k_release_kubernetes import ExactCandidateDirectCreateGuard
+
+        if type(qwen38_262k_release_guard) is not ExactCandidateDirectCreateGuard:
+            raise JobsError("exact 262K four-node SFT requires its dedicated release supervisor")
+        if output_absence_receipt is not None:
+            raise JobsError(
+                "exact 262K release supervision cannot use a remote output-absence receipt"
+            )
+    if not exact_release_candidate and qwen38_262k_release_guard is not None:
+        raise JobsError("the dedicated 262K release supervisor cannot guard another SFT plan")
 
     def output_absence_gate() -> dict:
         try:
@@ -2215,6 +2301,7 @@ def direct_submit_sft_once(
         run_id=run_id,
         output_absence_gate=output_absence_gate,
         require_readback=True,
+        qwen38_262k_release_guard=qwen38_262k_release_guard,
     )
 
 

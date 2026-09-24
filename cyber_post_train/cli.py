@@ -1361,7 +1361,12 @@ def direct_submit_sft(
     It then executes exactly one ``kubectl create`` and never retries, applies
     or patches. Prefer normal ``submit`` whenever its preview is qualified.
     """
-    from .direct_submit import DIRECT_JOURNAL, Kubectl, direct_submit_sft_once
+    from .direct_submit import (
+        DIRECT_JOURNAL,
+        QWEN38_262K_RELEASE_VARIANT,
+        Kubectl,
+        direct_submit_sft_once,
+    )
 
     try:
         plan, request = _prepared(directory)
@@ -1369,6 +1374,18 @@ def direct_submit_sft(
         _external_action_gate(plan, "submit")
         _require_preflight(directory, plan, request)
         output_receipt = _read(output_absence_receipt) if output_absence_receipt else None
+        release_guard = None
+        if plan.get("runtime_variant") == QWEN38_262K_RELEASE_VARIANT:
+            from training.qwen38_262k_release_kubernetes import (
+                CONTEXT as RELEASE_CONTEXT,
+            )
+            from training.qwen38_262k_release_kubernetes import (
+                ExactCandidateDirectCreateGuard,
+            )
+
+            if context != RELEASE_CONTEXT:
+                raise ValueError("exact 262K release supervisor requires its bound context")
+            release_guard = ExactCandidateDirectCreateGuard(directory / "RELEASE_SUPERVISION")
         with _client_for_plan(plan) as client:
             result = direct_submit_sft_once(
                 plan=plan,
@@ -1377,6 +1394,7 @@ def direct_submit_sft(
                 kubectl=Kubectl(context),
                 journal=directory / DIRECT_JOURNAL,
                 output_absence_receipt=output_receipt,
+                qwen38_262k_release_guard=release_guard,
             )
         _print(result)
     except Exception as exc:
