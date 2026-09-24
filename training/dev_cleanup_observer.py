@@ -1815,9 +1815,7 @@ class Observer:
             and labels.get("kueue.x-k8s.io/priority-class") == "q1"
         )
         workloads = (
-            self._list(
-                "workload", "--selector", f"kueue.x-k8s.io/job-uid={self.snapshot.uid}"
-            )
+            self._list("workload", "--selector", f"kueue.x-k8s.io/job-uid={self.snapshot.uid}")
             if queued
             else []
         )

@@ -1954,10 +1954,7 @@ def test_jobs_api_exact_uid_observer_waits_for_root_and_children_after_delete(tm
                 self.deleted = False
                 self.delete_accepted = True
                 return result
-            if (
-                self.delete_accepted
-                and args[:3] == ["get", "rayjob", self.binding["rayjob_name"]]
-            ):
+            if self.delete_accepted and args[:3] == ["get", "rayjob", self.binding["rayjob_name"]]:
                 self.post_delete_root_reads += 1
                 value = self._root() if self.post_delete_root_reads <= 1 else None
                 return NS(returncode=0, stdout=json.dumps(value) if value else "", stderr="")
@@ -1975,9 +1972,7 @@ def test_jobs_api_exact_uid_observer_waits_for_root_and_children_after_delete(tm
             return super().__call__(command, **kwargs)
 
     cluster = LingeringDeleteCluster(binding, auto_release=False)
-    result = _jobs_api_exact_observer(
-        tmp_path, cluster, release_contract_path=contract
-    ).run()
+    result = _jobs_api_exact_observer(tmp_path, cluster, release_contract_path=contract).run()
     assert result["status"] == "released_after_terminal"
     assert result["release_confirmed"] is True
     assert result["cleanup_requested"] is True
@@ -2002,9 +1997,7 @@ def test_jobs_api_exact_uid_observer_never_retries_uncertain_delete(tmp_path) ->
             return super().__call__(command, **kwargs)
 
     cluster = UncertainDeleteCluster(binding, auto_release=False)
-    result = _jobs_api_exact_observer(
-        tmp_path, cluster, release_contract_path=contract
-    ).run()
+    result = _jobs_api_exact_observer(tmp_path, cluster, release_contract_path=contract).run()
     assert result["release_confirmed"] is True
     assert result["cleanup_status"] == "exact_uid_delete_outcome_uncertain_not_retried"
     assert cluster.delete_attempts == 1
