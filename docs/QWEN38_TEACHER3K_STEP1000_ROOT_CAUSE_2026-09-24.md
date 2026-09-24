@@ -21,16 +21,21 @@ loss alongside worse task performance:
    examples (80.64%).
 2. **The training and evaluation tool interfaces differed.** Training targets
    used bare `bash` and `submit_report` names and were rendered without the
-   formal tool catalog. OpenCode registered those tools through its `fleet`
-   MCP client and supplied the full schemas. The precise model-facing name
-   versus stored normalized name is under independent reconciliation; the
-   unambiguous behavioral fact is that the trained checkpoint never attempted
-   the required report-submission action.
+   formal tool catalog. The pinned OpenCode evaluator exposed those same
+   underlying MCP tools to the model as `fleet_bash` and
+   `fleet_submit_report`. The evaluator preserved those exact model-generated
+   names in storage; it did not add the `fleet_` prefix during ingestion.
 
 These are real training-contract defects, not merely speculative differences.
 They were measured in the exact corpus consumed by the checkpoint and in its
-actual held-out evaluation traces. Other recipe choices likely made the
+actual development-evaluation traces. Other recipe choices likely made the
 regression worse, but they are secondary to these defects.
+
+The old development comparison is useful for this structural diagnosis, but it
+is not a valid capability result. It incorrectly treated output-limit and
+nonzero-process attempts as ordinary failures, and four of its 17 development
+task families were exposed in training through aliases. No pass@4 value,
+paired effect, or confidence interval can be claimed from those attempts.
 
 ## Exact artifact under investigation
 
@@ -51,24 +56,29 @@ regression worse, but they are secondary to these defects.
 The complete run later reached all 1,837 planned optimizer steps. Step 1000 was
 an intermediate checkpoint, not the one-epoch final model.
 
-## What the matched evaluation showed
+## What the attempted evaluation showed
 
-The Fleet development comparison used the same 17 task
-versions, four seeds per task, OpenCode 1.18.27, sampling settings, context and
-time limits, environment bindings, verifier bindings, and serving settings.
+The Fleet development attempt used the same 17 task versions, four seeds per
+task, OpenCode 1.18.27, sampling settings, context and time limits, environment
+bindings, verifier bindings, and serving settings.
 
-| Model | Raw observed task success | Successful attempts |
-|---|---:|---:|
-| Exact base | 7 / 17 tasks | 15 / 68 attempts |
-| Teacher3K step 1000 | 0 / 17 tasks | 0 / 68 attempts |
+| Model | Planned attempts | Normally completed | Output-limit holds | Process errors |
+|---|---:|---:|---:|---:|
+| Exact base | 68 | 52 | 15 | 1 |
+| Teacher3K step 1000 | 68 | 18 | 49 | 1 |
 
-Those raw denominators must not be published as a scientifically valid pass@4
-estimate. The project protocol requires output-limit and process-error attempts
-to be held rather than scored as capability failures. The candidate had 49
-output-limit and one process-error attempt; base had 15 and one. All 18 normally
-completed candidate attempts nevertheless scored zero and none attempted the
-report tool, so a serious regression signal remains, but missing valid attempts
-must be reacquired before calculating pass@4 or a confidence interval.
+Only exit zero plus a normal OpenCode completion is a valid model outcome.
+Output-limit and process-error attempts must be held outside the denominator,
+not converted to zero. The two arms therefore contain only 52 and 18 valid
+attempts, with different missing cells. The earlier 7/17 versus 0/17 statement,
+its 41.18-point difference, and its bootstrap interval are superseded and must
+not be cited as a valid pass@4 or capability comparison. Missing paired cells
+must be reacquired under a score-blind, predeclared replacement policy before
+any effect estimate is calculated.
+
+All 18 normally completed candidate attempts scored zero and none attempted the
+report tool. That remains a useful diagnostic observation about these retained
+traces, not a complete task-level capability estimate.
 
 The candidate also behaved differently from base:
 
@@ -76,9 +86,15 @@ The candidate also behaved differently from base:
 - 18/68 ended normally without solving;
 - 1/68 had a process error;
 - candidate tool-call volume was much lower than base;
-- one structural census represented 32 calls as bare `bash` across 24 attempts,
-  but model-facing versus normalized stored naming is being reconciled;
+- the candidate generated 32 invalid bare-`bash` call attempts across 24
+  attempts; OpenCode rejected every one before MCP execution;
 - candidate emitted zero report-submission calls.
+
+The comparison also was not training-lineage held out. A later exact-lineage
+audit established that four of these 17 development families occurred in the
+training corpus through composite or hinted aliases. This is separate from the
+incomplete-attempt defect above and independently prevents a held-out capability
+claim.
 
 ## Primary defect 1: malformed, anchorless windows
 
@@ -116,32 +132,57 @@ actions.
 
 ## Primary defect 2: tool-interface mismatch
 
-The historical training materializer rendered with `tools=[]` and normalized
-targets to the bare tool names `bash` and `submit_report`.
+The historical training materializer at preparation commit
+`daa86d54e38bcd347c1e79e9dd7a0c081d47e63f` rendered with `tools=[]`, admitted
+only the bare tool names `bash` and `submit_report`, and retained those names in
+assistant targets. Its exact `training/dense.py` SHA-256 is
+`712038f1abf4f461cf471afc50f7fbbfe90c9d2d7b9e0be1a81583378c933012`.
 
-The pinned OpenCode evaluator registers an MCP server named `fleet`. OpenCode
-therefore exposes the model-facing tools as `fleet_bash` and
-`fleet_submit_report`, with their full schemas. Evaluation also uses
-OpenCode's coding-agent system prompt, reasoning mode, long context and native
-compaction. Training used heterogeneous teacher prompts, no formal tool catalog,
-visible actions only, 32K windows and raw truncation.
+The pinned evaluator's MCP server advertises the underlying executor names
+`bash` and `submit_report`. OpenCode registers that server under the client name
+`fleet`, constructs each model-facing name as `<client>_<tool>`, and sends
+`fleet_bash` and `fleet_submit_report` with their full schemas to the provider.
+When a valid prefixed call executes, OpenCode maps it back to the underlying
+bare MCP name. Bare `bash` and bare `submit_report` are not valid model-facing
+names in this harness. Evaluation also uses OpenCode's coding-agent system
+prompt, reasoning mode, long context and native compaction. Training used
+heterogeneous teacher prompts, no formal tool catalog, visible actions only,
+32K windows and raw truncation.
 
-The interface difference is observable in source code and tokenization. The
-table below records the current aggregate trace representation; the `bash`
-name row must not be treated as causal until model-facing versus normalized
-stored names are reconciled:
+This path is fixed by the pinned OpenCode 1.18.27 source. Its MCP catalog builds
+the prefixed key, the session request passes that exact key to the provider, and
+its only repair for an unknown tool is lowercasing before routing it to an
+`invalid` handler. Lowercasing cannot map `bash` to `fleet_bash`. The evaluator's
+normalizer copies raw OpenCode `part.tool` into stored `function.name` without
+renaming it.
 
-| Aggregate | Base | Step 1000 |
+The evaluator pins OpenCode release asset SHA-256
+`4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702`;
+the v1.18.27 tag resolves to source commit
+`4b7e19e315cca414121ba1d61523fef74bb3ae8b`. The fixed request proxy retained
+request byte counts and status, not request bodies or body hashes, so the
+provider-facing catalog is established by this exact pinned construction and
+the matching raw OpenCode events rather than by a retained provider payload.
+
+All 136 retained raw OpenCode traces were read from their exact bound paths and
+verified against their recorded file SHA-256. The raw and stored aggregate names
+agree exactly:
+
+| Raw OpenCode tool event | Base | Step 1000 |
 |---|---:|---:|
-| `fleet_bash` calls | 10,606 | 5,023 |
-| bare `bash` calls | 0 | 32 |
-| attempts with a bare `bash` call | 0 / 68 | 24 / 68 |
-| `fleet_submit_report` calls | 20 | 0 |
+| valid `fleet_bash`, completed | 9,929 | 4,929 |
+| valid `fleet_bash`, tool returned an error | 677 | 94 |
+| invalid bare `bash`, rejected before execution | 0 | 32 |
+| attempts with an invalid bare `bash` event | 0 / 68 | 24 / 68 |
+| valid `fleet_submit_report`, completed | 20 | 0 |
 
-The base and candidate saw the same evaluation interface. Zero report actions
-from the candidate is mechanically important because Fleet grading requires a
-submission, but the causal contribution of the tool-name prefix requires the
-pending name-path reconciliation.
+The base and candidate saw the same evaluation interface. The candidate's 32
+bare `bash` values were model-generated invalid call attempts, not executed
+shell actions. They match the names used in training and provide direct evidence
+of the interface mismatch. No retained attempt generated bare `submit_report`,
+but the same deterministic mapping makes it invalid; the valid model-facing
+name is `fleet_submit_report`. Zero report actions from the candidate is
+mechanically important because Fleet grading requires a submission.
 
 ## Additional material problems
 
@@ -179,14 +220,23 @@ warmup and no held-out capability selection. Those choices may have amplified
 forgetting. They cannot, however, explain away the proven malformed-context and
 tool-interface defects.
 
-### Held-out family isolation is not yet fully proven
+### Five claimed held-out families were exposed through aliases
 
-The historical builder excluded 25 exact task-key strings. It did not enforce a
-reviewed family identifier across aliases and hinted variants. Exact held-out
-keys do not occur in training, but several held-out lineage slugs recur in
-other training keys. Existing dev/final results remain useful descriptions,
-but a new “scientifically clean” confirmation set must first map every alias and
-version to its task family.
+The historical builder excluded 25 exact task-key strings, but exact-string
+exclusion was scientifically insufficient. A complete read-only lineage audit
+resolved all 496 training keys and 1,176 exact training versions to their
+reviewed vulnerability lineages. It found zero exact task-key or version
+overlap, yet five of the 25 claimed held-out families occurred through six
+composite or hinted training aliases: four development families and one final
+family.
+
+The historical manifest claim
+`held_out_task_families_excluded_across_all_versions: 25` is therefore false
+for the bound source selection. The checkpoint and immutable manifests remain
+valid provenance, but that field must not be used as leakage evidence. The
+largest proven training-lineage-clean subset is 20 families: 13 development and
+7 final. “Lineage-clean” here means absent from this exact teacher3k corpus, not
+globally untouched.
 
 ## What was ruled out
 
@@ -206,8 +256,9 @@ The following explanations have low likelihood given the evidence:
 - **Missing tensors or export dtype corruption.** The export contains the exact
   1,199-tensor BF16 layout: 1,184 trained tensors plus 15 exact-base MTP tensors.
   CPU and GPU reloads produced finite logits.
-- **Base/candidate evaluation drift.** The retained comparison used matching
-  tasks, seeds, harness, tools, budgets and non-weight serving settings.
+- **Base/candidate treatment drift.** The attempted comparison used matching
+  tasks, seeds, harness, tools, budgets and non-weight serving settings. This
+  does not repair the incomplete-attempt or training-lineage defects.
 - **Final-answer-only learning.** Submit/report output was a small fraction of
   the objective.
 
@@ -225,8 +276,8 @@ corpus generation must:
 5. prove every row begins with the pinned chat-template system anchor;
 6. require success evidence within the retained fragment, or label the fragment
    independently rather than inheriting full-session success;
-7. exclude held-out task families across every alias, hint, composite and
-   version before materialization;
+7. exclude held-out task families by reviewed vulnerability lineage across
+   every alias, hint, composite and version before materialization;
 8. bind the parent builder revision, selection roster and source cutoffs;
 9. publish per-task/session/teacher concentration and checkpoint-exposure
    statistics;
@@ -241,8 +292,9 @@ The smallest decisive confirmation is:
 2. run a bounded corrected SFT canary, preferably with a lower LR and warmup;
 3. demonstrate finite loss/gradients, changed weights and a reloadable
    checkpoint;
-4. run a matched pass@4 base-versus-corrected-checkpoint comparison on an exact
-   family-clean Fleet set;
+4. run a matched pass@4 base-versus-corrected-checkpoint comparison on the exact
+   20-family lineage-clean Fleet set, reacquiring every output-limit or process
+   failure as a paired replacement rather than scoring it as zero;
 5. separately compare earlier and final checkpoints from the flawed run to
    localize when capability declined; and
 6. ablate tool-contract repair versus context repair if attribution between the
