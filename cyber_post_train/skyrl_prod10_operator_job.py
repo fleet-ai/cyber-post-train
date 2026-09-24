@@ -8,7 +8,9 @@ import hashlib
 import io
 import json
 import re
+import subprocess
 import tarfile
+import threading
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,6 +39,8 @@ CONTROLS_SUBPATH = "jobs/chris-q38-study-corpora-v1/launch-controls"
 CONTROLS_PATH = "/mnt/sfs/" + CONTROLS_SUBPATH
 LAUNCH_ACTIVE_DEADLINE_SECONDS = direct.MAXIMUM_SECONDS + 3600
 _ROOT = Path(__file__).resolve().parents[1]
+_FAST3_RUN_PATH = _ROOT / "configs/qualification/qwen38-rl-reward-canary-prod-v11-fast3.json"
+_FAST3_COMPILE_LOCK = threading.Lock()
 _SOURCE_DIRS = ("training", "cyber_post_train")
 _SOURCE_FILES = (
     "scripts/probe_qwen38_prod8_terminal.py",
@@ -152,15 +156,31 @@ def source_archive() -> tuple[bytes, str]:
     return value, "sha256:" + hashlib.sha256(value).hexdigest()
 
 
+def _launch_gate(
+    identity: historical.RailIdentity, value: object, *, phase: str
+) -> dict[str, Any] | None:
+    if identity == operator.FAST3_IDENTITY:
+        return operator.fast3_launch_gate(value)
+    if value is not None:
+        raise ValueError(f"prod10 {phase} received an unexpected Fast3 launch gate")
+    return None
+
+
 def stage_packet(
     *,
     identity: historical.RailIdentity,
     stage: dict[str, Any],
+    launch_gate: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    gate = _launch_gate(identity, launch_gate, phase="stage")
     checked, bound = training._stage_identity(stage)
     if bound != identity:
         raise ValueError("prod10 stage operator identity changed")
     names = operator.operator_names(identity)
+    if identity == operator.FAST3_IDENTITY:
+        operator.fast3_public_manifest(
+            checked["predecessor_manifest"], expected_name=identity.predecessor_run_name
+        )
     return _seal(
         {
             "schema": operator.PACKET_SCHEMA,
@@ -169,12 +189,104 @@ def stage_packet(
             "identity": identity.sealed_mapping(),
             "stage": checked,
             **(
-                {"fresh_identity": True}
+                {"fresh_identity": True, "launch_gate": gate}
                 if identity == operator.FAST3_IDENTITY
                 else {"precreate_recovery": operator.stage_recovery_binding()}
             ),
         }
     )
+
+
+def fast3_successor_manifest(
+    stage: dict[str, Any],
+    stage_launch_result: dict[str, Any],
+    *,
+    launch_gate: dict[str, Any],
+) -> dict[str, Any]:
+    """Recover only the public rebound manifest from a released Fast3 stage."""
+    operator.fast3_launch_gate(launch_gate)
+    checked_stage, identity = training._stage_identity(stage)
+    if identity != operator.FAST3_IDENTITY:
+        raise ValueError("Fast3 successor manifest requires the Fast3 stage")
+    launch = direct._direct_stage_launch(
+        stage_launch_result,
+        checked_stage,
+        identity=identity,
+        operator_name=operator.FAST3_OPERATOR_NAMES["stage"],
+        fresh=False,
+    )
+    termination = direct._validate_seal(
+        launch.get("observer", {}).get("receipt"), operator.TERMINATION_SCHEMA
+    )
+    try:
+        successor = operator.fast3_public_manifest(
+            termination.get("successor_manifest"), expected_name=identity.run_name
+        )
+    except ValueError as exc:
+        raise ValueError("Fast3 surfaced stage manifest changed") from exc
+    if (
+        termination.get("status") != "passed"
+        or termination.get("phase") != "stage"
+        or termination.get("gpus") != 0
+        or not isinstance(termination.get("result_sha256"), str)
+        or termination.get("successor_manifest_sha256") != successor.get("sha256")
+    ):
+        raise ValueError("Fast3 surfaced stage manifest changed")
+    return successor
+
+
+def fast3_plan_from_successor(
+    successor_manifest: dict[str, Any], *, launch_gate: dict[str, Any]
+) -> dict[str, Any]:
+    """Compile the exact Fast3 profile from public staged metadata off SFS."""
+    operator.fast3_launch_gate(launch_gate)
+    successor = operator.fast3_public_manifest(
+        successor_manifest, expected_name=operator.FAST3_IDENTITY.run_name
+    )
+    from training import sft, skyrl_fast3_training
+
+    selected = json.loads(_FAST3_RUN_PATH.read_bytes())
+    manifest_path = Path(selected["data"]["manifest"])
+    original = sft.read_mapping
+
+    def read(path: Path) -> dict[str, Any]:
+        if Path(path) == manifest_path:
+            return deepcopy(successor)
+        return original(path)
+
+    with _FAST3_COMPILE_LOCK:
+        if sft.read_mapping is not original:
+            raise ValueError("Fast3 compiler input reader is already overridden")
+        sft.read_mapping = read
+        try:
+            plan = skyrl_fast3_training.compile_rl(selected, relative_to=_FAST3_RUN_PATH.parent)
+        finally:
+            sft.read_mapping = original
+    if plan.get("data") != successor:
+        raise ValueError("Fast3 compiled plan differs from the surfaced stage manifest")
+    return plan
+
+
+def fast3_preflight_development_proofs(
+    plan: dict[str, Any],
+    *,
+    launch_gate: dict[str, Any],
+    runner: Any = subprocess.run,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Gate the two caller-side Kubernetes reads needed by Fast3 preflight."""
+    operator.fast3_launch_gate(launch_gate)
+    launch_direct.plan_identity(plan, operator.FAST3_IDENTITY)
+    expected = launch_direct.preflight_job_manifest(plan, identity=operator.FAST3_IDENTITY)
+    rendered = direct.server_dry_run(expected, context=direct.DEV_CONTEXT, runner=runner)
+    preview = direct.validate_cpu_preview(
+        expected, rendered, context=direct.DEV_CONTEXT, purpose="preflight"
+    )
+    duplicate = direct.cpu_duplicate_proof(
+        operator.FAST3_IDENTITY.preflight_name,
+        context=direct.DEV_CONTEXT,
+        runner=runner,
+    )
+    return preview, duplicate
 
 
 def manifest_packet(
@@ -183,7 +295,9 @@ def manifest_packet(
     stage: dict[str, Any],
     stage_launch_result: dict[str, Any],
     plan: dict[str, Any] | None = None,
+    launch_gate: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    gate = _launch_gate(identity, launch_gate, phase="manifest")
     checked_stage, stage_identity = training._stage_identity(stage)
     if stage_identity != identity:
         raise ValueError("prod10 manifest stage identity changed")
@@ -203,6 +317,10 @@ def manifest_packet(
             launch_direct.training_operation_root(plan, identity=identity)
         except (AttributeError, JobsError, TypeError, ValueError) as exc:
             raise ValueError("Fast3 manifest requires the full training plan") from exc
+        if plan.get("data") != fast3_successor_manifest(
+            checked_stage, checked_launch, launch_gate=gate
+        ):
+            raise ValueError("Fast3 manifest plan differs from the surfaced stage manifest")
     return _seal(
         {
             "schema": operator.PACKET_SCHEMA,
@@ -212,7 +330,7 @@ def manifest_packet(
             "stage": checked_stage,
             "stage_launch_result": checked_launch,
             **(
-                {"fresh_identity": True, "plan": plan}
+                {"fresh_identity": True, "launch_gate": gate, "plan": plan}
                 if identity == operator.FAST3_IDENTITY
                 else {"preflight_v1_failure": operator.preflight_v1_failure_binding()}
             ),
@@ -230,7 +348,9 @@ def preflight_packet(
     manifest_launch_result: dict[str, Any],
     dev_preview: dict[str, Any],
     dev_duplicate_proof: dict[str, Any],
+    launch_gate: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    gate = _launch_gate(identity, launch_gate, phase="preflight")
     names = operator.operator_names(identity)
     launch_direct.plan_identity(plan, identity)
     if launch_direct.job_request(plan, identity=identity) != request:
@@ -304,6 +424,7 @@ def preflight_packet(
             "manifest_sha256": "sha256:" + digest(expected),
             "dev_preview": dev_preview,
             "dev_duplicate_proof": duplicate,
+            **({"launch_gate": gate} if identity == operator.FAST3_IDENTITY else {}),
         }
     )
 
@@ -322,7 +443,9 @@ def launch_packet(
     capacity_census: dict[str, Any],
     predecessor_evidence: dict[str, Any] | None = None,
     fresh_duplicate: bool = True,
+    launch_gate: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    gate = _launch_gate(identity, launch_gate, phase="launch")
     names = operator.operator_names(identity)
     launch_direct.plan_identity(plan, identity)
     if launch_direct.job_request(plan, identity=identity) != request:
@@ -372,6 +495,7 @@ def launch_packet(
             **(
                 {
                     "fresh_identity": True,
+                    "launch_gate": gate,
                     "predecessor_evidence": fast3_evidence,
                 }
                 if identity == operator.FAST3_IDENTITY
@@ -402,6 +526,8 @@ def inspect_packet(
     plan: dict[str, Any],
     preflight_launch_result: dict[str, Any],
 ) -> dict[str, Any]:
+    if identity == operator.FAST3_IDENTITY:
+        raise ValueError("Fast3 inspect phase is unsupported")
     launch_direct.plan_identity(plan, identity)
     checked_launch = launch_direct._preflight_launch(
         preflight_launch_result,
@@ -459,6 +585,7 @@ def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
         expected = stage_packet(
             identity=identity,
             stage=checked["stage"],
+            launch_gate=checked.get("launch_gate"),
         )
     elif checked["phase"] == "manifest":
         expected = manifest_packet(
@@ -466,6 +593,7 @@ def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
             stage=checked["stage"],
             stage_launch_result=checked["stage_launch_result"],
             plan=checked.get("plan"),
+            launch_gate=checked.get("launch_gate"),
         )
     elif checked["phase"] == "preflight":
         expected = preflight_packet(
@@ -477,6 +605,7 @@ def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
             manifest_launch_result=checked["manifest_launch_result"],
             dev_preview=checked["dev_preview"],
             dev_duplicate_proof=checked["dev_duplicate_proof"],
+            launch_gate=checked.get("launch_gate"),
         )
     elif checked["phase"] == "inspect":
         expected = inspect_packet(
@@ -502,6 +631,7 @@ def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
             capacity_census=checked["capacity_census"],
             predecessor_evidence=checked.get("predecessor_evidence"),
             fresh_duplicate=False,
+            launch_gate=checked.get("launch_gate"),
         )
     if checked != expected:
         raise ValueError("prod10 operator packet differs from current exact renderer")

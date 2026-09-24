@@ -31,6 +31,23 @@ from training import skyrl_prod10_operator as operator
 from training import skyrl_reward_rayjob as historical
 
 BASE_SOURCE_HEAD = "cc07933546abb82023cf0413b4538dcf9d992ed5"
+SOURCE_MERGE_HEAD = operator.FAST3_SOURCE_MERGE_HEAD
+LAUNCHER_MERGE_HEAD = operator.FAST3_LAUNCHER_MERGE_HEAD
+LAUNCH_GATE_PATH = Path("configs/qualification/qwen38-rl-reward-canary-port-v10.json")
+LAUNCH_GATE_FILE_SHA256 = "sha256:469d6168eb42eeaf1e8acf94790f036708ba9d3cab9f0cfc88d23b442f4a6cd9"
+PORT_V9_FILE_SHA256 = "sha256:0a64f23677833b29bb4ddf21c7516352d75040b8b85c885e62490dbb8d791fd2"
+PORT_V9_SELF_SHA256 = "sha256:c2c11ee405563bb6025bc6f7309184deb8f0ed9c2eb6213e549ceefb350e609d"
+RUNTIME_V9_FILE_SHA256 = "sha256:96c9ab8ff66bfa7f435404d9ff5cd5d690c498ea0798a6fde46798d613a5789a"
+RUNTIME_V9_SELF_SHA256 = "sha256:50f8122021a7e96f79fbe9e2c60816394ca5202dc9f38493f7776406a80d3bdd"
+SCIENCE_FILE_SHA256 = "sha256:76bbabb6775c4a82d4d11a2a76c3b6c5e4198b7143e05a4a55cf73dad81b6080"
+SCIENCE_SELF_SHA256 = operator.FAST3_PREDECESSOR_SCIENCE_SHA256
+RETRY_FILE_SHA256 = "sha256:3ead20ef5330303687a377560dff0b097bef6f481194542503978b07788e577f"
+RETRY_SELF_SHA256 = operator.FAST3_RETRY_POLICY_SHA256
+RELOAD_FILE_SHA256 = "sha256:46c9ea1daeb6965b85f0eed8ab9dd2c50a13ef68916092b0cba306367031ee84"
+DIAGNOSTIC_FILE_SHA256 = operator.FAST3_DIAGNOSTIC_FILE_SHA256
+DIAGNOSTIC_SELF_SHA256 = operator.FAST3_DIAGNOSTIC_SELF_SHA256
+FAST2_RETIREMENT_FILE_SHA256 = operator.FAST3_FAST2_RETIREMENT_FILE_SHA256
+FAST2_RETIREMENT_SELF_SHA256 = operator.FAST3_FAST2_RETIREMENT_SELF_SHA256
 LAUNCHER_ROOT = Path(__file__).resolve().parents[1]
 MIN_RUNTIME_REMAINING_SECONDS = 180
 MIN_CAPACITY_REMAINING_SECONDS = 30
@@ -70,6 +87,15 @@ def _source_file(root: Path, value: Path) -> Path:
     return path
 
 
+def _launcher_file(value: Path) -> Path:
+    path = _source_file(LAUNCHER_ROOT, value)
+    if path.relative_to(LAUNCHER_ROOT) != LAUNCH_GATE_PATH:
+        raise ValueError("Fast3 launch gate is not the exact launcher config")
+    if _file_sha256(path) != LAUNCH_GATE_FILE_SHA256:
+        raise ValueError("Fast3 launch gate bytes changed")
+    return path
+
+
 def _file_sha256(path: Path) -> str:
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -91,6 +117,8 @@ def _expected_sha256(value: str, *, name: str) -> str:
 def _source_head(root: Path, expected: str) -> None:
     if re.fullmatch(r"[0-9a-f]{40}", expected) is None:
         raise ValueError("source head must be one full commit")
+    if expected != SOURCE_MERGE_HEAD:
+        raise ValueError("source head is not the accepted Fast3 source merge")
     top = Path(
         subprocess.check_output(
             ["git", "rev-parse", "--show-toplevel"], cwd=root, text=True
@@ -135,6 +163,112 @@ def _launcher_head(expected: str, *, source_head: str) -> None:
         check=False,
     ).returncode:
         raise ValueError("Fast3 launcher does not contain the frozen source head")
+
+
+def _merge_identity(commit: str) -> dict[str, Any]:
+    tree = subprocess.check_output(
+        ["git", "show", "-s", "--format=%T", commit], cwd=LAUNCHER_ROOT, text=True
+    ).strip()
+    parents = subprocess.check_output(
+        ["git", "show", "-s", "--format=%P", commit], cwd=LAUNCHER_ROOT, text=True
+    ).split()
+    return {"commit": commit, "parents": parents, "tree": tree}
+
+
+def _launch_gate(path: Path, plan: dict[str, Any]) -> dict[str, Any]:
+    """Validate the append-only authority that closes only the two merge gates."""
+    value = operator.fast3_launch_gate(_load(path))
+    parent_path = LAUNCHER_ROOT / "configs/qualification/qwen38-rl-reward-canary-port-v9.json"
+    runtime_path = (
+        LAUNCHER_ROOT / "configs/data/qwen38-rl-reward-canary-exact-version-evidence-v9.json"
+    )
+    science_path = (
+        LAUNCHER_ROOT
+        / "configs/qualification/qwen38-rl-reward-canary-prod11-fast3-predecessor-science-v1.json"
+    )
+    policy_path = (
+        LAUNCHER_ROOT
+        / "configs/qualification/qwen38-rl-reward-canary-prod11-fast3-generation-retry-v1.json"
+    )
+    identity_path = (
+        LAUNCHER_ROOT
+        / "configs/qualification/qwen38-rl-reward-canary-prod11-fast3-identity-v1.json"
+    )
+    run_path = LAUNCHER_ROOT / "configs/qualification/qwen38-rl-reward-canary-prod-v11-fast3.json"
+    reload_path = LAUNCHER_ROOT / "training/skyrl_fast3_reload.py"
+    diagnostic_path = (
+        LAUNCHER_ROOT
+        / "docs/evidence/qwen38-study/2026-09-23-skyrl-prod11-generation-failure-diagnostic-v1.json"
+    )
+    retirement_path = (
+        LAUNCHER_ROOT
+        / "docs/evidence/qwen38-study/2026-09-23-skyrl-prod11-fast2-retirement-v1.json"
+    )
+    parent = _load(parent_path)
+    preserved = value.get("preserved_identity", {})
+    sealed_files = (
+        ("runtime_evidence", runtime_path, RUNTIME_V9_FILE_SHA256, RUNTIME_V9_SELF_SHA256),
+        ("predecessor_science", science_path, SCIENCE_FILE_SHA256, SCIENCE_SELF_SHA256),
+        ("generation_retry_policy", policy_path, RETRY_FILE_SHA256, RETRY_SELF_SHA256),
+        ("failure_diagnostic", diagnostic_path, DIAGNOSTIC_FILE_SHA256, DIAGNOSTIC_SELF_SHA256),
+        (
+            "fast2_retirement",
+            retirement_path,
+            FAST2_RETIREMENT_FILE_SHA256,
+            FAST2_RETIREMENT_SELF_SHA256,
+        ),
+        ("fast3_identity", identity_path, None, None),
+    )
+    for key, file_path, literal_file, literal_self in sealed_files:
+        current = _load(file_path)
+        bound = preserved.get(key, {})
+        if (
+            _file_sha256(file_path) != bound.get("file_sha256")
+            or _self_sha256(current) != bound.get("self_sha256")
+            or literal_file is not None
+            and _file_sha256(file_path) != literal_file
+            or literal_self is not None
+            and _self_sha256(current) != literal_self
+        ):
+            raise ValueError("Fast3 append-only launch authorization changed")
+    for key, file_path in (("reload_source", reload_path), ("run_profile", run_path)):
+        if _file_sha256(file_path) != preserved.get(key, {}).get("file_sha256"):
+            raise ValueError("Fast3 append-only launch authorization changed")
+    historical_gate = {
+        "blockers": [
+            "fast3_source_pr_not_merged",
+            "fast3_launch_chain_not_separately_bound",
+        ],
+        "preview_authorized": False,
+        "submission_authorized": False,
+    }
+    qualification = plan.get("qualification", {})
+    if not isinstance(qualification, dict):
+        raise ValueError("Fast3 append-only launch authorization changed")
+    fast3 = qualification.get("fast3", {})
+    if (
+        {key: _merge_identity(bound["commit"]) for key, bound in value["merge_evidence"].items()}
+        != value["merge_evidence"]
+        or _file_sha256(parent_path) != PORT_V9_FILE_SHA256
+        or _self_sha256(parent) != PORT_V9_SELF_SHA256
+        or _file_sha256(reload_path) != RELOAD_FILE_SHA256
+        or parent.get("submission_gate") != historical_gate
+        or qualification.get("qualification_self_sha256") != parent.get("sha256")
+        or qualification.get("submission_gate") != historical_gate
+        or fast3.get("qualification") != parent
+        or subprocess.run(
+            ["git", "merge-base", "--is-ancestor", SOURCE_MERGE_HEAD, "HEAD"],
+            cwd=LAUNCHER_ROOT,
+            check=False,
+        ).returncode
+        or subprocess.run(
+            ["git", "merge-base", "--is-ancestor", LAUNCHER_MERGE_HEAD, "HEAD"],
+            cwd=LAUNCHER_ROOT,
+            check=False,
+        ).returncode
+    ):
+        raise ValueError("Fast3 append-only launch authorization changed")
+    return value
 
 
 def _retry_policy(path: Path) -> tuple[dict[str, Any], str, str]:
@@ -246,17 +380,33 @@ def _predecessor_science(
     return value, _file_sha256(path), self_sha
 
 
-def _preflight(path: Path, plan: dict[str, Any], request: dict[str, Any]) -> dict[str, Any]:
+def _preflight(
+    path: Path,
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    launch_gate: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
     packet = operator._packet(_load(path / "PREFLIGHT_PACKET.json"), "preflight")
+    successor = operator_job.fast3_successor_manifest(
+        packet["stage"], packet["stage_launch_result"], launch_gate=launch_gate
+    )
+    rebuilt_plan = operator_job.fast3_plan_from_successor(successor, launch_gate=launch_gate)
+    if (
+        packet.get("identity") != operator.FAST3_IDENTITY.sealed_mapping()
+        or packet.get("launch_gate") != launch_gate
+        or packet.get("plan") != plan
+        or packet.get("request") != request
+        or rebuilt_plan != plan
+        or launch_direct.job_request(rebuilt_plan, identity=operator.FAST3_IDENTITY) != request
+        or successor != plan.get("data")
+    ):
+        raise ValueError("accepted zero-GPU Fast3 preflight changed")
     launch = prod10_finalizer._terminal_preflight(path / "OPERATOR_CREATE.jsonl")
     copied = _load(path / "PREFLIGHT_LAUNCH_RESULT.json")
     observer = launch.get("observer", {})
     receipt = observer.get("receipt", {}) if isinstance(observer, dict) else {}
     if (
         launch != copied
-        or packet.get("identity") != operator.FAST3_IDENTITY.sealed_mapping()
-        or packet.get("plan") != plan
-        or packet.get("request") != request
         or launch.get("status") != "operator_succeeded_and_released"
         or launch.get("package", {}).get("name") != operator.FAST3_OPERATOR_NAMES["preflight"]
         or launch.get("package", {}).get("packet_sha256") != packet.get("sha256")
@@ -269,7 +419,7 @@ def _preflight(path: Path, plan: dict[str, Any], request: dict[str, Any]) -> dic
         or observer.get("peak_gpus") != 0
     ):
         raise ValueError("accepted zero-GPU Fast3 preflight changed")
-    return launch
+    return launch, successor
 
 
 def _capacity(request: dict[str, Any]) -> dict[str, Any]:
@@ -408,8 +558,15 @@ def finalize(args: argparse.Namespace) -> dict[str, Any]:
     output = operator_launch._operation_directory(args.operation_directory)
     if any(output.iterdir()):
         raise ValueError("operation directory must be new and empty")
+    early_gate_path = (
+        args.launch_gate if args.launch_gate.is_absolute() else LAUNCHER_ROOT / args.launch_gate
+    )
+    early_gate = operator.fast3_launch_gate(_load(early_gate_path))
+    if _file_sha256(early_gate_path) != LAUNCH_GATE_FILE_SHA256:
+        raise ValueError("Fast3 launch gate bytes changed")
     _source_head(source_root, args.source_head)
     _launcher_head(args.launcher_head, source_head=args.source_head)
+    launch_gate_path = _launcher_file(args.launch_gate)
     identity_path = _source_file(source_root, args.identity)
     diagnostic_path = _source_file(source_root, args.failure_diagnostic)
     retirement_path = _source_file(source_root, args.fast2_retirement)
@@ -422,7 +579,10 @@ def finalize(args: argparse.Namespace) -> dict[str, Any]:
     preflight_dir = operator_launch._operation_directory(args.preflight_directory)
     plan = _load(preflight_dir / "PLAN.json")
     request = _load(preflight_dir / "REQUEST.json")
-    data_manifest = _load(preflight_dir / "SUCCESSOR_MANIFEST.json")
+    launch_gate = _launch_gate(launch_gate_path, plan)
+    if launch_gate != early_gate:
+        raise ValueError("Fast3 append-only launch authorization changed")
+    preflight, data_manifest = _preflight(preflight_dir, plan, request, launch_gate)
     expected_plan_sha = _expected_sha256(args.plan_sha256, name="plan")
     expected_request_sha = _expected_sha256(args.request_sha256, name="request")
     expected_data_sha = _expected_sha256(args.data_manifest_sha256, name="data manifest")
@@ -469,7 +629,6 @@ def finalize(args: argparse.Namespace) -> dict[str, Any]:
         generation_retry_policy_sha256=policy_self_sha,
         predecessor_science_sha256=science_self_sha,
     )
-    preflight = _preflight(preflight_dir, plan, request)
     token = os.environ["FLEET_API_KEY"]
     source_preview, expected, gpu_previews, provenance = _fresh_gpu_proofs(
         plan=plan, request=request, token=token
@@ -477,9 +636,12 @@ def finalize(args: argparse.Namespace) -> dict[str, Any]:
     if "sha256:" + digest(expected) != expected_gpu_sha:
         raise ValueError("reviewed Fast3 GPU manifest changed")
     capacity = _capacity(request)
-    host_identity = launch_direct.host_identity_proof(identity, token=token)
+    host_identity = launch_direct.host_identity_proof(
+        identity, token=token, launch_gate=launch_gate
+    )
     packet = operator_job.launch_packet(
         identity=identity,
+        launch_gate=launch_gate,
         plan=plan,
         request=request,
         preflight_launch_result=preflight,
@@ -512,6 +674,7 @@ def finalize(args: argparse.Namespace) -> dict[str, Any]:
         "FAST2_RETIREMENT.json": retirement,
         "PREDECESSOR_SCIENCE.json": science,
         "PREDECESSOR_EVIDENCE.json": evidence,
+        "LAUNCH_GATE.json": launch_gate,
         "SOURCE_PREVIEW.json": source_preview,
         "GPU_MANIFEST.json": expected,
         "GPU_PREVIEWS.json": gpu_previews,
@@ -552,6 +715,7 @@ def finalize(args: argparse.Namespace) -> dict[str, Any]:
         "predecessor_science_file_sha256": science_file_sha,
         "predecessor_science_sha256": science_self_sha,
         "predecessor_evidence_sha256": evidence["sha256"],
+        "launch_gate_sha256": launch_gate["sha256"],
         "packet_sha256": packet["sha256"],
         "package": proof,
         "gpu_preview_sha256": [value["sha256"] for value in gpu_previews],
@@ -592,6 +756,7 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--source-root", type=Path, required=True)
     value.add_argument("--source-head", required=True)
     value.add_argument("--launcher-head", required=True)
+    value.add_argument("--launch-gate", type=Path, required=True)
     value.add_argument("--identity", type=Path, required=True)
     value.add_argument("--plan-sha256", required=True)
     value.add_argument("--request-sha256", required=True)
