@@ -10,16 +10,23 @@ key. An uncertain POST is recorded and must be reconciled, never replayed.
 from __future__ import annotations
 
 import base64
+import contextlib
+import copy
+import fcntl
 import gzip
 import hashlib
 import json
 import os
 import re
 import shlex
+import stat
+import time
+from collections.abc import Callable
 from decimal import Decimal
 from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import quote
+from uuid import UUID, uuid4
 
 import httpx
 import yaml
@@ -32,6 +39,26 @@ API_URLS = {
 FAILURE_ALERT_REQUEST_FIELD = "failureAlerts"
 FAILURE_ALERT_ANNOTATION = "fleet.ai/failure-alerts"
 FAILURE_ALERT_OFF = "off"
+PRIVILEGED_WHOLE_NODE_WARNING = (
+    "privileged: the GPU containers run with full device access and seccomp Unconfined. "
+    "The schema allows it only on a whole-node pod, so the blast radius is this job -- "
+    "but a compromised or buggy image can now reset the node's GPUs and read anything "
+    "mounted on it"
+)
+JOBS_RUN_FIELDS = {
+    "image",
+    "job_id",
+    "message",
+    "name",
+    "priority_class",
+    "priority_reason",
+    "queue_priority_class",
+    "requeueIfPreempted",
+    "run_dir",
+    "status",
+    "submitted_by",
+    "submitted_by_profile_id",
+}
 
 
 class JobsError(ValueError):
@@ -223,7 +250,17 @@ def validate_request(config: dict) -> None:
 
 def validate_preview(config: dict, preview: dict) -> dict:
     validate_request(config)
-    if preview.get("errors") or preview.get("warnings"):
+    privileged_whole_node = (
+        config.get("privileged") is True
+        and config.get("workers") == 1
+        and config.get("gpus_per_worker") == 8
+    )
+    if privileged_whole_node:
+        if preview.get("errors", object()) is not None or preview.get("warnings") != [
+            PRIVILEGED_WHOLE_NODE_WARNING
+        ]:
+            raise JobsError("preview reported an unreviewed whole-node warning policy")
+    elif preview.get("errors") or preview.get("warnings"):
         raise JobsError("preview reported errors/warnings; review before submission")
     try:
         obj = yaml.safe_load(preview["manifest_yaml"])
@@ -246,6 +283,8 @@ def validate_preview(config: dict, preview: dict) -> dict:
             raise JobsError("preview does not disable failed-job alerts")
         if not (spec["suspend"] is True and spec["shutdownAfterJobFinishes"] is True):
             raise JobsError("preview must queue normally and release on exit")
+        if type(spec.get("backoffLimit")) is not int or spec["backoffLimit"] != 0:
+            raise JobsError("preview must disable controller retries")
         if spec["entrypoint"] != config["command"]:
             raise JobsError("preview entrypoint drift")
         cluster = spec["rayClusterSpec"]
@@ -259,6 +298,8 @@ def validate_preview(config: dict, preview: dict) -> dict:
             if not replicas:
                 continue
             pod = template["spec"]
+            if pod.get("restartPolicy") != "Never":
+                raise JobsError("preview Pod restart policy drift")
             if pod.get("nodeName") or pod.get("priorityClassName") != config["priority_class"]:
                 raise JobsError("preview node assignment/priority bypass")
             gpu_containers = [
@@ -311,8 +352,13 @@ def validate_preview(config: dict, preview: dict) -> dict:
             raise JobsError("preview worker count drift")
     except (KeyError, TypeError, yaml.YAMLError) as exc:
         raise JobsError("malformed Jobs API preview") from exc
+    canonical = copy.deepcopy(obj)
+    metadata = canonical.get("metadata", {})
+    for field in ("creationTimestamp", "generation", "managedFields", "resourceVersion", "uid"):
+        metadata.pop(field, None)
+    canonical.pop("status", None)
     return {
-        "manifest_sha256": digest(obj),
+        "manifest_sha256": digest(canonical),
         "nodes": nodes,
         "gpus": nodes * config["gpus_per_worker"],
         "image": config["image"],
@@ -324,6 +370,144 @@ def safe_status(run: dict) -> dict:
     return {
         k: run.get(k) for k in ("name", "job_id", "run_dir", "status", "created_at", "finished_at")
     }
+
+
+def validate_creator_response(config: dict, value: object) -> dict:
+    """Bind the deployed flat creator row to one exact reviewed request."""
+    if not isinstance(value, dict) or set(value) != JOBS_RUN_FIELDS:
+        raise JobsError("Jobs creator response fields changed; reconcile, never repeat POST")
+    try:
+        job_id = str(UUID(str(value["job_id"])))
+    except (KeyError, TypeError, ValueError):
+        raise JobsError("Jobs creator identity is invalid; reconcile, never repeat POST") from None
+    generated_name = re.fullmatch(
+        re.escape(config["name"]) + r"-[a-f0-9]{8}", str(value.get("name", ""))
+    )
+    optional_strings = ("message", "priority_reason", "submitted_by", "submitted_by_profile_id")
+    if (
+        generated_name is None
+        or job_id != value["job_id"]
+        or value.get("run_dir") != config["run_dir"]
+        or value.get("image") != config["image"]
+        or value.get("priority_class") != config["priority_class"]
+        or value.get("queue_priority_class") != "q" + config["priority_class"][1:]
+        or value.get("requeueIfPreempted") is not False
+        or not isinstance(value.get("status"), str)
+        or not value["status"]
+        or any(
+            value.get(key) is not None and not isinstance(value[key], str)
+            for key in optional_strings
+        )
+    ):
+        raise JobsError("Jobs creator response differs from the exact request; reconcile")
+    return {
+        "name": value["name"],
+        "job_id": job_id,
+        "run_dir": value["run_dir"],
+        "status": value["status"],
+    }
+
+
+def _validate_journal_response(config: dict, value: object) -> dict:
+    fields = {"state", "name", "job_id", "run_dir", "status"}
+    if not isinstance(value, dict) or set(value) != fields or value.get("state") != "POST_RESPONSE":
+        raise JobsError("submission response journal record is malformed")
+    try:
+        job_id = str(UUID(str(value["job_id"])))
+    except (KeyError, TypeError, ValueError):
+        raise JobsError("submission response journal job ID is invalid") from None
+    if (
+        re.fullmatch(re.escape(config["name"]) + r"-[a-f0-9]{8}", str(value.get("name", "")))
+        is None
+        or job_id != value["job_id"]
+        or value.get("run_dir") != config["run_dir"]
+        or not isinstance(value.get("status"), str)
+        or not value["status"]
+    ):
+        raise JobsError("submission response journal identity changed")
+    return {key: value[key] for key in ("name", "job_id", "run_dir", "status")}
+
+
+def read_submission_journal(
+    path: Path,
+    config: dict,
+    *,
+    expected_manifest_sha256: str,
+    expected_intent_evidence_file_sha256: str | None,
+    expected_response: dict | None = None,
+) -> tuple[dict, dict | None, str]:
+    """Read one durable intent and an optional complete response without replay."""
+    descriptor = -1
+    try:
+        descriptor = os.open(
+            path,
+            os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0),
+        )
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise JobsError("submission journal publisher is still active") from None
+        metadata = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or stat.S_IMODE(metadata.st_mode) != 0o600
+            or not 0 < metadata.st_size <= 64 * 1024
+        ):
+            raise JobsError("submission journal is not one bounded mode-0600 regular file")
+        chunks = []
+        remaining = 64 * 1024 + 1
+        while remaining:
+            chunk = os.read(descriptor, remaining)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        payload = b"".join(chunks)
+        if len(payload) != metadata.st_size or len(payload) > 64 * 1024:
+            raise JobsError("submission journal changed while it was read")
+    except OSError as exc:
+        raise JobsError("submission journal could not be read") from exc
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    parts = payload.split(b"\n")
+    tail = b"" if parts[-1] == b"" else parts[-1]
+    complete = parts[:-1]
+    if not complete or len(complete) > 2 or any(not row for row in complete):
+        raise JobsError("submission journal has malformed complete records")
+    if len(complete) == 2 and tail:
+        raise JobsError("submission journal has an unexpected third record")
+    if tail:
+        if expected_response is None:
+            raise JobsError("submission journal has an unverified torn response")
+        immutable = {key: expected_response[key] for key in ("name", "job_id", "run_dir")}
+        canonical_prefix = (
+            json.dumps({"state": "POST_RESPONSE", **immutable})[:-1] + ', "status": '
+        ).encode()
+        if not (
+            canonical_prefix.startswith(tail)
+            or (tail.startswith(canonical_prefix) and len(tail) <= len(canonical_prefix) + 1024)
+        ):
+            raise JobsError("submission journal torn response differs from exact Jobs history")
+    try:
+        rows = [json.loads(row) for row in complete]
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise JobsError("submission journal has a malformed complete record") from exc
+    intent = rows[0]
+    expected = {
+        "state": "POST_INTENT_DO_NOT_RETRY",
+        "intent_created_at_epoch": intent.get("intent_created_at_epoch"),
+        "intent_evidence_file_sha256": expected_intent_evidence_file_sha256,
+        "request_sha256": digest(config),
+        "manifest_sha256": expected_manifest_sha256,
+        "nodes": config["workers"],
+        "gpus": config["workers"] * config["gpus_per_worker"],
+        "image": config["image"],
+    }
+    if type(intent.get("intent_created_at_epoch")) is not int or intent != expected:
+        raise JobsError("submission intent differs from the reviewed request and preview")
+    response = _validate_journal_response(config, rows[1]) if len(rows) == 2 else None
+    return intent, response, "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
 class Jobs:
@@ -397,6 +581,35 @@ class Jobs:
             raise JobsError("invalid run name")
         return safe_status(self.request("GET", "/v1/runs/" + quote(name, safe="")))
 
+    def status_exact(self, config: dict, name: str, job_id: str) -> dict:
+        """Resolve status from the deployed flat list contract, not single-GET shape."""
+        if not re.fullmatch(r"[a-z0-9-]+", name):
+            raise JobsError("invalid run name")
+        matches = [
+            validate_creator_response(config, row)
+            for row in self.all_runs()
+            if row.get("name") == name or row.get("job_id") == job_id
+        ]
+        if len(matches) != 1:
+            raise JobsError("Jobs status did not resolve one exact creator identity")
+        result = matches[0]
+        if result["name"] != name or result["job_id"] != job_id:
+            raise JobsError("Jobs status identity differs from the creator receipt")
+        return result
+
+    def reconcile_submission(self, config: dict) -> dict:
+        """Resolve one uncertain POST by exact history reads; never submit."""
+        matches = []
+        for row in self.all_runs():
+            name = row.get("name")
+            if row.get("run_dir") == config["run_dir"] or (
+                isinstance(name, str) and name.startswith(config["name"] + "-")
+            ):
+                matches.append(validate_creator_response(config, row))
+        if len(matches) != 1:
+            raise JobsError("uncertain submission did not resolve to exactly one creator identity")
+        return matches[0]
+
     def delete(self, name: str) -> dict:
         """Release one exact Jobs API run; success is exactly HTTP 204.
 
@@ -420,8 +633,19 @@ class Jobs:
             raise JobsError("Jobs API DELETE returned an unexpected response body")
         return {"name": name, "deleted": True, "http_status": 204}
 
-    def submit_once(self, config: dict, journal: Path) -> dict:
+    def submit_once(
+        self,
+        config: dict,
+        journal: Path,
+        *,
+        expected_preview_manifest_sha256: str | None = None,
+        intent_evidence_file_sha256: str | None = None,
+        before_intent: Callable[[dict], str] | None = None,
+        not_after_epoch: int | None = None,
+    ) -> dict:
         validate_request(config)
+        if before_intent is not None and intent_evidence_file_sha256 is not None:
+            raise JobsError("submission intent evidence has two competing producers")
         if journal.exists() or journal.is_symlink():
             raise JobsError("submission journal already exists; reconcile, never repeat POST")
         for row in self.all_runs():
@@ -434,30 +658,139 @@ class Jobs:
             ):
                 raise JobsError("a recorded run already owns this name/title/output; reconcile it")
         proof = validate_preview(config, self.preview(config))
-        journal.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(journal, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, "w") as stream:
-            stream.write(
+        if (
+            expected_preview_manifest_sha256 is not None
+            and proof["manifest_sha256"] != expected_preview_manifest_sha256
+        ):
+            raise JobsError("final server preview differs from the reviewed manifest")
+        if (
+            intent_evidence_file_sha256 is not None
+            and re.fullmatch(r"sha256:[0-9a-f]{64}", intent_evidence_file_sha256) is None
+        ):
+            raise JobsError("submission intent evidence digest is invalid")
+        for row in self.all_runs():
+            name = row["name"]
+            if (
+                row.get("run_dir") == config["run_dir"]
+                or name == config["name"]
+                or name.startswith(config["name"] + "-")
+                or (config.get("title") is not None and row.get("title") == config["title"])
+            ):
+                raise JobsError(
+                    "a recorded run appeared after preview; reconcile it before submission"
+                )
+        if not_after_epoch is not None and (
+            type(not_after_epoch) is not int or time.time() + 30 > not_after_epoch
+        ):
+            raise JobsError("submission authority expired during final duplicate checks")
+        if journal.name in {"", ".", ".."} or journal.parent.is_symlink():
+            raise JobsError("submission journal path is unsafe")
+        directory_fd = -1
+        journal_fd = -1
+        temporary_name = f".{journal.name}.{uuid4().hex}.tmp"
+        try:
+            directory_fd = os.open(
+                journal.parent,
+                os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+            )
+            journal_fd = os.open(
+                temporary_name,
+                os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+                0o600,
+                dir_fd=directory_fd,
+            )
+            os.fchmod(journal_fd, 0o600)
+            fcntl.flock(journal_fd, fcntl.LOCK_EX)
+            if before_intent is not None:
+                request_sha256 = digest(config)
+                proof_sha256 = digest(proof)
+                intent_evidence_file_sha256 = before_intent(copy.deepcopy(proof))
+                if digest(config) != request_sha256 or digest(proof) != proof_sha256:
+                    raise JobsError("submission callback mutated the reviewed request or preview")
+            if (
+                intent_evidence_file_sha256 is not None
+                and re.fullmatch(r"sha256:[0-9a-f]{64}", intent_evidence_file_sha256) is None
+            ):
+                raise JobsError("submission intent evidence digest is invalid")
+            intent_payload = (
                 json.dumps(
                     {
                         "state": "POST_INTENT_DO_NOT_RETRY",
+                        "intent_created_at_epoch": int(time.time()),
+                        "intent_evidence_file_sha256": intent_evidence_file_sha256,
                         "request_sha256": digest(config),
                         **proof,
                     }
                 )
                 + "\n"
+            ).encode()
+            written = 0
+            while written < len(intent_payload):
+                count = os.write(journal_fd, intent_payload[written:])
+                if count <= 0:
+                    raise OSError("submission intent write made no progress")
+                written += count
+            os.fsync(journal_fd)
+            os.link(
+                temporary_name,
+                journal.name,
+                src_dir_fd=directory_fd,
+                dst_dir_fd=directory_fd,
+                follow_symlinks=False,
             )
-            stream.flush()
-            os.fsync(stream.fileno())
-        # Do not wrap this POST in retry logic, even for a timeout or HTTP error.
-        response = self.request("POST", "/v1/runs", json=config)
-        if not re.fullmatch(re.escape(config["name"]) + r"-[a-f0-9]{8}", response.get("name", "")):
-            raise JobsError("ambiguous submit response; reconcile journal, never repeat POST")
-        if response.get("run_dir") not in (None, config["run_dir"]):
-            raise JobsError("submitted output differs; reconcile resource ownership immediately")
-        result = safe_status(response)
-        with journal.open("a") as stream:
-            stream.write(json.dumps({"state": "POST_RESPONSE", **result}) + "\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        return result
+            os.fsync(directory_fd)
+        except OSError as exc:
+            if directory_fd >= 0:
+                with contextlib.suppress(OSError):
+                    os.unlink(temporary_name, dir_fd=directory_fd)
+            if journal_fd >= 0:
+                os.close(journal_fd)
+                journal_fd = -1
+            if directory_fd >= 0:
+                os.close(directory_fd)
+                directory_fd = -1
+            raise JobsError("submission intent could not be durably published") from exc
+        except Exception:
+            if directory_fd >= 0:
+                with contextlib.suppress(OSError):
+                    os.unlink(temporary_name, dir_fd=directory_fd)
+            if journal_fd >= 0:
+                os.close(journal_fd)
+                journal_fd = -1
+            if directory_fd >= 0:
+                os.close(directory_fd)
+                directory_fd = -1
+            raise
+        try:
+            if not_after_epoch is not None and time.time() > not_after_epoch:
+                raise JobsError(
+                    "submission authority expired after durable intent; "
+                    "reconcile, never repeat POST"
+                )
+            # Do not wrap this POST in retry logic, even for a timeout or HTTP error.
+            response = self.request("POST", "/v1/runs", json=config)
+            result = validate_creator_response(config, response)
+            response_payload = (json.dumps({"state": "POST_RESPONSE", **result}) + "\n").encode()
+            os.lseek(journal_fd, 0, os.SEEK_END)
+            written = 0
+            while written < len(response_payload):
+                count = os.write(journal_fd, response_payload[written:])
+                if count <= 0:
+                    raise OSError("submission response write made no progress")
+                written += count
+            os.fsync(journal_fd)
+            return result
+        except OSError as exc:
+            raise JobsError(
+                "submission response could not be durably recorded; reconcile, never repeat POST"
+            ) from exc
+        finally:
+            if journal_fd >= 0:
+                os.close(journal_fd)
+                journal_fd = -1
+            if directory_fd >= 0:
+                with contextlib.suppress(OSError):
+                    os.unlink(temporary_name, dir_fd=directory_fd)
+                with contextlib.suppress(OSError):
+                    os.fsync(directory_fd)
+                os.close(directory_fd)

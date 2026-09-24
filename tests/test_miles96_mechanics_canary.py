@@ -18,7 +18,12 @@ import pytest
 import yaml
 
 from cyber_post_train.gpu_capacity import build_capacity_census
-from cyber_post_train.jobs import JobsError, validate_preview, validate_request
+from cyber_post_train.jobs import (
+    PRIVILEGED_WHOLE_NODE_WARNING,
+    JobsError,
+    validate_preview,
+    validate_request,
+)
 from cyber_post_train.jobs import digest as jobs_digest
 from cyber_post_train.sfs_output import build_output_absence_receipt
 from cyber_post_train.sfs_output_job import build_sfs_output_job
@@ -71,6 +76,7 @@ def _server_preview(request: dict) -> dict:
     pod = {
         "spec": {
             "priorityClassName": request["priority_class"],
+            "restartPolicy": "Never",
             "imagePullSecrets": [{"name": item} for item in request["image_pull_secrets"]],
             "containers": [
                 {
@@ -122,7 +128,11 @@ def _server_preview(request: dict) -> dict:
             },
         },
     }
-    return {"manifest_yaml": yaml.safe_dump(obj), "warnings": []}
+    return {
+        "manifest_yaml": yaml.safe_dump(obj),
+        "warnings": [PRIVILEGED_WHOLE_NODE_WARNING],
+        "errors": None,
+    }
 
 
 def _receipt(plan: dict) -> dict:
@@ -364,7 +374,14 @@ def test_server_preview_proves_root_alert_annotation_and_no_retry() -> None:
     broken = yaml.safe_load(_server_preview(request)["manifest_yaml"])
     broken["metadata"]["annotations"].pop("fleet.ai/failure-alerts")
     with pytest.raises(JobsError, match="failed-job alerts"):
-        validate_preview(request, {"manifest_yaml": yaml.safe_dump(broken), "warnings": []})
+        validate_preview(
+            request,
+            {
+                "manifest_yaml": yaml.safe_dump(broken),
+                "warnings": [PRIVILEGED_WHOLE_NODE_WARNING],
+                "errors": None,
+            },
+        )
 
 
 @pytest.mark.parametrize(

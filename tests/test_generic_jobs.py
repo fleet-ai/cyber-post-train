@@ -1,17 +1,23 @@
 import json
+import os
+import stat
+import uuid
 from copy import deepcopy
 
 import httpx
 import pytest
 import yaml
 
+from cyber_post_train import jobs as jobs_module
 from cyber_post_train.jobs import (
     API_URLS,
+    PRIVILEGED_WHOLE_NODE_WARNING,
     Jobs,
     JobsError,
     plan_api_target,
     quantity,
     safe_status,
+    validate_creator_response,
     validate_preview,
     validate_request,
 )
@@ -210,6 +216,7 @@ def manifest(request=None):
     pod = {
         "spec": {
             "priorityClassName": c["priority_class"],
+            "restartPolicy": "Never",
             "imagePullSecrets": [{"name": s} for s in c["image_pull_secrets"]],
             "containers": [
                 {
@@ -253,6 +260,7 @@ def manifest(request=None):
         "spec": {
             "suspend": True,
             "shutdownAfterJobFinishes": True,
+            "backoffLimit": 0,
             "entrypoint": c["command"],
             "rayClusterSpec": {
                 "headGroupSpec": {"template": pod},
@@ -266,6 +274,26 @@ def preview(obj=None):
     return {"manifest_yaml": yaml.safe_dump(obj or manifest()), "warnings": []}
 
 
+def creator_row(request=None, **overrides):
+    c = request or config()
+    row = {
+        "image": c["image"],
+        "job_id": "e75dfbcc-dada-4bb5-9f4d-49b43322f2aa",
+        "message": None,
+        "name": c["name"] + "-1234abcd",
+        "priority_class": c["priority_class"],
+        "priority_reason": None,
+        "queue_priority_class": "q" + c["priority_class"][1:],
+        "requeueIfPreempted": False,
+        "run_dir": c["run_dir"],
+        "status": "QUEUED",
+        "submitted_by": None,
+        "submitted_by_profile_id": None,
+    }
+    row.update(overrides)
+    return row
+
+
 @pytest.mark.parametrize("nodes", [1, 2, 4, 5, 8])
 @pytest.mark.parametrize("priority", ["c1", "c2"])
 def test_resource_preview(nodes, priority):
@@ -273,6 +301,65 @@ def test_resource_preview(nodes, priority):
     result = validate_preview(request, preview(manifest(request)))
     assert result["nodes"] == nodes and result["gpus"] == nodes * 8
     assert len(result["manifest_sha256"]) == 64
+
+
+def test_privileged_whole_node_preview_accepts_only_the_reviewed_warning() -> None:
+    request = {**config(), "privileged": True}
+    payload = {
+        "manifest_yaml": yaml.safe_dump(manifest(request)),
+        "errors": None,
+        "warnings": [PRIVILEGED_WHOLE_NODE_WARNING],
+    }
+    assert validate_preview(request, payload)["gpus"] == 8
+
+
+@pytest.mark.parametrize(
+    ("errors", "warnings"),
+    [
+        (None, []),
+        (None, None),
+        (None, ["different"]),
+        (None, [PRIVILEGED_WHOLE_NODE_WARNING, "extra"]),
+        ([], [PRIVILEGED_WHOLE_NODE_WARNING]),
+        ({}, [PRIVILEGED_WHOLE_NODE_WARNING]),
+    ],
+)
+def test_privileged_whole_node_preview_rejects_every_other_policy(errors, warnings) -> None:
+    request = {**config(), "privileged": True}
+    payload = {
+        "manifest_yaml": yaml.safe_dump(manifest(request)),
+        "errors": errors,
+        "warnings": warnings,
+    }
+    with pytest.raises(JobsError, match="whole-node warning policy"):
+        validate_preview(request, payload)
+
+
+def test_generic_preview_keeps_legacy_omitted_errors_semantics() -> None:
+    assert validate_preview(config(), preview())["gpus"] == 8
+
+
+@pytest.mark.parametrize("value", [None, True, False, -1, 1, "0"])
+def test_preview_requires_exact_integer_zero_backoff(value) -> None:
+    obj = manifest()
+    if value is None:
+        obj["spec"].pop("backoffLimit")
+    else:
+        obj["spec"]["backoffLimit"] = value
+    with pytest.raises(JobsError, match="controller retries"):
+        validate_preview(config(), preview(obj))
+
+
+@pytest.mark.parametrize("value", [None, "OnFailure", "Always", False])
+def test_preview_requires_restart_never_on_every_active_group(value) -> None:
+    obj = manifest()
+    pod = obj["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]
+    if value is None:
+        pod.pop("restartPolicy")
+    else:
+        pod["restartPolicy"] = value
+    with pytest.raises(JobsError, match="restart policy"):
+        validate_preview(config(), preview(obj))
 
 
 @pytest.mark.parametrize(
@@ -537,7 +624,16 @@ def test_incomplete_history_blocks_submission(payload, tmp_path):
 
 @pytest.mark.parametrize(
     "outcome",
-    ["ok", "timeout", "http-error", "invalid-json", "ambiguous", "wrong-root"],
+    [
+        "ok",
+        "timeout",
+        "http-error",
+        "invalid-json",
+        "ambiguous",
+        "wrong-root",
+        "bad-job-id",
+        "extra-field",
+    ],
 )
 def test_one_post_with_durable_intent_even_after_uncertain_failure(tmp_path, outcome):
     seen = []
@@ -558,20 +654,20 @@ def test_one_post_with_durable_intent_even_after_uncertain_failure(tmp_path, out
             return httpx.Response(500, text="private-trace-and-secret")
         if outcome == "invalid-json":
             return httpx.Response(202, text="private-trace-and-secret")
-        response = {
-            "name": "researcher-sft-1234abcd",
-            "status": "queued",
-            "failure_message": "private-trace-and-secret",
-        }
+        response = creator_row()
         if outcome == "ambiguous":
             response["name"] = "unexpected"
         if outcome == "wrong-root":
             response["run_dir"] = "/mnt/sfs/other"
+        if outcome == "bad-job-id":
+            response["job_id"] = "not-a-uuid"
+        if outcome == "extra-field":
+            response["unexpected"] = True
         return httpx.Response(202, json=response)
 
     with client(handler) as api:
         if outcome == "ok":
-            assert api.submit_once(config(), journal)["status"] == "queued"
+            assert api.submit_once(config(), journal)["status"] == "QUEUED"
         else:
             with pytest.raises(JobsError) as error:
                 api.submit_once(config(), journal)
@@ -581,6 +677,391 @@ def test_one_post_with_durable_intent_even_after_uncertain_failure(tmp_path, out
     assert seen.count(("POST", "/v1/runs")) == 1
     assert "private-trace-and-secret" not in journal.read_text()
     assert journal.stat().st_mode & 0o777 == 0o600
+
+
+def test_intent_file_and_parent_are_fsynced_before_the_sole_post(tmp_path, monkeypatch) -> None:
+    events = []
+    journal = tmp_path / "intent.jsonl"
+    original_fsync = os.fsync
+
+    def fsync(fd):
+        events.append("fsync:dir" if stat.S_ISDIR(os.fstat(fd).st_mode) else "fsync:file")
+        return original_fsync(fd)
+
+    def handler(req):
+        if req.method == "GET":
+            return httpx.Response(200, json={"items": [], "has_more": False})
+        if req.url.path.endswith("/preview"):
+            return httpx.Response(200, json=preview())
+        events.append("POST")
+        raise httpx.ReadTimeout("uncertain", request=req)
+
+    monkeypatch.setattr(jobs_module.os, "fsync", fsync)
+    with client(handler) as api:
+        with pytest.raises(JobsError, match="transport failed"):
+            api.submit_once(config(), journal)
+        with pytest.raises(JobsError, match="journal already exists"):
+            api.submit_once(config(), journal)
+    assert events[:3] == ["fsync:file", "fsync:dir", "POST"]
+    assert stat.S_IMODE(journal.stat().st_mode) == 0o600
+
+
+def test_before_intent_runs_after_final_preview_and_duplicate_scan(tmp_path) -> None:
+    events = []
+    journal = tmp_path / "intent.jsonl"
+    evidence = "sha256:" + "e" * 64
+
+    def handler(req):
+        if req.method == "GET":
+            events.append("history")
+            return httpx.Response(200, json={"items": [], "has_more": False})
+        if req.url.path.endswith("/preview"):
+            events.append("preview")
+            return httpx.Response(200, json=preview())
+        events.append("POST")
+        assert journal.exists()
+        return httpx.Response(202, json=creator_row())
+
+    def before_intent(proof):
+        events.append("before-intent")
+        assert proof["gpus"] == 8
+        assert not journal.exists()
+        return evidence
+
+    with client(handler) as api:
+        assert api.submit_once(config(), journal, before_intent=before_intent)["status"] == "QUEUED"
+    assert events == ["history", "preview", "history", "before-intent", "POST"]
+    intent, response, _ = jobs_module.read_submission_journal(
+        journal,
+        config(),
+        expected_manifest_sha256=validate_preview(config(), preview())["manifest_sha256"],
+        expected_intent_evidence_file_sha256=evidence,
+    )
+    assert intent["intent_evidence_file_sha256"] == evidence
+    assert response is not None
+
+
+def test_before_intent_failure_leaves_no_intent_and_no_post(tmp_path) -> None:
+    journal = tmp_path / "intent.jsonl"
+    calls = []
+
+    def handler(req):
+        if req.method == "GET":
+            return httpx.Response(200, json={"items": [], "has_more": False})
+        if req.url.path.endswith("/preview"):
+            return httpx.Response(200, json=preview())
+        calls.append("POST")
+        return httpx.Response(202, json=creator_row())
+
+    def stop(_proof):
+        calls.append("callback")
+        raise JobsError("fresh Kubernetes absence failed")
+
+    with client(handler) as api, pytest.raises(JobsError, match="Kubernetes absence"):
+        api.submit_once(config(), journal, before_intent=stop)
+    assert calls == ["callback"]
+    assert not journal.exists()
+    assert not list(tmp_path.glob(".intent.jsonl.*.tmp"))
+
+
+def test_before_intent_cannot_mutate_reviewed_request_or_preview(tmp_path) -> None:
+    journal = tmp_path / "intent.jsonl"
+    request = config()
+    calls = []
+
+    def handler(req):
+        if req.method == "GET":
+            return httpx.Response(200, json={"items": [], "has_more": False})
+        if req.url.path.endswith("/preview"):
+            return httpx.Response(200, json=preview())
+        calls.append("POST")
+        return httpx.Response(202, json=creator_row())
+
+    def mutate(proof):
+        request["image"] = "attacker/image:latest"
+        proof["image"] = request["image"]
+        return "sha256:" + "f" * 64
+
+    with client(handler) as api, pytest.raises(JobsError, match="mutated"):
+        api.submit_once(request, journal, before_intent=mutate)
+    assert calls == []
+    assert not journal.exists()
+
+
+def test_expired_authority_stops_before_callback_intent_and_post(tmp_path, monkeypatch) -> None:
+    journal = tmp_path / "intent.jsonl"
+    calls = []
+
+    def handler(req):
+        if req.method == "GET":
+            return httpx.Response(200, json={"items": [], "has_more": False})
+        if req.url.path.endswith("/preview"):
+            return httpx.Response(200, json=preview())
+        calls.append("POST")
+        return httpx.Response(202, json=creator_row())
+
+    monkeypatch.setattr(jobs_module.time, "time", lambda: 1000.0)
+    with client(handler) as api, pytest.raises(JobsError, match="expired"):
+        api.submit_once(
+            config(),
+            journal,
+            before_intent=lambda _proof: calls.append("callback") or ("sha256:" + "f" * 64),
+            not_after_epoch=1029,
+        )
+    assert calls == []
+    assert not journal.exists()
+
+
+def test_authority_expiring_after_intent_fsync_stops_before_post(tmp_path, monkeypatch) -> None:
+    journal = tmp_path / "intent.jsonl"
+    calls = []
+
+    def handler(req):
+        if req.method == "GET":
+            return httpx.Response(200, json={"items": [], "has_more": False})
+        if req.url.path.endswith("/preview"):
+            return httpx.Response(200, json=preview())
+        calls.append("POST")
+        return httpx.Response(202, json=creator_row())
+
+    monkeypatch.setattr(
+        jobs_module.time,
+        "time",
+        lambda: 1031.0 if journal.exists() else 1000.0,
+    )
+    with client(handler) as api, pytest.raises(JobsError, match="after durable intent"):
+        api.submit_once(config(), journal, not_after_epoch=1030)
+    assert calls == []
+    assert journal.exists()
+
+
+def test_restrictive_umask_cannot_poison_the_submission_journal(tmp_path) -> None:
+    journal = tmp_path / "intent.jsonl"
+    posts = []
+
+    def handler(req):
+        if req.method == "GET":
+            return httpx.Response(200, json={"items": [], "has_more": False})
+        if req.url.path.endswith("/preview"):
+            return httpx.Response(200, json=preview())
+        posts.append(req.url.path)
+        return httpx.Response(202, json=creator_row())
+
+    previous = os.umask(0o777)
+    try:
+        with client(handler) as api:
+            api.submit_once(config(), journal)
+    finally:
+        os.umask(previous)
+    assert posts == ["/v1/runs"]
+    assert stat.S_IMODE(journal.stat().st_mode) == 0o600
+
+
+def test_post_link_temp_cleanup_fsync_failure_cannot_suppress_the_post(
+    tmp_path, monkeypatch
+) -> None:
+    journal = tmp_path / "intent.jsonl"
+    posts = []
+    directory_fsyncs = 0
+    original_fsync = os.fsync
+
+    def fsync(descriptor):
+        nonlocal directory_fsyncs
+        if stat.S_ISDIR(os.fstat(descriptor).st_mode):
+            directory_fsyncs += 1
+            if directory_fsyncs == 2:
+                raise OSError("injected cleanup-only directory fsync failure")
+        return original_fsync(descriptor)
+
+    def handler(req):
+        if req.method == "GET":
+            return httpx.Response(200, json={"items": [], "has_more": False})
+        if req.url.path.endswith("/preview"):
+            return httpx.Response(200, json=preview())
+        posts.append(req.url.path)
+        return httpx.Response(202, json=creator_row())
+
+    monkeypatch.setattr(jobs_module.os, "fsync", fsync)
+    with client(handler) as api:
+        result = api.submit_once(config(), journal)
+    assert result["status"] == "QUEUED"
+    assert posts == ["/v1/runs"]
+    assert directory_fsyncs == 2
+    assert not list(tmp_path.glob(".intent.jsonl.*.tmp"))
+
+
+def test_post_link_temp_unlink_failure_cannot_replace_the_creator_result(
+    tmp_path, monkeypatch
+) -> None:
+    journal = tmp_path / "intent.jsonl"
+    posts = []
+    injected = False
+    original_unlink = os.unlink
+
+    def unlink(path, *args, **kwargs):
+        nonlocal injected
+        if not injected and str(path).startswith(".intent.jsonl."):
+            injected = True
+            raise OSError("injected cleanup-only unlink failure")
+        return original_unlink(path, *args, **kwargs)
+
+    def handler(req):
+        if req.method == "GET":
+            return httpx.Response(200, json={"items": [], "has_more": False})
+        if req.url.path.endswith("/preview"):
+            return httpx.Response(200, json=preview())
+        posts.append(req.url.path)
+        return httpx.Response(202, json=creator_row())
+
+    monkeypatch.setattr(jobs_module.os, "unlink", unlink)
+    with client(handler) as api:
+        result = api.submit_once(config(), journal)
+        with pytest.raises(JobsError, match="journal already exists"):
+            api.submit_once(config(), journal)
+    assert injected is True
+    assert result["status"] == "QUEUED"
+    assert posts == ["/v1/runs"]
+
+
+def test_submission_reader_is_blocked_until_the_writer_finishes_response(tmp_path) -> None:
+    journal = tmp_path / "intent.jsonl"
+    request = config()
+    manifest_sha256 = validate_preview(request, preview())["manifest_sha256"]
+    blocked = []
+
+    def handler(req):
+        if req.method == "GET":
+            return httpx.Response(200, json={"items": [], "has_more": False})
+        if req.url.path.endswith("/preview"):
+            return httpx.Response(200, json=preview())
+        with pytest.raises(JobsError, match="publisher is still active"):
+            jobs_module.read_submission_journal(
+                journal,
+                request,
+                expected_manifest_sha256=manifest_sha256,
+                expected_intent_evidence_file_sha256=None,
+            )
+        blocked.append(True)
+        return httpx.Response(202, json=creator_row())
+
+    with client(handler) as api:
+        result = api.submit_once(request, journal)
+    assert blocked == [True]
+    _, response, _ = jobs_module.read_submission_journal(
+        journal,
+        request,
+        expected_manifest_sha256=manifest_sha256,
+        expected_intent_evidence_file_sha256=None,
+    )
+    assert response == result
+
+
+def test_reviewed_preview_digest_accepts_only_allowed_root_metadata_drift(tmp_path) -> None:
+    request = config()
+    reviewed = validate_preview(request, preview())["manifest_sha256"]
+    rendered = manifest()
+    rendered["metadata"].update(
+        uid=str(uuid.uuid4()),
+        resourceVersion="12",
+        creationTimestamp="2026-09-24T12:00:00Z",
+    )
+    rendered["status"] = {"jobStatus": "PENDING"}
+    posts = []
+
+    def handler(req):
+        if req.method == "GET":
+            return httpx.Response(200, json={"items": [], "has_more": False})
+        if req.url.path.endswith("/preview"):
+            return httpx.Response(200, json=preview(rendered))
+        posts.append(req.url.path)
+        return httpx.Response(202, json=creator_row())
+
+    with client(handler) as api:
+        api.submit_once(
+            request,
+            tmp_path / "intent.jsonl",
+            expected_preview_manifest_sha256=reviewed,
+        )
+    assert posts == ["/v1/runs"]
+
+
+@pytest.mark.parametrize("drift", ["annotation", "image", "command"])
+def test_reviewed_preview_semantic_drift_blocks_before_intent_and_post(tmp_path, drift) -> None:
+    request = config()
+    reviewed = validate_preview(request, preview())["manifest_sha256"]
+    rendered = manifest()
+    container = rendered["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"][
+        "containers"
+    ][0]
+    if drift == "annotation":
+        rendered["metadata"]["annotations"]["fleet.ai/run-dir"] = "/mnt/sfs/jobs/other"
+    elif drift == "image":
+        container["image"] = "registry/image@sha256:" + "b" * 64
+    else:
+        rendered["spec"]["entrypoint"] = "python other.py"
+    posts = []
+
+    def handler(req):
+        if req.method == "GET":
+            return httpx.Response(200, json={"items": [], "has_more": False})
+        if req.url.path.endswith("/preview"):
+            return httpx.Response(200, json=preview(rendered))
+        posts.append(req.url.path)
+        return httpx.Response(202, json=creator_row())
+
+    journal = tmp_path / "intent.jsonl"
+    with client(handler) as api, pytest.raises(JobsError):
+        api.submit_once(
+            request,
+            journal,
+            expected_preview_manifest_sha256=reviewed,
+        )
+    assert posts == []
+    assert not journal.exists()
+
+
+def test_reviewed_privileged_preview_warning_drift_blocks_before_intent(tmp_path) -> None:
+    request = config()
+    request["privileged"] = True
+    rendered = manifest(request)
+    valid = preview(rendered)
+    valid.update(errors=None, warnings=[PRIVILEGED_WHOLE_NODE_WARNING])
+    reviewed = validate_preview(request, valid)["manifest_sha256"]
+    bad = {**valid, "warnings": []}
+    journal = tmp_path / "intent.jsonl"
+
+    def handler(req):
+        if req.method == "GET":
+            return httpx.Response(200, json={"items": [], "has_more": False})
+        if req.url.path.endswith("/preview"):
+            return httpx.Response(200, json=bad)
+        raise AssertionError("unreviewed warning policy reached the create POST")
+
+    with client(handler) as api, pytest.raises(JobsError, match="warning policy"):
+        api.submit_once(
+            request,
+            journal,
+            expected_preview_manifest_sha256=reviewed,
+        )
+    assert not journal.exists()
+
+
+def test_duplicate_appearing_after_preview_blocks_before_intent(tmp_path) -> None:
+    reads = 0
+
+    def handler(req):
+        nonlocal reads
+        if req.method == "GET":
+            reads += 1
+            items = [] if reads == 1 else [{"name": "researcher-sft-1234abcd"}]
+            return httpx.Response(200, json={"items": items, "has_more": False})
+        if req.url.path.endswith("/preview"):
+            return httpx.Response(200, json=preview())
+        raise AssertionError("late duplicate reached the create POST")
+
+    with client(handler) as api, pytest.raises(JobsError, match="appeared after preview"):
+        api.submit_once(config(), tmp_path / "intent.jsonl")
+    assert not (tmp_path / "intent.jsonl").exists()
 
 
 def test_unrelated_history_does_not_block_a_new_create_once_run(tmp_path):
@@ -598,12 +1079,43 @@ def test_unrelated_history_does_not_block_a_new_create_once_run(tmp_path):
             )
         if req.url.path.endswith("/preview"):
             return httpx.Response(200, json=preview())
-        return httpx.Response(202, json={"name": "researcher-sft-1234abcd", "status": "queued"})
+        return httpx.Response(202, json=creator_row())
 
     with client(handler) as api:
         result = api.submit_once(config(), tmp_path / "intent.jsonl")
-    assert result["status"] == "queued"
+    assert result["status"] == "QUEUED"
     assert seen.count(("POST", "/v1/runs")) == 1
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("name", "other-1234abcd"),
+        ("job_id", str(uuid.uuid4()).upper()),
+        ("run_dir", "/mnt/sfs/jobs/other"),
+        ("image", "registry/image@sha256:" + "b" * 64),
+        ("priority_class", "c2"),
+        ("queue_priority_class", "q0"),
+        ("requeueIfPreempted", True),
+        ("status", ""),
+        ("message", {}),
+    ],
+)
+def test_creator_response_rejects_every_identity_or_policy_drift(field, value) -> None:
+    with pytest.raises(JobsError, match="creator"):
+        validate_creator_response(config(), creator_row(**{field: value}))
+
+
+def test_creator_response_is_safely_projected_from_exact_flat_contract() -> None:
+    row = creator_row(message="private server detail", priority_reason="admitted")
+    assert validate_creator_response(config(), row) == {
+        "name": row["name"],
+        "job_id": row["job_id"],
+        "run_dir": row["run_dir"],
+        "status": row["status"],
+    }
+    with pytest.raises(JobsError, match="fields changed"):
+        validate_creator_response(config(), {**row, "unexpected": True})
 
 
 @pytest.mark.parametrize(
