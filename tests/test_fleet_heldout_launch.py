@@ -481,6 +481,8 @@ def test_rendered_bundle_installs_configured_task_set_basename(tmp_path, task_se
 
     assert package.evaluation_config["task_set"] == task_set_name
     assert environment["EVAL_TASK_SET_NAME"] == task_set_name
+    assert "model_artifact_v2.py" in package.config_map["data"]
+    assert "model_artifact_v3.py" in package.config_map["data"]
     assert '"$root/configs/evaluation/$EVAL_TASK_SET_NAME"' in script
     assert "qwen38-fresh75-fleet-dev17-task-set-v1.json" not in script
 
