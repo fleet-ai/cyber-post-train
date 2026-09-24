@@ -1,11 +1,11 @@
 {
   "classification": "diagnostic-contract-invalid",
   "cleanup": {
-    "config_map_absent": false,
-    "job_absent": false,
-    "pod_absent": false,
-    "uid_preconditioned_cleanup_at": null,
-    "workload_absent": false
+    "config_map_absent": true,
+    "job_absent": true,
+    "pod_absent": true,
+    "uid_preconditioned_cleanup_at": "2026-09-24T06:25:34Z",
+    "workload_absent": true
   },
   "config_map": {
     "name": "chris-q38-m96-signal-a2-diagnosis-a1-code",
@@ -40,7 +40,7 @@
     "priority": "c1/q1"
   },
   "schema": "cyber_qwen38_miles96_signal_diagnosis_terminal_v1",
-  "sha256": "sha256:a5ae0a77f97741635ae606549e091aca7d5b77fbb3a3484a4bcae019a2074a0b",
+  "sha256": "sha256:a31516197954193acde281683f9d0e6ca08a9ce7427de900f94c50c15ed6c8b0",
   "workload": {
     "name": "job-chris-q38-m96-signal-a2-diagnosis-a1-6fd01",
     "uid": "7f74d576-4ca9-482c-818f-e40ae48cf492"
