@@ -33,6 +33,74 @@ def _sha(char: str) -> str:
     return "sha256:" + char * 64
 
 
+def _raw_tool_catalog() -> list[dict]:
+    return json.loads(
+        (Path(mechanics.__file__).resolve().parents[1] / mechanics.TOOL_CATALOG_PATH).read_text()
+    )
+
+
+def _install_fake_fti_session(
+    monkeypatch: pytest.MonkeyPatch,
+    plan: dict,
+    *,
+    raw_override: list[dict] | None = None,
+    visible_drift: bool = False,
+) -> tuple[type, object]:
+    raw = _raw_tool_catalog() if raw_override is None else raw_override
+
+    def openai_tools(catalog):
+        return mechanics._openai_tool_catalog(catalog)
+
+    class FakeInstance:
+        def __init__(self):
+            self.calls = 0
+
+        def list_tools(self):
+            self.calls += 1
+            return copy.deepcopy(raw)
+
+    instance = FakeInstance()
+
+    class FakeTaskSession:
+        def __init__(self):
+            self.instance = None
+            self.tools = []
+            self.close_calls = 0
+            self.task_key = plan["task_binding"]["task_key"]
+            self.task_version_id = plan["task_binding"]["task_version_id"]
+            self.verifier_version_id = plan["task_binding"]["verifier_version_id"]
+
+        def open(self):
+            self.instance = instance
+            self.tools = openai_tools(instance.list_tools())
+            if visible_drift:
+                self.tools[0]["function"]["name"] = "drifted"
+
+        def close(self):
+            self.close_calls += 1
+
+    fleet = types.ModuleType("fti.fleet")
+    fleet.GradeResult = type("GradeResult", (), {})
+    fleet_v1 = types.ModuleType("fti.fleet.v1")
+    fleet_v1.PlatformError = type("PlatformError", (Exception,), {})
+    fleet_v1.openai_tools = openai_tools
+    common = types.ModuleType("fti.miles.v1.common")
+    common.TaskSession = FakeTaskSession
+    common.numeric_reward = float
+    for name, module in {
+        "fti": types.ModuleType("fti"),
+        "fti.fleet": fleet,
+        "fti.fleet.v1": fleet_v1,
+        "fti.miles": types.ModuleType("fti.miles"),
+        "fti.miles.v1": types.ModuleType("fti.miles.v1"),
+        "fti.miles.v1.common": common,
+    }.items():
+        monkeypatch.setitem(sys.modules, name, module)
+    monkeypatch.setattr(mechanics, "_EVIDENCE_SESSION_CLASS", None)
+    monkeypatch.setattr(mechanics, "_load_runtime_plan", lambda: plan)
+    return mechanics._evidence_session_class(), instance
+
+
 def _phase1_plan() -> dict:
     wave = miles_signal_wave.load()
     candidate = wave["candidates"][0]
@@ -73,6 +141,9 @@ def _plan() -> dict:
         "excluded_slot_count": 0,
         "outer_replacement_count": 0,
         **authority,
+        "raw_tool_catalog_sha256": phase1["tool_contract"]["raw_tool_catalog_sha256"],
+        "openai_tool_catalog_sha256": phase1["tool_contract"]["openai_tool_catalog_sha256"],
+        "tool_transform_source_sha256": phase1["tool_contract"]["transform_source_sha256"],
         "max_turns": 32,
         "max_tokens_per_turn": 8192,
         "episode_timeout_s": 2400,
@@ -158,6 +229,65 @@ def _server_preview(request: dict) -> dict:
         },
     }
     return {"manifest_yaml": yaml.safe_dump(obj), "warnings": []}
+
+
+def test_dual_tool_contract_matches_exact_raw_and_fti_projection() -> None:
+    raw = _raw_tool_catalog()
+    contract = mechanics.tool_contract()
+    assert "sha256:" + mechanics.digest(raw) == contract["raw_tool_catalog_sha256"]
+    assert (
+        "sha256:" + mechanics.digest(mechanics._openai_tool_catalog(raw))
+        == contract["openai_tool_catalog_sha256"]
+    )
+    assert contract["transform_source_sha256"] == "sha256:" + mechanics.FTI_V1_SHA256
+
+
+def test_evidence_session_open_accepts_exact_raw_and_openai_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = _phase1_plan()
+    session_type, instance = _install_fake_fti_session(monkeypatch, plan)
+    session = session_type()
+    session.open()
+    assert instance.calls == 1
+    assert session.close_calls == 0
+    assert (
+        "sha256:" + mechanics.digest(session.tools)
+        == plan["tool_contract"]["openai_tool_catalog_sha256"]
+    )
+
+
+@pytest.mark.parametrize("fault", ["raw", "visible", "plan", "plan_load_error"])
+def test_evidence_session_open_rejects_tool_drift_and_closes_once(
+    monkeypatch: pytest.MonkeyPatch, fault: str
+) -> None:
+    plan = _phase1_plan()
+    raw_override: list[dict] | None = None
+    visible_drift = fault == "visible"
+    if fault == "raw":
+        raw_override = _raw_tool_catalog()
+        raw_override[0]["name"] = "drifted"
+    session_type, instance = _install_fake_fti_session(
+        monkeypatch,
+        plan,
+        raw_override=raw_override,
+        visible_drift=visible_drift,
+    )
+    if fault == "plan":
+        changed = copy.deepcopy(plan)
+        changed["tool_contract"]["openai_tool_catalog_sha256"] = _sha("f")
+        monkeypatch.setattr(mechanics, "_load_runtime_plan", lambda: changed)
+    elif fault == "plan_load_error":
+        monkeypatch.setattr(
+            mechanics,
+            "_load_runtime_plan",
+            lambda: (_ for _ in ()).throw(ValueError("plan unavailable")),
+        )
+    session = session_type()
+    with pytest.raises(ValueError):
+        session.open()
+    assert instance.calls == 1
+    assert session.close_calls == 1
 
 
 def _receipt(plan: dict) -> dict:
@@ -432,7 +562,9 @@ def test_phase2_rereads_exact_phase1_source_and_zero_update_filesystem(
         "max_concurrent_envs": 2,
         "shielded_close": True,
         "release_absence_http_status": 404,
-        "tool_catalog_sha256": plan["task_binding"]["tool_catalog_sha256"],
+        "raw_tool_catalog_sha256": phase1["tool_contract"]["raw_tool_catalog_sha256"],
+        "openai_tool_catalog_sha256": phase1["tool_contract"]["openai_tool_catalog_sha256"],
+        "tool_transform_source_sha256": phase1["tool_contract"]["transform_source_sha256"],
         "live_tool_schema_gate_at_session_open": True,
         "outer_episode_replacements": 0,
     }
@@ -512,6 +644,9 @@ def test_server_preview_proves_root_alert_annotation_and_no_retry() -> None:
         "priority",
         "reuse",
         "authority",
+        "tool_raw",
+        "tool_openai",
+        "tool_source",
         "signal",
         "provenance",
     ],
@@ -532,6 +667,12 @@ def test_contract_drift_fails_before_any_request(fault: str) -> None:
         plan["prepared_model"]["root"] = plan["identity"]["run_dir"] + "/old-model"
     elif fault == "authority":
         plan["task_binding"]["tool_catalog_sha256"] = _sha("9")
+    elif fault == "tool_raw":
+        plan["tool_contract"]["raw_tool_catalog_sha256"] = _sha("1")
+    elif fault == "tool_openai":
+        plan["tool_contract"]["openai_tool_catalog_sha256"] = _sha("2")
+    elif fault == "tool_source":
+        plan["tool_contract"]["transform_source_sha256"] = _sha("3")
     elif fault == "signal":
         plan["task_signal_evidence"]["reward_variation"] = False
     else:

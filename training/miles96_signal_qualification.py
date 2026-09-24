@@ -36,7 +36,7 @@ NATIVE_TERMINAL_SCHEMA = "cyber_qwen38_miles96_signal_native_terminal_v1"
 RUNTIME_PREFLIGHT_FILE = "SIGNAL_RUNTIME_PREFLIGHT.json"
 RUNTIME_PREFLIGHT_SCHEMA = "cyber_qwen38_miles96_signal_runtime_preflight_v1"
 SAMPLES = 8
-FTI_V1_SHA256 = "0524f19dcc886b20d17b39c21bd6417f537423eec6ef2359487fc3911dad441c"
+FTI_V1_SHA256 = mechanics.FTI_V1_SHA256
 MILES_INFERENCE_EVAL_SHA256 = "7c13e0e1ab49cc1cb7224c3f9f91245d4c0bd46c0b7c1785cba8b633ca587a26"
 HF_MODEL_ROOT = "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2"
 HF_MODEL_REVISION = "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
@@ -139,6 +139,7 @@ def build_plan(
                 "binding_sha256": model_binding_sha256,
             },
             "task_binding": task_binding,
+            "tool_contract": mechanics.tool_contract(),
             "selection_authority": {
                 "authority_config_sha256": authority_config_sha256,
                 "current_binding_sha256": current_binding_sha256,
@@ -197,6 +198,7 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
             "execution",
             "prepared_model",
             "task_binding",
+            "tool_contract",
             "selection_authority",
             "episode",
             "qualification",
@@ -254,6 +256,12 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     authority = {key: task[key] for key in task_fields if key != "authority_receipt_sha256"}
     if task["authority_receipt_sha256"] != "sha256:" + mechanics.digest(authority):
         raise ValueError("task authority receipt digest is not self-consistent")
+    tools = value["tool_contract"]
+    if (
+        tools != mechanics.tool_contract()
+        or tools["raw_tool_catalog_sha256"] != task["tool_catalog_sha256"]
+    ):
+        raise ValueError("raw or OpenAI-visible tool contract drift")
 
     selection = value["selection_authority"]
     if set(selection) != {
@@ -459,9 +467,23 @@ def _runtime_signal_binding(plan: dict[str, Any]) -> dict[str, Any]:
     cfg = common.Config(**plan["episode"])
     if cfg.max_concurrent_envs != 2:
         raise ValueError("signal environment concurrency is not exactly two")
+    catalog = json.loads(
+        (Path(mechanics.__file__).resolve().parents[1] / mechanics.TOOL_CATALOG_PATH).read_text()
+    )
+    tools = plan["tool_contract"]
+    if (
+        "sha256:" + mechanics.digest(catalog) != tools["raw_tool_catalog_sha256"]
+        or "sha256:" + mechanics.digest(fleet_v1.openai_tools(catalog))
+        != tools["openai_tool_catalog_sha256"]
+        or tools["transform_source_sha256"] != "sha256:" + FTI_V1_SHA256
+    ):
+        raise ValueError("exact-image raw or OpenAI-visible tool contract drift")
     session_source = inspect.getsource(mechanics._evidence_session_class)
     if (
-        '"sha256:" + digest(self.tools) != binding["tool_catalog_sha256"]' not in session_source
+        '"sha256:" + digest(self.tools) != tools["openai_tool_catalog_sha256"]'
+        not in session_source
+        or "except BaseException:" not in session_source
+        or "self.close()" not in session_source
         or "live V1 task authority differs from the immutable plan" not in session_source
     ):
         raise ValueError("live session-open tool-schema gate drift")
@@ -477,7 +499,9 @@ def _runtime_signal_binding(plan: dict[str, Any]) -> dict[str, Any]:
         "max_concurrent_envs": cfg.max_concurrent_envs,
         "shielded_close": True,
         "release_absence_http_status": 404,
-        "tool_catalog_sha256": plan["task_binding"]["tool_catalog_sha256"],
+        "raw_tool_catalog_sha256": tools["raw_tool_catalog_sha256"],
+        "openai_tool_catalog_sha256": tools["openai_tool_catalog_sha256"],
+        "tool_transform_source_sha256": tools["transform_source_sha256"],
         "live_tool_schema_gate_at_session_open": True,
         "outer_episode_replacements": 0,
     }
@@ -1084,7 +1108,9 @@ def _validate_runtime_preflight(plan: dict[str, Any], value: dict[str, Any]) -> 
             "max_concurrent_envs",
             "shielded_close",
             "release_absence_http_status",
-            "tool_catalog_sha256",
+            "raw_tool_catalog_sha256",
+            "openai_tool_catalog_sha256",
+            "tool_transform_source_sha256",
             "live_tool_schema_gate_at_session_open",
             "outer_episode_replacements",
             "sha256",
@@ -1101,7 +1127,11 @@ def _validate_runtime_preflight(plan: dict[str, Any], value: dict[str, Any]) -> 
         or value.get("max_concurrent_envs") != 2
         or value.get("shielded_close") is not True
         or value.get("release_absence_http_status") != 404
-        or value.get("tool_catalog_sha256") != plan["task_binding"]["tool_catalog_sha256"]
+        or value.get("raw_tool_catalog_sha256") != plan["tool_contract"]["raw_tool_catalog_sha256"]
+        or value.get("openai_tool_catalog_sha256")
+        != plan["tool_contract"]["openai_tool_catalog_sha256"]
+        or value.get("tool_transform_source_sha256")
+        != plan["tool_contract"]["transform_source_sha256"]
         or value.get("live_tool_schema_gate_at_session_open") is not True
         or value.get("outer_episode_replacements") != 0
     ):
@@ -1278,6 +1308,9 @@ def aggregate(plan: dict[str, Any]) -> dict[str, Any]:
         "verifier_version_id": plan["task_binding"]["verifier_version_id"],
         "task_set_sha256": plan["task_binding"]["task_set_sha256"],
         "tool_catalog_sha256": plan["task_binding"]["tool_catalog_sha256"],
+        "raw_tool_catalog_sha256": plan["tool_contract"]["raw_tool_catalog_sha256"],
+        "openai_tool_catalog_sha256": plan["tool_contract"]["openai_tool_catalog_sha256"],
+        "tool_transform_source_sha256": plan["tool_contract"]["transform_source_sha256"],
         "max_turns": plan["episode"]["max_turns"],
         "max_tokens_per_turn": plan["episode"]["max_tokens_per_turn"],
         "episode_timeout_s": plan["episode"]["episode_timeout_s"],

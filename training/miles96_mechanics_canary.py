@@ -34,6 +34,8 @@ import uuid
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+# These exact-field v1 schemas have never admitted an external run; validators
+# intentionally reject every earlier pre-launch draft after a contract repair.
 SCHEMA = "cyber_qwen38_miles96_mechanics_canary_v1"
 TRAIN_RECEIPT_SCHEMA = "cyber_qwen38_miles96_update_export_receipt_v1"
 RELOAD_RECEIPT_SCHEMA = "cyber_qwen38_miles96_reload_receipt_v1"
@@ -57,6 +59,7 @@ FTI_VERSION = "0.10.27"
 RUN_FLEET_SHA256 = "ae82e3f03d14c81e52009bc2cbff857d9e844baf07a9d82d8266608cb8cba2b1"
 FTI_COMMON_SHA256 = "0a6801afe0cea5e4c0b6a53ffe07c083cc7e3691cf231dff460889e79c1626b0"
 FTI_CLIENT_RECORDING_SHA256 = "41292533ec356a51a722c2c98f92bdfd98c56fdce429537a816957bf7172e9dc"
+FTI_V1_SHA256 = "0524f19dcc886b20d17b39c21bd6417f537423eec6ef2359487fc3911dad441c"
 MILES_INFERENCE_ROLLOUT_SHA256 = "96e3cba12ae033527e823ed3dd8cb43c31d244775756ecf0bab4ad81eb4f06a4"
 MILES_HTTP_UTILS_SHA256 = "da630d6594c86d76e89a262d1060c7f81238da9659899dea917987c5f39fab86"
 MILES_MEGATRON_ACTOR_SHA256 = "eecd72a4387511916add2c97d9e2dad6716db9097fd6ec471468c1f7edc074b9"
@@ -95,6 +98,11 @@ PROD_JOBS_API = "https://api.ft.flt.build"
 PROD_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 NAMESPACE = "fleet-train-jobs"
 SFS_JOBS_ROOT = Path("/mnt/sfs/jobs")
+TOOL_CATALOG_PATH = "configs/data/qwen38-rl-filtered-canary-tool-catalog-v1.json"
+RAW_TOOL_CATALOG_SHA256 = "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+OPENAI_TOOL_CATALOG_SHA256 = (
+    "sha256:9c3ad657a76c11423cdd1f543abb0d5363420dd4aae6244a2de73bb58913ce20"
+)
 
 
 def digest(value: Any) -> str:
@@ -110,6 +118,36 @@ def file_sha256(path: Path) -> str:
         for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
             value.update(block)
     return value.hexdigest()
+
+
+def _openai_tool_catalog(catalog: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Mirror pinned ``fti.fleet.v1.openai_tools`` for a sealed raw catalog."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": tool["name"],
+                "description": tool.get("description", ""),
+                "parameters": tool["inputSchema"],
+            },
+        }
+        for tool in catalog
+    ]
+
+
+def tool_contract() -> dict[str, str]:
+    """Bind the raw Fleet catalog and its pinned FTI OpenAI projection."""
+    path = Path(__file__).resolve().parents[1] / TOOL_CATALOG_PATH
+    catalog = json.loads(path.read_text())
+    raw_sha256 = "sha256:" + digest(catalog)
+    openai_sha256 = "sha256:" + digest(_openai_tool_catalog(catalog))
+    if raw_sha256 != RAW_TOOL_CATALOG_SHA256 or openai_sha256 != OPENAI_TOOL_CATALOG_SHA256:
+        raise ValueError("raw or OpenAI-visible tool catalog changed")
+    return {
+        "raw_tool_catalog_sha256": raw_sha256,
+        "openai_tool_catalog_sha256": openai_sha256,
+        "transform_source_sha256": "sha256:" + FTI_V1_SHA256,
+    }
 
 
 def _sha256(value: object, field: str) -> str:
@@ -227,6 +265,7 @@ def build_plan(
             "binding_sha256": model_binding_sha256,
         },
         "task_binding": task_binding,
+        "tool_contract": tool_contract(),
         "task_signal_evidence": task_signal_evidence,
         "provenance": {
             "mechanics_reference": {
@@ -301,6 +340,7 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "execution",
         "prepared_model",
         "task_binding",
+        "tool_contract",
         "task_signal_evidence",
         "provenance",
         "episode",
@@ -387,6 +427,9 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     }
     if task["authority_receipt_sha256"] != "sha256:" + digest(authority):
         raise ValueError("task authority receipt digest is not self-consistent")
+    tools = value["tool_contract"]
+    if tools != tool_contract() or tools["raw_tool_catalog_sha256"] != task["tool_catalog_sha256"]:
+        raise ValueError("raw or OpenAI-visible tool contract drift")
 
     signal = value["task_signal_evidence"]
     signal_fields = {
@@ -407,6 +450,9 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "verifier_version_id",
         "task_set_sha256",
         "tool_catalog_sha256",
+        "raw_tool_catalog_sha256",
+        "openai_tool_catalog_sha256",
+        "tool_transform_source_sha256",
         "max_turns",
         "max_tokens_per_turn",
         "episode_timeout_s",
@@ -446,6 +492,9 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         or not 0 <= signal["excluded_slot_count"] <= 6
         or signal.get("outer_replacement_count") != 0
         or any(signal.get(field) != task[field] for field in authority)
+        or signal.get("raw_tool_catalog_sha256") != tools["raw_tool_catalog_sha256"]
+        or signal.get("openai_tool_catalog_sha256") != tools["openai_tool_catalog_sha256"]
+        or signal.get("tool_transform_source_sha256") != tools["transform_source_sha256"]
         or type(signal.get("max_turns")) is not int
         or not 1 <= signal["max_turns"] <= 32
         or type(signal.get("max_tokens_per_turn")) is not int
@@ -840,6 +889,7 @@ def job_request(plan: dict[str, Any]) -> dict[str, Any]:
 def _runtime_recipe_binding() -> None:
     import fti
     import miles
+    from fti.fleet import v1 as fleet_v1
     from fti.miles.v1 import client_recording
     from fti.miles.v1 import common as fti_common
     from fti.trainers.miles import run_fleet
@@ -852,6 +902,8 @@ def _runtime_recipe_binding() -> None:
         raise ValueError("maintained V1 task-session source drift")
     if file_sha256(Path(client_recording.__file__)) != FTI_CLIENT_RECORDING_SHA256:
         raise ValueError("maintained V1 rollout source drift")
+    if file_sha256(Path(fleet_v1.__file__)) != FTI_V1_SHA256:
+        raise ValueError("maintained Fleet V1 tool projection source drift")
     miles_root = Path(miles.__file__).resolve().parent
     if (
         file_sha256(miles_root / "rollout/inference_rollout/inference_rollout_common.py")
@@ -1093,16 +1145,20 @@ def _evidence_session_class() -> type:
 
         def open(self) -> None:
             super().open()
-            plan = _load_runtime_plan()
-            binding = plan["task_binding"]
-            if (
-                self.task_key != binding["task_key"]
-                or self.task_version_id != binding["task_version_id"]
-                or self.verifier_version_id != binding["verifier_version_id"]
-                or "sha256:" + digest(self.tools) != binding["tool_catalog_sha256"]
-            ):
+            try:
+                plan = _load_runtime_plan()
+                binding = plan["task_binding"]
+                tools = plan["tool_contract"]
+                if (
+                    self.task_key != binding["task_key"]
+                    or self.task_version_id != binding["task_version_id"]
+                    or self.verifier_version_id != binding["verifier_version_id"]
+                    or "sha256:" + digest(self.tools) != tools["openai_tool_catalog_sha256"]
+                ):
+                    raise ValueError("live V1 task authority differs from the immutable plan")
+            except BaseException:
                 self.close()
-                raise ValueError("live V1 task authority differs from the immutable plan")
+                raise
 
         def grade(self, answer, reset_ack=None, close_final_step=False):
             del reset_ack, close_final_step

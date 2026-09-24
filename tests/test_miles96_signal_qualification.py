@@ -69,7 +69,9 @@ def _preflight(plan: dict) -> dict:
         "max_concurrent_envs": 2,
         "shielded_close": True,
         "release_absence_http_status": 404,
-        "tool_catalog_sha256": plan["task_binding"]["tool_catalog_sha256"],
+        "raw_tool_catalog_sha256": plan["tool_contract"]["raw_tool_catalog_sha256"],
+        "openai_tool_catalog_sha256": plan["tool_contract"]["openai_tool_catalog_sha256"],
+        "tool_transform_source_sha256": plan["tool_contract"]["transform_source_sha256"],
         "live_tool_schema_gate_at_session_open": True,
         "outer_episode_replacements": 0,
     }
@@ -364,6 +366,16 @@ def test_signal_plan_rejects_optimizer_or_authority_drift() -> None:
     ]
     with pytest.raises(ValueError, match="frozen wave authority"):
         signal.validate_plan(plan)
+
+    for field in (
+        "raw_tool_catalog_sha256",
+        "openai_tool_catalog_sha256",
+        "transform_source_sha256",
+    ):
+        plan = _valid_plan()
+        plan["tool_contract"][field] = "sha256:" + "f" * 64
+        with pytest.raises(ValueError, match="tool contract drift"):
+            signal.validate_plan(plan)
 
 
 def test_generate_exception_seals_unaccepted_slot_without_replay(
