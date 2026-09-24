@@ -1,0 +1,52 @@
+{
+  "classification": "signal-contract-not-qualified",
+  "cleanup": {
+    "config_map_absent": false,
+    "job_absent": false,
+    "pod_absent": false,
+    "uid_preconditioned_cleanup_at": null,
+    "workload_absent": false
+  },
+  "config_map": {
+    "name": "chris-q38-m96-signal-a2-diagnosis-a2-code",
+    "uid": "822ed4bc-efdc-45fb-806b-ba721aee301d"
+  },
+  "execution": {
+    "diagnosis_receipt_written": false,
+    "exit_code": 1,
+    "failure_class": "attempt_reward_contract_mismatch",
+    "finished_at": "2026-09-24T06:36:23Z",
+    "private_contents_exposed": false,
+    "restart_count": 0
+  },
+  "job": {
+    "name": "chris-q38-m96-signal-a2-diagnosis-a2",
+    "status": "Failed",
+    "uid": "21948815-d7b9-432e-8921-72884dd5fdb1"
+  },
+  "packet": {
+    "bundle_sha256": "sha256:21937dd4e24712f73a7fb48b1b09a32a41a5351887563019e3337ff0312de6df",
+    "file_sha256": "sha256:9f32da5d94cd8446f4fd310bb329e9f0c7ae39e0cec70f24334bd8d93758e019",
+    "internal_sha256": "sha256:5863ef9a494a62db060c98a0334b65f913b741c16aa5acab622c58ab8888604d",
+    "normalized_server_preview_sha256": "sha256:564aa069e238298f98d0d04501c3cae52dcd7d9916505f5f8e2d338243da5512",
+    "source_sha256": "sha256:20b0f3bf58a65840fe7920beeb046d523dd7e85e9f5985d7b270c75ec1522cdd"
+  },
+  "pod": {
+    "image_id": "ghcr.io/astral-sh/uv@sha256:85d4cb1afa769a7338e095b927bee941cf5ec92266c7424b3f6c0f2748567248",
+    "name": "chris-q38-m96-signal-a2-diagnosis-a2-td4r9",
+    "uid": "1f400869-37b3-4f01-b432-b3b4879ead24"
+  },
+  "private_instance_ids_prompts_traces_rewards_scores_or_credentials_included": false,
+  "resources": {
+    "failure_alerts": "off",
+    "gpus": 0,
+    "priority": "c1/q1"
+  },
+  "reward_variation_conclusion": "not_established",
+  "schema": "cyber_qwen38_miles96_signal_diagnosis_terminal_v2",
+  "sha256": "sha256:0346b573f145cd09eef483bd6a40767be0a1851b70eacf28e892050a25957663",
+  "workload": {
+    "name": "job-chris-q38-m96-signal-a2-diagnosis-a2-bc023",
+    "uid": "bf2ad9ae-239d-40b1-ac4c-020acc15b29e"
+  }
+}
