@@ -788,6 +788,74 @@ def test_before_intent_cannot_mutate_reviewed_request_or_preview(tmp_path) -> No
     assert not journal.exists()
 
 
+def test_before_intent_cannot_replace_the_retained_journal_directory(tmp_path) -> None:
+    launch = tmp_path / "launch"
+    launch.mkdir()
+    moved = tmp_path / "launch-moved"
+    journal = launch / "SUBMISSION.jsonl"
+    posts = []
+
+    def handler(req):
+        if req.method == "GET":
+            return httpx.Response(200, json={"items": [], "has_more": False})
+        if req.url.path.endswith("/preview"):
+            return httpx.Response(200, json=preview())
+        posts.append(req.url.path)
+        return httpx.Response(202, json=creator_row())
+
+    def replace_directory(_proof):
+        launch.rename(moved)
+        launch.mkdir()
+        return "sha256:" + "f" * 64
+
+    with client(handler) as api:
+        with pytest.raises(JobsError, match="journal directory changed before durable intent"):
+            api.submit_once(config(), journal, before_intent=replace_directory)
+        assert posts == []
+        assert not journal.exists()
+        assert not (moved / journal.name).exists()
+        assert api.submit_once(config(), journal)["status"] == "QUEUED"
+    assert posts == ["/v1/runs"]
+
+
+def test_replaced_journal_directory_after_intent_blocks_the_post(tmp_path, monkeypatch) -> None:
+    launch = tmp_path / "launch"
+    launch.mkdir()
+    moved = tmp_path / "launch-moved"
+    journal = launch / "SUBMISSION.jsonl"
+    posts = []
+    swapped = False
+    original_fsync = os.fsync
+
+    def fsync(descriptor):
+        nonlocal swapped
+        result = original_fsync(descriptor)
+        if not swapped and stat.S_ISDIR(os.fstat(descriptor).st_mode) and journal.exists():
+            launch.rename(moved)
+            launch.mkdir()
+            swapped = True
+        return result
+
+    def handler(req):
+        if req.method == "GET":
+            return httpx.Response(200, json={"items": [], "has_more": False})
+        if req.url.path.endswith("/preview"):
+            return httpx.Response(200, json=preview())
+        posts.append(req.url.path)
+        return httpx.Response(202, json=creator_row())
+
+    monkeypatch.setattr(jobs_module.os, "fsync", fsync)
+    with (
+        client(handler) as api,
+        pytest.raises(JobsError, match="journal directory changed after durable intent"),
+    ):
+        api.submit_once(config(), journal)
+    assert swapped is True
+    assert posts == []
+    assert not journal.exists()
+    assert (moved / journal.name).exists()
+
+
 def test_expired_authority_stops_before_callback_intent_and_post(tmp_path, monkeypatch) -> None:
     journal = tmp_path / "intent.jsonl"
     calls = []

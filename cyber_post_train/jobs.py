@@ -688,6 +688,30 @@ class Jobs:
         directory_fd = -1
         journal_fd = -1
         temporary_name = f".{journal.name}.{uuid4().hex}.tmp"
+
+        def require_attached_journal_directory(*, durable_intent: bool) -> None:
+            try:
+                opened = os.fstat(directory_fd)
+                named = os.stat(journal.parent, follow_symlinks=False)
+            except OSError as exc:
+                suffix = (
+                    " after durable intent; reconcile, never repeat POST"
+                    if durable_intent
+                    else " before durable intent"
+                )
+                raise JobsError("submission journal directory became unavailable" + suffix) from exc
+            if (
+                not stat.S_ISDIR(named.st_mode)
+                or named.st_dev != opened.st_dev
+                or named.st_ino != opened.st_ino
+            ):
+                suffix = (
+                    " after durable intent; reconcile, never repeat POST"
+                    if durable_intent
+                    else " before durable intent"
+                )
+                raise JobsError("submission journal directory changed" + suffix)
+
         try:
             directory_fd = os.open(
                 journal.parent,
@@ -731,6 +755,7 @@ class Jobs:
                     raise OSError("submission intent write made no progress")
                 written += count
             os.fsync(journal_fd)
+            require_attached_journal_directory(durable_intent=False)
             os.link(
                 temporary_name,
                 journal.name,
@@ -767,6 +792,7 @@ class Jobs:
                     "submission authority expired after durable intent; "
                     "reconcile, never repeat POST"
                 )
+            require_attached_journal_directory(durable_intent=True)
             # Do not wrap this POST in retry logic, even for a timeout or HTTP error.
             response = self.request("POST", "/v1/runs", json=config)
             result = validate_creator_response(config, response)
