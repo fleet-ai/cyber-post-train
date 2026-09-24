@@ -3,12 +3,14 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
 
 from cyber_post_train.jobs import digest
 from training import dev_cleanup_observer as cleanup
+from training import miles96_exact_image_preflight as image_preflight
 from training import miles96_mechanics_canary as mechanics
 from training import miles96_mechanics_launch as launch
 from training import miles96_signal_qualification as signal
@@ -85,6 +87,8 @@ def _static_evidence():
     lanes = transition._lane_receipts()
     adapter_commit = "1" * 40
     operator_commit = "2" * 40
+    packet, config_map, job = image_preflight.build_packet(operator_commit)
+    previewed_at = transition._stamp(NOW - dt.timedelta(seconds=2))
     adapter_tests = transition._sealed(
         {
             "schema": transition.TEST_RECEIPT_SCHEMA,
@@ -107,9 +111,16 @@ def _static_evidence():
             "runtime_image": mechanics.IMAGE,
             "image_digest": "sha256:" + mechanics.IMAGE.rsplit("@sha256:", 1)[1],
             "source_closure_sha256": "sha256:" + digest(signal.runtime_source_manifest()),
+            "driver_sha256": packet["driver_sha256"],
+            "runtime_bundle_sha256": packet["runtime_bundle_sha256"],
+            "plan_sha256": packet["plan_sha256"],
             "raw_tool_catalog_sha256": mechanics.RAW_TOOL_CATALOG_SHA256,
             "openai_tool_catalog_sha256": mechanics.OPENAI_TOOL_CATALOG_SHA256,
             "tool_transform_source_sha256": "sha256:" + mechanics.FTI_V1_SHA256,
+            "source_hashes": {
+                name: "sha256:" + value
+                for name, value in image_preflight.EXPECTED_SOURCE_HASHES.items()
+            },
             "checks": {
                 "image_digest_exact": True,
                 "pinned_fti_imports": True,
@@ -129,11 +140,17 @@ def _static_evidence():
         {
             "schema": transition.IMAGE_PREFLIGHT_EXECUTION_SCHEMA,
             "status": "passed",
-            "job_name": "chris-q38-m96-image-preflight-test-v1",
+            "job_name": packet["name"],
+            "config_map_name": packet["config_map"],
             "namespace": mechanics.NAMESPACE,
             "kubernetes_context": mechanics.PROD_CONTEXT,
             "job_uid": "00000000-0000-4000-8000-000000000001",
             "pod_uid": "00000000-0000-4000-8000-000000000002",
+            "pod_owner_job_uid": "00000000-0000-4000-8000-000000000001",
+            "config_map_uid": "00000000-0000-4000-8000-000000000003",
+            "workload_name": packet["name"] + "-00000001",
+            "workload_uid": "00000000-0000-4000-8000-000000000004",
+            "workload_owner_job_uid": "00000000-0000-4000-8000-000000000001",
             "runtime_image": mechanics.IMAGE,
             "observed_image_id": mechanics.IMAGE,
             "priority_class": "c1",
@@ -144,12 +161,42 @@ def _static_evidence():
             "requested_gpus": 0,
             "pod_restarts": 0,
             "exit_code": 0,
-            "preview_manifest_sha256": "sha256:" + "a" * 64,
-            "preview_count": 2,
+            "job_server_previews": [
+                image_preflight.preview_receipt(job, job, observed_at=previewed_at),
+                image_preflight.preview_receipt(job, job, observed_at=previewed_at),
+            ],
+            "config_map_server_previews": [
+                image_preflight.preview_receipt(config_map, config_map, observed_at=previewed_at),
+                image_preflight.preview_receipt(config_map, config_map, observed_at=previewed_at),
+            ],
+            "precreate_absence_receipt": image_preflight.absence_receipt(
+                job_absent=True,
+                config_map_absent=True,
+                pod_prefix_collision_count=0,
+                workload_prefix_collision_count=0,
+                observed_at=transition._stamp(NOW - dt.timedelta(seconds=1)),
+            ),
+            "created_at": transition._stamp(NOW),
+            "job_manifest_sha256": packet["job_manifest_sha256"],
+            "config_map_manifest_sha256": packet["config_map_manifest_sha256"],
+            "driver_sha256": packet["driver_sha256"],
+            "runtime_bundle_sha256": packet["runtime_bundle_sha256"],
+            "plan_sha256": packet["plan_sha256"],
             "preflight_receipt_sha256": image["sha256"],
+            "precreate_job_absent": True,
+            "precreate_config_map_absent": True,
+            "absence_observed_at": transition._stamp(NOW - dt.timedelta(seconds=1)),
             "cleanup_job_uid": "00000000-0000-4000-8000-000000000001",
+            "cleanup_config_map_uid": "00000000-0000-4000-8000-000000000003",
+            "job_delete_uid_precondition": "00000000-0000-4000-8000-000000000001",
+            "config_map_delete_uid_precondition": "00000000-0000-4000-8000-000000000003",
+            "job_delete_accepted": True,
+            "config_map_delete_accepted": True,
+            "workload_cleanup_mode": "job_foreground_cascade",
             "job_absent_after_cleanup": True,
             "pod_absent_after_cleanup": True,
+            "config_map_absent_after_cleanup": True,
+            "workload_absent_after_cleanup": True,
             "resources_released": True,
             "observed_at": transition._stamp(NOW),
             "released_at": transition._stamp(NOW + dt.timedelta(seconds=1)),
@@ -243,6 +290,23 @@ def _lane():
     return row, plan, request
 
 
+def _parent_review(candidate):
+    return transition._sealed(
+        {
+            "schema": transition.REVIEW_SCHEMA,
+            "candidate_sha256": candidate["sha256"],
+            "approved": True,
+            "reviewer": "root",
+            "reviewed_at": transition._stamp(NOW),
+            "evidence_file_sha256s": {
+                key: value
+                for key, value in candidate["future_bindings"]["pins"].items()
+                if key.endswith("_file_sha256")
+            },
+        }
+    )
+
+
 def _reseal_wrapper(wrapper):
     body = transition._sealed(
         {key: value for key, value in wrapper["body"].items() if key != "sha256"}
@@ -252,17 +316,80 @@ def _reseal_wrapper(wrapper):
     return wrapper
 
 
+def test_exact_image_packet_is_deterministic_and_safe():
+    commit = "2" * 40
+    packet, config_map, job = image_preflight.build_packet(commit)
+    assert (packet, config_map, job) == image_preflight.build_packet(commit)
+    assert packet["external_post_count"] == 0
+    assert packet["requested_gpus"] == 0
+    assert packet["job_manifest_sha256"] == "sha256:" + digest(job)
+    assert packet["config_map_manifest_sha256"] == "sha256:" + digest(config_map)
+    assert config_map["immutable"] is True
+    assert config_map["data"]["driver.py"] == Path(image_preflight.__file__).read_text()
+    assert job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+    assert job["spec"]["suspend"] is True
+    assert job["spec"]["backoffLimit"] == 0
+    pod = job["spec"]["template"]["spec"]
+    assert pod["automountServiceAccountToken"] is False
+    assert pod["restartPolicy"] == "Never"
+    assert pod["priorityClassName"] == "c1"
+    assert "nvidia.com/gpu" not in json.dumps(pod["containers"][0]["resources"])
+
+
+def test_server_preview_receipts_bind_full_normalized_bodies():
+    _packet, config_map, job = image_preflight.build_packet("2" * 40)
+    rendered = deepcopy(job)
+    rendered["metadata"]["uid"] = "00000000-0000-4000-8000-000000000001"
+    rendered["status"] = {"active": 0}
+    rendered["spec"]["selector"] = {"matchLabels": {"controller-uid": "volatile"}}
+    rendered["spec"]["template"]["metadata"]["labels"]["controller-uid"] = "volatile"
+    receipt = image_preflight.preview_receipt(rendered, job, observed_at=transition._stamp(NOW))
+    image_preflight.validate_preview_receipt(receipt, job)
+    assert "status" not in receipt["normalized_manifest"]
+    assert "selector" not in receipt["normalized_manifest"]["spec"]
+
+    config_receipt = image_preflight.preview_receipt(
+        config_map, config_map, observed_at=transition._stamp(NOW)
+    )
+    image_preflight.validate_preview_receipt(config_receipt, config_map)
+
+
+def test_server_preview_rejects_alert_and_gpu_drift():
+    _packet, _config_map, job = image_preflight.build_packet("2" * 40)
+    alert = deepcopy(job)
+    alert["metadata"]["annotations"]["fleet.ai/failure-alerts"] = "on"
+    with pytest.raises(ValueError, match="differs"):
+        image_preflight.preview_receipt(alert, job, observed_at=transition._stamp(NOW))
+    gpu = deepcopy(job)
+    gpu["spec"]["template"]["spec"]["containers"][0]["resources"]["limits"]["nvidia.com/gpu"] = "1"
+    with pytest.raises(ValueError, match="zero-GPU"):
+        image_preflight.validate_server_manifest(gpu, gpu)
+
+
+def test_observed_image_id_extracts_exact_digest_from_cri_forms():
+    image_digest = mechanics.IMAGE.rsplit("@", 1)[1]
+    assert transition._image_id_digest(mechanics.IMAGE) == image_digest
+    assert transition._image_id_digest("containerd://" + image_digest) == image_digest
+    assert transition._image_id_digest("sha256:" + "0" * 64) != image_digest
+
+
 @pytest.mark.parametrize(
     ("field", "bad_value"),
     [
         ("status", "failed"),
         ("job_name", "other-preflight"),
+        ("config_map_name", "other-config"),
         ("namespace", "default"),
         ("kubernetes_context", "dev-context"),
         ("runtime_image", "registry.invalid/example@sha256:" + "0" * 64),
         ("observed_image_id", "registry.invalid/example@sha256:" + "0" * 64),
         ("job_uid", "not-a-uuid"),
         ("pod_uid", "not-a-uuid"),
+        ("pod_owner_job_uid", "00000000-0000-4000-8000-000000000002"),
+        ("config_map_uid", "not-a-uuid"),
+        ("workload_name", "unowned-workload"),
+        ("workload_uid", "not-a-uuid"),
+        ("workload_owner_job_uid", "00000000-0000-4000-8000-000000000002"),
         ("priority_class", "c0"),
         ("queue_priority", "q0"),
         ("root_failure_alerts", "on"),
@@ -271,12 +398,31 @@ def _reseal_wrapper(wrapper):
         ("requested_gpus", 1),
         ("pod_restarts", 1),
         ("exit_code", 1),
-        ("preview_manifest_sha256", "not-a-sha"),
-        ("preview_count", 1),
+        ("job_server_previews", []),
+        ("config_map_server_previews", []),
+        ("precreate_absence_receipt", {}),
+        ("job_manifest_sha256", "sha256:" + "0" * 64),
+        ("config_map_manifest_sha256", "sha256:" + "0" * 64),
+        ("driver_sha256", "sha256:" + "0" * 64),
+        ("runtime_bundle_sha256", "sha256:" + "0" * 64),
+        ("plan_sha256", "sha256:" + "0" * 64),
         ("preflight_receipt_sha256", "sha256:" + "0" * 64),
+        ("precreate_job_absent", False),
+        ("precreate_config_map_absent", False),
         ("cleanup_job_uid", "00000000-0000-4000-8000-000000000003"),
+        ("cleanup_config_map_uid", "00000000-0000-4000-8000-000000000001"),
+        ("job_delete_uid_precondition", "00000000-0000-4000-8000-000000000002"),
+        (
+            "config_map_delete_uid_precondition",
+            "00000000-0000-4000-8000-000000000001",
+        ),
+        ("job_delete_accepted", False),
+        ("config_map_delete_accepted", False),
+        ("workload_cleanup_mode", "name_only"),
         ("job_absent_after_cleanup", False),
         ("pod_absent_after_cleanup", False),
+        ("config_map_absent_after_cleanup", False),
+        ("workload_absent_after_cleanup", False),
         ("resources_released", False),
         ("released_at", "2026-09-24T08:59:59Z"),
     ],
@@ -287,13 +433,62 @@ def test_exact_image_execution_receipt_tamper_fails_closed(field, bad_value):
     wrapper = evidence["exact_image_preflight_execution_receipt"]
     wrapper["body"][field] = bad_value
     _reseal_wrapper(wrapper)
+    packet, config_map, job = image_preflight.build_packet("2" * 40)
     with pytest.raises(ValueError, match="execution receipt is incomplete"):
         transition._validate_image_preflight_execution(
             wrapper,
             expected_file_sha256=wrapper["file_sha256"],
             expected_runtime_image=mechanics.IMAGE,
             expected_preflight_sha256=image["sha256"],
+            expected_packet=packet,
+            expected_config_map=config_map,
+            expected_job=job,
         )
+
+
+def test_exact_image_execution_rejects_preview_body_and_absence_drift():
+    packet, config_map, job = image_preflight.build_packet("2" * 40)
+    for section in ("job_server_previews", "precreate_absence_receipt"):
+        evidence = _static_evidence()
+        image = evidence["exact_image_preflight_receipt"]["body"]
+        wrapper = evidence["exact_image_preflight_execution_receipt"]
+        if section == "job_server_previews":
+            preview = wrapper["body"][section][0]
+            preview["normalized_manifest"]["metadata"]["annotations"]["fleet.ai/failure-alerts"] = (
+                "on"
+            )
+            preview["normalized_manifest_sha256"] = "sha256:" + image_preflight.canonical_digest(
+                preview["normalized_manifest"]
+            )
+            wrapper["body"][section][0] = image_preflight.sealed(
+                {key: value for key, value in preview.items() if key != "sha256"}
+            )
+        else:
+            absence = wrapper["body"][section]
+            absence["job_absent"] = False
+            wrapper["body"][section] = image_preflight.sealed(
+                {key: value for key, value in absence.items() if key != "sha256"}
+            )
+        _reseal_wrapper(wrapper)
+        with pytest.raises(ValueError, match="execution receipt is incomplete"):
+            transition._validate_image_preflight_execution(
+                wrapper,
+                expected_file_sha256=wrapper["file_sha256"],
+                expected_runtime_image=mechanics.IMAGE,
+                expected_preflight_sha256=image["sha256"],
+                expected_packet=packet,
+                expected_config_map=config_map,
+                expected_job=job,
+            )
+
+
+def test_static_gate_requires_exact_image_source_hashes(live_receipt):
+    evidence = _static_evidence()
+    wrapper = evidence["exact_image_preflight_receipt"]
+    wrapper["body"]["source_hashes"]["fti.fleet.v1"] = "sha256:" + "0" * 64
+    _reseal_wrapper(wrapper)
+    candidate = transition.build_review_candidate(live_receipt, evidence, observed_at=NOW)
+    assert candidate["gates"][0]["passed"] is False
 
 
 def test_static_gate_requires_execution_body_and_adapter_cross_link(live_receipt):
@@ -480,15 +675,7 @@ def test_sha_shaped_claims_cannot_replace_receipt_bodies(live_receipt):
 
 def test_parent_review_digest_is_an_independent_required_pin(live_receipt):
     candidate = transition.build_review_candidate(live_receipt, _static_evidence(), observed_at=NOW)
-    review = transition._sealed(
-        {
-            "schema": transition.REVIEW_SCHEMA,
-            "candidate_sha256": candidate["sha256"],
-            "approved": True,
-            "reviewer": "root",
-            "reviewed_at": transition._stamp(NOW),
-        }
-    )
+    review = _parent_review(candidate)
     with pytest.raises(ValueError, match="independently pinned"):
         transition.validate_parent_review(
             candidate,
@@ -496,19 +683,21 @@ def test_parent_review_digest_is_an_independent_required_pin(live_receipt):
             expected_parent_review_sha256="sha256:" + "0" * 64,
         )
 
+    review = _parent_review(candidate)
+    review["evidence_file_sha256s"]["adapter_freeze_file_sha256"] = "sha256:" + "0" * 64
+    review = transition._sealed({key: value for key, value in review.items() if key != "sha256"})
+    with pytest.raises(ValueError, match="independently pinned"):
+        transition.validate_parent_review(
+            candidate,
+            review,
+            expected_parent_review_sha256=review["sha256"],
+        )
+
 
 def test_lane_successor_binds_exact_post_time_receipts(live_receipt):
     _, plan, request = _lane()
     candidate = transition.build_review_candidate(live_receipt, _static_evidence(), observed_at=NOW)
-    review = transition._sealed(
-        {
-            "schema": transition.REVIEW_SCHEMA,
-            "candidate_sha256": candidate["sha256"],
-            "approved": True,
-            "reviewer": "root",
-            "reviewed_at": transition._stamp(NOW),
-        }
-    )
+    review = _parent_review(candidate)
     bundle = _post_bundle(plan, request)
     approved = transition.approve_review_candidate(
         candidate,
