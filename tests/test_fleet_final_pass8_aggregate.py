@@ -1586,9 +1586,9 @@ def test_reviewed_stored_session_needs_matching_private_reconciliation(tmp_path:
     plan, snapshots = _study(tmp_path)
     _add_reconciliation(plan, snapshots)
 
-    final.finalize(plan, snapshots, output_root=_test_path(plan["private_output_root"]))
-
-    assert (_test_path(plan["private_output_root"]) / "FINAL.json").is_file()
+    with pytest.raises(final.FinalAggregateError, match="held or infrastructure-invalid"):
+        final.finalize(plan, snapshots, output_root=_test_path(plan["private_output_root"]))
+    assert all(value.score_reads == 0 for value in snapshots.values())
 
 
 def test_legacy_reconciliation_receipt_is_fully_bound_before_score_open(tmp_path: Path) -> None:
@@ -1612,9 +1612,9 @@ def test_legacy_reconciliation_receipt_is_fully_bound_before_score_open(tmp_path
     detail["failure_code"] = "stored_session.owner_terminal"
     event["detail_json"] = json.dumps(detail)
 
-    final.finalize(plan, snapshots, output_root=_test_path(plan["private_output_root"]))
-
-    assert (_test_path(plan["private_output_root"]) / "FINAL.json").is_file()
+    with pytest.raises(final.FinalAggregateError, match="held or infrastructure-invalid"):
+        final.finalize(plan, snapshots, output_root=_test_path(plan["private_output_root"]))
+    assert all(value.score_reads == 0 for value in snapshots.values())
 
 
 def _as_subset_receipt(evidence: dict[str, Any]) -> None:
@@ -1650,9 +1650,9 @@ def test_subset_reconciliation_state_transition_is_fully_bound(tmp_path: Path) -
     evidence = _add_reconciliation(plan, snapshots)
     _as_subset_receipt(evidence)
 
-    final.finalize(plan, snapshots, output_root=_test_path(plan["private_output_root"]))
-
-    assert (_test_path(plan["private_output_root"]) / "FINAL.json").is_file()
+    with pytest.raises(final.FinalAggregateError, match="held or infrastructure-invalid"):
+        final.finalize(plan, snapshots, output_root=_test_path(plan["private_output_root"]))
+    assert all(value.score_reads == 0 for value in snapshots.values())
 
 
 @pytest.mark.parametrize("drift", ("total", "states", "local_counts"))

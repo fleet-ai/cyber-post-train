@@ -44,12 +44,13 @@ proved all of the following:
 - the sole intended model revision and serving route are exact for each arm;
 - every replica ledger contains the same 17 task versions exactly once;
 - every cell is `accepted`, is classified `valid`, has no active lease or
-  failure code, and has exactly one private local-result record;
+  failure code, has exactly one private local-result record, and that record
+  proves exit zero plus a normal OpenCode completion;
 - every ordinary accepted cell has one exact, self-digested `ACCEPTED.json`
   that matches its cell, execution, session, verifier, configuration, and
-  completed cleanup/ingest lifecycle; a result recovered from an
-  already-completed stored session instead needs its exact private
-  reconciliation receipt and source process lifecycle;
+  completed cleanup/ingest lifecycle; a reconciliation may preserve an
+  already-scored stored session, but an output-limit or nonzero-process
+  lifecycle still remains held and cannot enter a capability aggregate;
 - the pre-reconciliation terminal census has exactly as many unresolved cells
   as the final ledger has valid, receipt-backed reconciliations; and
 - there are no pending, active, review-held, terminally invalid, missing, or
