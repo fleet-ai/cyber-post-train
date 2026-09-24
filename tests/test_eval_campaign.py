@@ -336,6 +336,16 @@ def test_fleet_preview_requires_root_alert_opt_out(tmp_path: Path):
     assert result["counts"] == {"rollout_pending": 16}
 
 
+def test_fail_fast_stops_after_first_driver_error(tmp_path: Path):
+    script = tmp_path / "driver.py"
+    script.write_text(DRIVER)
+    state = _prepare(tmp_path, _config(script, bad_alert=True))
+    result = step(state, fail_fast=True)
+    assert result["advanced"] == 0
+    assert len(result["errors"]) == 1
+    assert result["counts"] == {"rollout_pending": 16}
+
+
 def test_capacity_deferral_precedes_claim_and_launch_intent(tmp_path: Path):
     script = tmp_path / "driver.py"
     script.write_text(DRIVER)

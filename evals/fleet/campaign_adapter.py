@@ -14,7 +14,10 @@ import hashlib
 import json
 import os
 import re
+import sys
+import tempfile
 from collections.abc import Callable
+from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -26,8 +29,10 @@ from evals.fleet import evaluate, heldout_launch, outcome_validity
 from evals.fleet import opencode_self_hosted as harness
 
 SCHEMA = "cyber_fleet_campaign_bindings_v1"
+WAVE_BINDING_SCHEMA = "cyber_fleet_campaign_bindings_v2"
 BUDGET_SCHEMA = "cyber_fleet_daily_rollout_budget_v1"
 RESERVATION_SCHEMA = "cyber_fleet_daily_rollout_reservation_v1"
+WAVE_RESERVATION_SCHEMA = "cyber_fleet_daily_rollout_wave_reservation_v1"
 BUDGET_ROOT = campaign.CANONICAL_REGISTRY / "fleet-daily-rollouts-v1"
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{1,127}")
 _SHA = re.compile(r"sha256:[0-9a-f]{64}")
@@ -47,10 +52,6 @@ def _digest(value: object) -> str:
     ).hexdigest()
 
 
-def _file_digest(path: Path) -> str:
-    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def _read(path: Path) -> dict[str, Any]:
     if path.is_symlink() or not path.is_file():
         raise AdapterError("required JSON evidence is absent")
@@ -63,13 +64,262 @@ def _read(path: Path) -> dict[str, Any]:
     return value
 
 
+def _mkdir_durable(path: Path) -> None:
+    missing: list[Path] = []
+    current = path
+    while not current.exists():
+        if current.is_symlink():
+            raise AdapterError("state directory must not be a symlink")
+        missing.append(current)
+        current = current.parent
+    if current.is_symlink() or not current.is_dir():
+        raise AdapterError("state directory parent is invalid")
+    for directory in reversed(missing):
+        try:
+            os.mkdir(directory, 0o700)
+        except FileExistsError:
+            if directory.is_symlink() or not directory.is_dir():
+                raise AdapterError("state directory is invalid") from None
+        parent = os.open(directory.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(parent)
+        finally:
+            os.close(parent)
+
+
 def _write_once(path: Path, value: dict[str, Any]) -> None:
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-        stream.write(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n")
-        stream.flush()
-        os.fsync(stream.fileno())
+    _mkdir_durable(path.parent)
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+    )
+    temporary = Path(temporary_name)
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.link(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        with suppress(FileNotFoundError):
+            os.unlink(temporary)
+
+
+def _reservation_index(
+    reservations: Path, *, date_utc: str
+) -> tuple[int, dict[tuple[str, str], dict[str, Any]], dict[str, dict[str, Any]]]:
+    total = 0
+    covered: dict[tuple[str, str], dict[str, Any]] = {}
+    waves: dict[str, dict[str, Any]] = {}
+    for path in reservations.glob("*.json"):
+        row = _read(path)
+        unsigned = {key: value for key, value in row.items() if key != "sha256"}
+        if row.get("sha256") != _digest(unsigned):
+            raise AdapterError("Fleet daily rollout reservation is invalid")
+        schema = row.get("schema")
+        if schema == RESERVATION_SCHEMA:
+            if set(row) != {
+                "schema",
+                "date_utc",
+                "group_id",
+                "count",
+                "packet_sha256",
+                "bindings_sha256",
+                "sha256",
+            }:
+                raise AdapterError("Fleet daily rollout reservation is invalid")
+            groups = [
+                {
+                    "group_id": row.get("group_id"),
+                    "count": row.get("count"),
+                    "packet_sha256": row.get("packet_sha256"),
+                }
+            ]
+        elif schema == WAVE_RESERVATION_SCHEMA:
+            if set(row) != {
+                "schema",
+                "date_utc",
+                "cap",
+                "count",
+                "reservation_id",
+                "packet_set_sha256",
+                "groups",
+                "bindings_sha256",
+                "sha256",
+            }:
+                raise AdapterError("Fleet daily rollout wave reservation is invalid")
+            _validate_digest(row.get("packet_set_sha256"), "wave packet set")
+            groups = row.get("groups")
+            if (
+                row.get("cap") != 500
+                or not isinstance(row.get("reservation_id"), str)
+                or _ID.fullmatch(row["reservation_id"]) is None
+                or not isinstance(groups, list)
+                or not groups
+            ):
+                raise AdapterError("Fleet daily rollout wave reservation is invalid")
+        else:
+            raise AdapterError("Fleet daily rollout reservation schema is invalid")
+        bindings_sha256 = _validate_digest(row.get("bindings_sha256"), "reservation bindings")
+        if schema == WAVE_RESERVATION_SCHEMA:
+            if bindings_sha256 in waves:
+                raise AdapterError("Fleet binding has more than one wave reservation")
+            waves[bindings_sha256] = row
+        if (
+            type(row.get("count")) is not int
+            or not 1 <= row["count"] <= 500
+            or row.get("date_utc") != date_utc
+        ):
+            raise AdapterError("Fleet daily rollout reservation is invalid")
+        group_total = 0
+        for group in groups:
+            if (
+                not isinstance(group, dict)
+                or set(group) != {"group_id", "count", "packet_sha256"}
+                or not isinstance(group["group_id"], str)
+                or _ID.fullmatch(group["group_id"]) is None
+                or type(group["count"]) is not int
+                or not 1 <= group["count"] <= 500
+            ):
+                raise AdapterError("Fleet daily rollout reservation group is invalid")
+            _validate_digest(group["packet_sha256"], "reservation packet")
+            key = (bindings_sha256, group["group_id"])
+            if key in covered:
+                raise AdapterError("Fleet daily rollout reservation group is duplicated")
+            covered[key] = group
+            group_total += group["count"]
+        if group_total != row["count"]:
+            raise AdapterError("Fleet daily rollout reservation count differs from its groups")
+        total += row["count"]
+    return total, covered, waves
+
+
+def reserve_wave(
+    binding: dict[str, Any],
+    reservation_id: str,
+    *,
+    expected_sessions: int,
+    packet_set_sha256: str,
+    root: Path = BUDGET_ROOT,
+) -> dict[str, Any]:
+    """Atomically reserve every source group in one campaign before any create."""
+    if not isinstance(reservation_id, str) or _ID.fullmatch(reservation_id) is None:
+        raise AdapterError("Fleet wave reservation id is invalid")
+    binding = _validate_bindings(binding)
+    if binding["schema"] != WAVE_BINDING_SCHEMA:
+        raise AdapterError("Fleet wave reservation requires a wave-bound campaign")
+    packet_set_sha256 = _validate_digest(packet_set_sha256, "wave packet set")
+    wave = binding["wave"]
+    if (
+        reservation_id != wave["reservation_id"]
+        or expected_sessions != wave["expected_sessions"]
+        or packet_set_sha256 != wave["packet_set_sha256"]
+    ):
+        raise AdapterError("Fleet wave reservation request differs from its binding")
+    budget = binding["budget"]
+    if budget["date_utc"] != datetime.now(UTC).date().isoformat():
+        raise AdapterError("Fleet daily budget census is not from today UTC")
+    groups = [
+        {
+            "group_id": group_id,
+            "count": len(group["cells"]),
+            "packet_sha256": group["packet_sha256"],
+        }
+        for group_id, group in sorted(binding["groups"].items())
+    ]
+    count = sum(group["count"] for group in groups)
+    if (
+        type(expected_sessions) is not int
+        or count != expected_sessions
+        or count != len(binding["cells"])
+        or not 1 <= count <= 500
+    ):
+        raise AdapterError("Fleet wave reservation does not cover every campaign cell")
+    day = root / budget["date_utc"]
+    if root.is_symlink() or day.is_symlink():
+        raise AdapterError("Fleet daily budget path must not be a symlink")
+    _mkdir_durable(day)
+    lock_path = day / ".lock"
+    if lock_path.is_symlink():
+        raise AdapterError("Fleet daily budget lock must not be a symlink")
+    lock_fd = os.open(
+        lock_path,
+        os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0),
+        0o600,
+    )
+    with os.fdopen(lock_fd, "a", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if budget["date_utc"] != datetime.now(UTC).date().isoformat():
+            raise AdapterError("Fleet daily budget UTC date changed while waiting for its lock")
+        baseline_path = day / "baseline.json"
+        baseline = {"schema": BUDGET_SCHEMA, **budget}
+        baseline = {**baseline, "sha256": _digest(baseline)}
+        if baseline_path.exists():
+            if _read(baseline_path) != baseline:
+                raise AdapterError("Fleet daily budget baseline differs")
+        else:
+            _write_once(baseline_path, baseline)
+        reservations = day / "reservations"
+        _mkdir_durable(reservations)
+        key = hashlib.sha256(
+            f"{reservation_id}:wave".encode()
+        ).hexdigest()
+        path = reservations / f"wave-{key}.json"
+        reservation = {
+            "schema": WAVE_RESERVATION_SCHEMA,
+            "date_utc": budget["date_utc"],
+            "cap": budget["cap"],
+            "count": count,
+            "reservation_id": reservation_id,
+            "packet_set_sha256": packet_set_sha256,
+            "groups": groups,
+            "bindings_sha256": binding["sha256"],
+        }
+        reservation = {**reservation, "sha256": _digest(reservation)}
+        existing = _read(path) if path.exists() else None
+        if existing is not None and existing != reservation:
+            raise AdapterError("Fleet daily rollout wave reservation differs")
+        total_reserved, covered, waves = _reservation_index(
+            reservations, date_utc=budget["date_utc"]
+        )
+        if budget["used"] + total_reserved > budget["cap"]:
+            raise AdapterError("Fleet daily rollout ledger exceeds its bound cap")
+        expected_keys = {(binding["sha256"], group["group_id"]) for group in groups}
+        already_covered = expected_keys & covered.keys()
+        if existing is None and already_covered:
+            raise AdapterError("Fleet wave overlaps an earlier partial reservation")
+        if existing is None:
+            if budget["used"] + total_reserved + count > budget["cap"]:
+                raise CapacityUnavailable("Fleet daily 500-rollout budget is exhausted")
+            _write_once(path, reservation)
+            total_reserved += count
+        elif already_covered != expected_keys:
+            raise AdapterError("Fleet wave reservation coverage is incomplete")
+        persisted_wave = waves.get(binding["sha256"])
+        if existing is not None and persisted_wave != reservation:
+            raise AdapterError("Fleet wave reservation differs after durable readback")
+        result = {
+            "schema": "cyber_fleet_daily_rollout_wave_reservation_receipt_v1",
+            "date_utc": budget["date_utc"],
+            "baseline_sha256": baseline["sha256"],
+            "bindings_sha256": binding["sha256"],
+            "reservation_id": reservation_id,
+            "packet_set_sha256": packet_set_sha256,
+            "used": budget["used"],
+            "reserved": total_reserved,
+            "committed_after": budget["used"] + total_reserved,
+            "cap": budget["cap"],
+            "wave_count": count,
+            "wave_sha256": reservation["sha256"],
+            "wave_path": str(path),
+            "replayed": existing is not None,
+        }
+        return {**result, "sha256": _digest(result)}
 
 
 def _validate_digest(value: object, label: str) -> str:
@@ -78,12 +328,15 @@ def _validate_digest(value: object, label: str) -> str:
     return value
 
 
-def load_bindings(path: Path) -> dict[str, Any]:
-    value = _read(path)
-    if set(value) != {"schema", "budget", "groups", "cells", "sha256"}:
+def _validate_bindings(value: dict[str, Any]) -> dict[str, Any]:
+    schema = value.get("schema")
+    expected_keys = {"schema", "budget", "groups", "cells", "sha256"}
+    if schema == WAVE_BINDING_SCHEMA:
+        expected_keys.add("wave")
+    if set(value) != expected_keys:
         raise AdapterError("Fleet campaign bindings have unknown or missing fields")
     unsigned = {key: item for key, item in value.items() if key != "sha256"}
-    if value["schema"] != SCHEMA or value["sha256"] != _digest(unsigned):
+    if schema not in {SCHEMA, WAVE_BINDING_SCHEMA} or value["sha256"] != _digest(unsigned):
         raise AdapterError("Fleet campaign bindings identity changed")
     budget = value["budget"]
     if not isinstance(budget, dict) or set(budget) != {
@@ -100,6 +353,25 @@ def load_bindings(path: Path) -> dict[str, Any]:
     if budget["cap"] != 500 or type(budget["used"]) is not int or not 0 <= budget["used"] <= 500:
         raise AdapterError("Fleet daily budget must bind the 500-rollout limit")
     _validate_digest(budget["census_receipt_sha256"], "budget census receipt")
+    if schema == WAVE_BINDING_SCHEMA:
+        wave = value["wave"]
+        if (
+            not isinstance(wave, dict)
+            or set(wave)
+            != {
+                "reservation_id",
+                "expected_sessions",
+                "packet_set_sha256",
+                "campaign_plan_sha256",
+            }
+            or not isinstance(wave["reservation_id"], str)
+            or _ID.fullmatch(wave["reservation_id"]) is None
+            or type(wave["expected_sessions"]) is not int
+            or not 1 <= wave["expected_sessions"] <= 500
+        ):
+            raise AdapterError("Fleet campaign wave binding is invalid")
+        _validate_digest(wave["packet_set_sha256"], "wave packet set")
+        _validate_digest(wave["campaign_plan_sha256"], "wave campaign plan")
     groups, cells = value["groups"], value["cells"]
     if not isinstance(groups, dict) or not groups or not isinstance(cells, dict) or not cells:
         raise AdapterError("Fleet campaign source groups and cells are required")
@@ -131,6 +403,8 @@ def load_bindings(path: Path) -> dict[str, Any]:
         assigned.update(members)
     if assigned != set(cells):
         raise AdapterError("Fleet source groups do not partition campaign cells")
+    if schema == WAVE_BINDING_SCHEMA and value["wave"]["expected_sessions"] != len(cells):
+        raise AdapterError("Fleet campaign wave count differs from its cells")
     required = {
         "group",
         "attempt",
@@ -162,6 +436,10 @@ def load_bindings(path: Path) -> dict[str, Any]:
     return value
 
 
+def load_bindings(path: Path) -> dict[str, Any]:
+    return _validate_bindings(_read(path))
+
+
 def _source(
     bindings_path: Path, target: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any], heldout_launch.Package, Path]:
@@ -172,12 +450,11 @@ def _source(
     cell = bindings["cells"][key]
     group = bindings["groups"][cell["group"]]
     packet = (bindings_path.resolve().parent / group["packet"]).resolve()
-    if (
-        bindings_path.resolve().parent not in packet.parents
-        or _file_digest(packet) != group["packet_sha256"]
-    ):
-        raise AdapterError("sealed Fleet source packet differs from its binding")
+    if bindings_path.resolve().parent not in packet.parents:
+        raise AdapterError("sealed Fleet source packet escapes its binding root")
     package = heldout_launch.build_package(packet)
+    if package.packet.packet_sha256 != group["packet_sha256"]:
+        raise AdapterError("sealed Fleet source packet differs from its binding")
     sealed = heldout_launch.sealed_evaluation(package)
     rows = {
         (row["task_version_id"], row["model_id"], row["model_revision"], row["attempt"])
@@ -312,9 +589,19 @@ def _budget(
     day = root / budget["date_utc"]
     if root.is_symlink() or day.is_symlink():
         raise AdapterError("Fleet daily budget path must not be a symlink")
-    day.mkdir(mode=0o700, parents=True, exist_ok=True)
-    with (day / ".lock").open("a", encoding="utf-8") as lock:
+    _mkdir_durable(day)
+    lock_path = day / ".lock"
+    if lock_path.is_symlink():
+        raise AdapterError("Fleet daily budget lock must not be a symlink")
+    lock_fd = os.open(
+        lock_path,
+        os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0),
+        0o600,
+    )
+    with os.fdopen(lock_fd, "a", encoding="utf-8") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
+        if budget["date_utc"] != datetime.now(UTC).date().isoformat():
+            raise AdapterError("Fleet daily budget UTC date changed while waiting for its lock")
         baseline_path = day / "baseline.json"
         baseline = {"schema": BUDGET_SCHEMA, **budget}
         baseline = {**baseline, "sha256": _digest(baseline)}
@@ -324,7 +611,7 @@ def _budget(
         elif reserve:
             _write_once(baseline_path, baseline)
         reservations = day / "reservations"
-        reservations.mkdir(mode=0o700, exist_ok=True)
+        _mkdir_durable(reservations)
         reservation_key = hashlib.sha256(
             f"{binding['sha256']}:{group_id}".encode()
         ).hexdigest()
@@ -341,30 +628,42 @@ def _budget(
         existing = _read(path) if path.exists() else None
         if existing is not None and existing != reservation:
             raise AdapterError("Fleet daily rollout reservation differs")
-        total_reserved = 0
-        for item in reservations.glob("*.json"):
-            row = _read(item)
-            unsigned = {key: value for key, value in row.items() if key != "sha256"}
-            if (
-                set(row)
-                != {
-                    "schema",
-                    "date_utc",
-                    "group_id",
-                    "count",
-                    "packet_sha256",
-                    "bindings_sha256",
-                    "sha256",
+        total_reserved, covered, waves = _reservation_index(
+            reservations, date_utc=budget["date_utc"]
+        )
+        if budget["used"] + total_reserved > budget["cap"]:
+            raise AdapterError("Fleet daily rollout ledger exceeds its bound cap")
+        coverage = covered.get((binding["sha256"], group_id))
+        if coverage is not None and coverage != {
+            "group_id": group_id,
+            "count": count,
+            "packet_sha256": packet_sha256,
+        }:
+            raise AdapterError("Fleet daily rollout reservation differs")
+        if binding["schema"] == WAVE_BINDING_SCHEMA:
+            wave = waves.get(binding["sha256"])
+            expected_wave = binding["wave"]
+            expected_groups = [
+                {
+                    "group_id": expected_group_id,
+                    "count": len(expected_group["cells"]),
+                    "packet_sha256": expected_group["packet_sha256"],
                 }
-                or row.get("schema") != RESERVATION_SCHEMA
-                or row.get("date_utc") != budget["date_utc"]
-                or type(row.get("count")) is not int
-                or not 1 <= row["count"] <= 500
-                or row.get("sha256") != _digest(unsigned)
+                for expected_group_id, expected_group in sorted(binding["groups"].items())
+            ]
+            if (
+                wave is None
+                or wave.get("reservation_id") != expected_wave["reservation_id"]
+                or wave.get("packet_set_sha256") != expected_wave["packet_set_sha256"]
+                or wave.get("count") != expected_wave["expected_sessions"]
+                or wave.get("groups") != expected_groups
+                or coverage is None
             ):
-                raise AdapterError("Fleet daily rollout reservation is invalid")
-            total_reserved += row.get("count", 0)
-        if existing is None:
+                raise CapacityUnavailable(
+                    "Fleet whole-wave reservation is absent; no source Job may be created"
+                )
+            return {"used": budget["used"], "reserved": total_reserved, "cap": budget["cap"]}
+        if existing is None and coverage is None:
             if budget["used"] + total_reserved + count > budget["cap"]:
                 raise CapacityUnavailable("Fleet daily 500-rollout budget is exhausted")
             if reserve:
@@ -404,6 +703,30 @@ def run_action(
 ) -> dict[str, Any]:
     target = _read(packet_path)
     bindings, cell, package, source_packet = _source(bindings_path, target)
+    if bindings["schema"] == WAVE_BINDING_SCHEMA:
+        state = packet_path.resolve().parents[2]
+        plan = campaign.load_plan(state)
+        expected_packet = state / "targets" / target["experiment_key"] / "packet.json"
+        planned_target = next(
+            (
+                item
+                for item in plan["targets"]
+                if item["experiment_key"] == target["experiment_key"]
+            ),
+            None,
+        )
+        driver = target.get("drivers", {}).get(phase, {})
+        source_sha256 = "sha256:" + hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+        if (
+            packet_path.resolve() != expected_packet
+            or planned_target != target
+            or plan["plan_sha256"] != bindings["wave"]["campaign_plan_sha256"]
+            or bindings_path.resolve() != state.parent / "fleet-bindings.json"
+            or duplicate_gate_evidence is None
+            or duplicate_gate_evidence.resolve() != state.parent / "duplicate-gate-evidence.json"
+            or driver.get("source_sha256") != source_sha256
+        ):
+            raise AdapterError("Fleet campaign control plane differs from its wave binding")
     group_id = cell["group"]
     group = bindings["groups"][group_id]
     root = _group_root(packet_path, group_id)
@@ -562,10 +885,10 @@ def run_action(
             )
             if root.is_symlink():
                 raise AdapterError("Fleet source group path must not be a symlink")
-            root.mkdir(mode=0o700, parents=True, exist_ok=True)
+            _mkdir_durable(root)
             launch_kwargs = {"output_exists": output_exists} if output_exists else {}
-            result = heldout_launch.launch_once(
-                source_packet,
+            result = heldout_launch.launch_package_once(
+                package,
                 cluster=cluster,
                 database=duplicate_database,
                 journal=root / "create-intent.jsonl",
@@ -595,8 +918,14 @@ def run_action(
         raise AdapterError("Fleet source Job has not been launched")
     launch = _read(launch_receipt)
     job = cluster.get("jobs.batch", package.packet.namespace, package.packet.job_name)
-    if job.get("metadata", {}).get("uid") != shared["job_uid"]:
-        raise AdapterError("Fleet source Job UID changed")
+    config_map = cluster.get(
+        "configmaps", package.packet.namespace, package.packet.config_map_name
+    )
+    if (
+        job.get("metadata", {}).get("uid") != shared["job_uid"]
+        or config_map.get("metadata", {}).get("uid") != shared["config_map_uid"]
+    ):
+        raise AdapterError("Fleet source Job or ConfigMap UID changed")
     conditions = {
         row.get("type")
         for row in job.get("status", {}).get("conditions", [])
@@ -627,8 +956,25 @@ def run_action(
         source_terminal.get("schema") != heldout_launch.TERMINAL_SCHEMA
         or source_terminal.get("sha256") != _digest(terminal_unsigned)
         or source_terminal.get("job", {}).get("uid") != shared["job_uid"]
+        or source_terminal.get("config_map", {}).get("uid") != shared["config_map_uid"]
+        or source_terminal.get("evaluation_identity_sha256")
+        != shared["evaluation_identity_sha256"]
     ):
         raise AdapterError("shared Fleet terminal evidence is invalid")
+    final_job = cluster.get("jobs.batch", package.packet.namespace, package.packet.job_name)
+    final_config_map = cluster.get(
+        "configmaps", package.packet.namespace, package.packet.config_map_name
+    )
+    final_pods = heldout_launch._owned_pods(cluster, package.packet)  # noqa: SLF001
+    final_pod_rows = heldout_launch._terminal_resource_rows(  # noqa: SLF001
+        final_pods, kind="Pod"
+    )
+    if (
+        final_job.get("metadata", {}).get("uid") != shared["job_uid"]
+        or final_config_map.get("metadata", {}).get("uid") != shared["config_map_uid"]
+        or source_terminal.get("pods") != final_pod_rows
+    ):
+        raise AdapterError("Fleet terminal resource identity changed during collection")
     try:
         row = database.cell_status(
             package.packet.database,
@@ -678,6 +1024,24 @@ def run_action(
 
 
 def main(argv: list[str] | None = None) -> None:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["reserve-wave"]:
+        reserve_parser = argparse.ArgumentParser()
+        reserve_parser.add_argument("command", choices=["reserve-wave"])
+        reserve_parser.add_argument("bindings", type=Path)
+        reserve_parser.add_argument("receipt", type=Path)
+        reserve_parser.add_argument("--reservation-id", required=True)
+        reserve_parser.add_argument("--expected-sessions", required=True, type=int)
+        reserve_parser.add_argument("--packet-set-sha256", required=True)
+        args = reserve_parser.parse_args(argv)
+        result = reserve_wave(
+            load_bindings(args.bindings),
+            args.reservation_id,
+            expected_sessions=args.expected_sessions,
+            packet_set_sha256=args.packet_set_sha256,
+        )
+        _write_once(args.receipt, result)
+        return
     parser = argparse.ArgumentParser()
     parser.add_argument("action", choices=campaign.ACTIONS)
     parser.add_argument("phase", choices=campaign.PHASES)
