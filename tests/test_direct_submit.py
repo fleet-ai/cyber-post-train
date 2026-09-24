@@ -33,6 +33,7 @@ from cyber_post_train.direct_submit import (
     create_sfs_output_check_once,
     direct_submit_lr30_qualification_once,
     direct_submit_sft_once,
+    normalize_pod_server_dry_run,
     render_cpu_checkpoint_seal_pod,
     render_lr30_qualification_rayjob,
     render_sft_rayjob,
@@ -56,6 +57,35 @@ from training import sft
 RUN_ID = "12345678-1234-4234-9234-123456789abc"
 CREATED_UID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
 SOURCE_COMMIT = "a108edff2062558359cc72ebdfaf5d40cadeb333"
+
+
+def test_pod_server_dry_run_normalization_keeps_the_effective_contract():
+    preview = {
+        "apiVersion": "v1",
+        "kind": "Pod",
+        "metadata": {
+            "name": "owned-pod",
+            "namespace": "fleet-train-jobs",
+            "uid": "a" * 36,
+            "creationTimestamp": "2026-09-24T00:00:00Z",
+            "generation": 1,
+            "annotations": {"fleet.ai/failure-alerts": "off"},
+        },
+        "spec": {"priorityClassName": "c1", "containers": [{"name": "run"}]},
+        "status": {},
+    }
+    later = deepcopy(preview)
+    later["metadata"].update(uid="b" * 36, creationTimestamp="2026-09-24T00:01:00Z")
+    expected = normalize_pod_server_dry_run(preview)
+    assert normalize_pod_server_dry_run(later) == expected
+
+    changed_spec = deepcopy(later)
+    changed_spec["spec"]["priorityClassName"] = "c0"
+    assert normalize_pod_server_dry_run(changed_spec) != expected
+
+    changed_annotation = deepcopy(later)
+    changed_annotation["metadata"]["annotations"]["fleet.ai/failure-alerts"] = "on"
+    assert normalize_pod_server_dry_run(changed_annotation) != expected
 
 
 @pytest.fixture(autouse=True)

@@ -1235,6 +1235,19 @@ def validate_direct_dev_gpu_reload_precreate(
     return census
 
 
+def normalize_pod_server_dry_run(preview: dict) -> dict:
+    """Remove only API-assigned Pod identity before comparing dry runs."""
+    if preview.get("apiVersion") != "v1" or preview.get("kind") != "Pod":
+        raise JobsError("server dry-run response is not a Pod")
+    normalized = deepcopy(preview)
+    metadata = normalized.get("metadata")
+    if not isinstance(metadata, dict):
+        raise JobsError("server dry-run Pod metadata is malformed")
+    for field in _RAY_SERVER_METADATA_FIELDS:
+        metadata.pop(field, None)
+    return normalized
+
+
 class Kubectl:
     """Small no-shell Kubernetes boundary; mutation is create-only and never retried."""
 
