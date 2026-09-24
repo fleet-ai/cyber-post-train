@@ -40,16 +40,13 @@ QUALIFICATION = {
         ),
     },
 }
-RELEASE_SUPERVISION = {
-    "schema": "qwen38_262k_4node_release_supervision_v1",
-    "status": "absent_blocks_submission",
-    "poll_seconds": 60,
-    "external_deadlines": {
-        "gpu_allocation_to_authenticated_started_seconds": 1800,
-        "authenticated_started_to_forced_terminal_action_seconds": 29100,
-        "gpu_allocation_to_forced_terminal_action_seconds": 30900,
-        "gpu_allocation_to_release_confirmation_outer_bound_seconds": 31500,
-    },
+STANDARD_JOBS_RAIL = {
+    "schema": "qwen38_262k_4node_standard_jobs_rail_v1",
+    "submission_route": "Jobs.submit_once",
+    "operator_preview_required_before_submit": True,
+    "submit_repeats_server_preview": True,
+    "complete_duplicate_census_required": True,
+    "durable_intent_journal": "SUBMISSION.jsonl",
     "runtime_watchdog_bounds": {
         "anchor": "ProgressWatchdog construction in _wait_for_training",
         "startup_seconds": 1800,
@@ -57,19 +54,18 @@ RELEASE_SUPERVISION = {
         "hard_seconds": 28800,
         "checkpoint_drain_seconds": 300,
     },
-    "required_uid_bindings": [
-        "RayJob",
-        "RayCluster",
-        "Kueue Workload",
-        "all Pods",
-    ],
-    "terminal_release_grace_seconds": 300,
-    "post_delete_confirmation_seconds": 300,
-    "terminal_proof": [
-        "all bound Kubernetes objects absent",
-        "all 32 requested GPUs released",
-    ],
-    "uncertain_create_policy": ("reconcile the exact rendered name and run ID before any retry"),
+    "rendered_root_contract": {
+        "failure_alerts": "off",
+        "priority_class": "c1",
+        "queue_priority": "q1",
+        "shutdown_after_job_finishes": True,
+        "ttl_seconds_after_finished": 0,
+    },
+    "monitoring": {
+        "identity": "exact Jobs API run name and Kubernetes UIDs",
+        "release_route": "one exact Jobs API DELETE after confirmed failure or stall",
+        "uncertain_delete_policy": "reconcile exact API and Kubernetes state before any retry",
+    },
 }
 SUBMISSION_GATE = {
     "preview_authorized": True,
@@ -77,10 +73,9 @@ SUBMISSION_GATE = {
     "submission_authorized": False,
     "blockers": [
         "zero-GPU preflight receipt absent",
-        "independent exact-UID release supervision absent",
         "four-node GPU launch has not received root review",
     ],
-    "required_release_supervision": RELEASE_SUPERVISION,
+    "required_standard_jobs_rail": STANDARD_JOBS_RAIL,
 }
 
 _BASE_VALIDATE_PLAN = base.validate_plan

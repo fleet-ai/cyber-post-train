@@ -3,8 +3,7 @@
 This compiler accepts no scientific menu.  It reopens the retained v12 plan,
 verifies its canonical digest, changes only the reviewed four-node hypothesis,
 and binds the current runtime bytes.  The resulting plan may be previewed but
-remains submission-blocked until its zero-GPU preflight, independent release
-supervision and root review exist.
+remains submission-blocked until its zero-GPU preflight and root review exist.
 """
 
 from __future__ import annotations

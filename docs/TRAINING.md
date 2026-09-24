@@ -193,41 +193,37 @@ both runtimes under digest checks. Its packet authorizes read-only preview and
 zero-GPU preflight only; GPU submission remains false. Never turn the held
 packet into a request by hand.
 
-Production submission is also blocked until an independent supervisor is
-already running. It must reconcile an uncertain create by exact rendered name
-and run ID, bind the created RayJob and every RayCluster, Kueue Workload and Pod
-UID, and observe them through terminal release. From the first allocated GPU it
-allows 30 minutes to reach the runtime's authenticated start marker. The
-runtime's own watchdog starts later, when `_wait_for_training` constructs it;
-from that point it uses a 30-minute startup allowance, a 20-minute confirmed
-no-progress check, an eight-hour hard ceiling, and five more minutes only while
-a checkpoint is advancing. Independently, the external supervisor must force a
-terminal action no later than 29,100 seconds after the authenticated start
-marker, or 30,900 seconds after GPU allocation. It then allows at most five
-minutes for normal release and five minutes after an authorized UID-bound
-delete to prove the objects are absent and all 32 GPUs are free. Thus the
-complete allocation-to-release-confirmation outer bound is 31,500 seconds. No
-such supervisor is assigned yet, so this packet remains nonlaunchable even if
-its zero-GPU preflight later passes.
+The production candidate uses the same small Jobs API launch rail as the proven
+eight-node parent. Run `preview` once for operator review; `submit` repeats the
+complete duplicate census and server preview, writes `SUBMISSION.jsonl` before
+its sole POST, and never retries an uncertain POST. Both previews must show the
+root RayJob annotation `fleet.ai/failure-alerts: "off"`, pod priority `c1`,
+queue priority `q1`, four nodes and eight GPUs per node. The runtime watchdog
+then applies its 30-minute startup allowance, 20-minute confirmed-no-progress
+check, eight-hour hard bound and five-minute checkpoint drain.
 
-After preparing the candidate, these two commands exercise only non-creating
-server rendering:
+The rendered RayJob has `shutdownAfterJobFinishes: true` and a zero-second
+terminal TTL. Monitor its exact Jobs API name and Kubernetes UIDs. If it fails
+or is confirmed stalled, use one exact Jobs API release, then reconcile API and
+Kubernetes state before any retry. This deliberately avoids a second custom
+resource controller; it does not weaken the fresh output-absence, preflight or
+root-review gates.
+
+After preparing the candidate, these commands perform the required
+non-creating operator preview and zero-GPU preflight preview:
 
 ```sh
+uv run cyber-post-train preview /shared/prepared-run
+
 uv run cyber-post-train sft-cpu-preflight-job-preview /shared/prepared-run \
   --context nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6
-
-uv run cyber-post-train direct-preview-sft /shared/prepared-run \
-  --context nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6 \
-  --output-absence-receipt /shared/fresh-output-absence.json
 ```
 
-The second command is production-only because the final development RayJob
-owner reference cannot exist before its cleanup guardian has a real UID. Both
-commands verify the bound cluster context; neither writes a create journal or
-calls Kubernetes create. A host without SFS may use the existing bounded,
-zero-GPU SFS observer under the preflight authorization, but that is still an
-external Job and must be operated and collected explicitly.
+The submit command performs the second server preview immediately before its
+sole POST. Neither command above writes a create journal or creates a GPU
+workload. A host without SFS may use the existing bounded, zero-GPU SFS observer
+under the preflight authorization, but that is still an external Job and must
+be operated and collected explicitly.
 
 When the submitter does not already run inside the pinned image with the shared
 SFS mount, dense SFT has one tracked zero-GPU preflight Job. Start from a clean

@@ -117,22 +117,21 @@
     "status": "implemented_and_locally_tested_not_live_qualified",
     "runtime_variant": "qwen38_sft_262k_4node_v1",
     "base_runtime_sha256": "sha256:8cb671f377d089e1303248e237f386c256b212b15e41dadc07ac49cf2695ee17",
-    "candidate_runtime_sha256": "sha256:0e9d494917b758729601102e9eec176a2d7247d7165fe95476c6a58672851a63",
+    "candidate_runtime_sha256": "sha256:fed7acaa5e08451da11231197aa20316de9cea2729fb31de22cc23cdb97d1001",
     "historical_hook_evidence": "configs/qualification/qwen38-teacher3k-262k-v12-hook-asts.json",
     "candidate_config": "configs/runs/qwen38-teacher3k-262k-4node-canary-v1.json",
     "isolated_runtime": "training/sft_262k_runtime.py",
     "compiler": "training/sft_262k_4node_v1.py",
     "offline_prepare": {
       "submitted": false,
-      "plan_sha256": "sha256:f80238bbd287e2f622b8ffd353a2dba795bf9d4414bc770ca06912b79487e3e6",
-      "request_sha256": "sha256:759ae2002aae5373dcbae5012e82ebe564815373dc8fc67158b01741d4d30c1e"
+      "plan_sha256": "sha256:3f96ba9d9233a969e47110f70ccf52c0e72d7c2f01d1ab5ce09678d982507a7e",
+      "request_sha256": "sha256:1679d4699b36bbd6e687ae9e84f6c0d6288620583bdb7a857ec873b87b908470"
     }
   },
   "remaining_blockers_before_any_post": [
     "The four-node hypothesis has no accepted execution or checkpoint-reload receipt.",
     "A fresh zero-GPU preflight must prove the exact model, data, runtime, recipe, output absence and checkpoint policy.",
     "A live server preview must prove the exact root alert annotation and 4x8 c1 resources before creation.",
-    "An independent supervisor must be running before POST and bind the exact created UIDs through terminal release and zero allocated GPUs.",
     "Root review must explicitly open the otherwise false GPU submission gate."
   ],
   "server_render_gates": {
@@ -144,15 +143,12 @@
     "destination_absence_recheck_required": true,
     "single_post_intent_journal_required": true
   },
-  "production_release_supervision": {
-    "status": "absent_blocks_submission",
-    "poll_seconds": 60,
-    "external_deadlines": {
-      "gpu_allocation_to_authenticated_started_seconds": 1800,
-      "authenticated_started_to_forced_terminal_action_seconds": 29100,
-      "gpu_allocation_to_forced_terminal_action_seconds": 30900,
-      "gpu_allocation_to_release_confirmation_outer_bound_seconds": 31500
-    },
+  "standard_jobs_rail": {
+    "submission_route": "Jobs.submit_once",
+    "operator_preview_required_before_submit": true,
+    "submit_repeats_server_preview": true,
+    "complete_duplicate_census_required": true,
+    "durable_intent_journal": "SUBMISSION.jsonl",
     "runtime_watchdog_bounds": {
       "anchor": "ProgressWatchdog construction in _wait_for_training",
       "startup_seconds": 1800,
@@ -160,19 +156,18 @@
       "hard_seconds": 28800,
       "checkpoint_drain_seconds": 300
     },
-    "terminal_release_grace_seconds": 300,
-    "post_delete_confirmation_seconds": 300,
-    "required_uid_bindings": [
-      "RayJob",
-      "RayCluster",
-      "Kueue Workload",
-      "all Pods"
-    ],
-    "terminal_proof": [
-      "all bound Kubernetes objects absent",
-      "all 32 requested GPUs released"
-    ],
-    "uncertain_create_policy": "reconcile the exact rendered name and run ID before any retry"
+    "rendered_root_contract": {
+      "failure_alerts": "off",
+      "priority_class": "c1",
+      "queue_priority": "q1",
+      "shutdown_after_job_finishes": true,
+      "ttl_seconds_after_finished": 0
+    },
+    "monitoring": {
+      "identity": "exact Jobs API run name and Kubernetes UIDs",
+      "release_route": "one exact Jobs API DELETE after confirmed failure or stall",
+      "uncertain_delete_policy": "reconcile exact API and Kubernetes state before any retry"
+    }
   },
   "dev_qualification": {
     "exact_four_node_gpu_shape_available": false,
@@ -185,5 +180,5 @@
     "planned_concurrent_nodes": 9,
     "authorized_concurrent_node_limit": 10
   },
-  "next_gate": "From the committed isolated runtime port, prepare the exact candidate, execute and collect its zero-GPU preflight, obtain a fresh destination-absence receipt, run the non-creating live Jobs API and Kubernetes server preview, then obtain root review before any GPU POST."
+  "next_gate": "From the committed isolated runtime port, prepare the exact candidate, execute and collect its zero-GPU preflight, obtain a fresh destination-absence result, run the standard Jobs API preview twice (operator preview and submit-time preview), then obtain root review before the sole GPU POST."
 }

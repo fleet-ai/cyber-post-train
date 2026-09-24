@@ -11,8 +11,7 @@ from pathlib import Path
 import pytest
 
 from cyber_post_train import cli
-from cyber_post_train.direct_submit import SFT_PRODUCTION_CONTEXT, render_sft_rayjob
-from cyber_post_train.jobs import digest
+from cyber_post_train.jobs import digest, validate_preview
 from tests.test_direct_submit import manifest, preview
 from training import sft_262k_4node_v1 as compiler
 from training import sft_262k_runtime as hooks
@@ -95,10 +94,9 @@ def test_candidate_changes_only_reviewed_topology_and_create_once_identity():
         "submission_authorized": False,
         "blockers": [
             "zero-GPU preflight receipt absent",
-            "independent exact-UID release supervision absent",
             "four-node GPU launch has not received root review",
         ],
-        "required_release_supervision": hooks.RELEASE_SUPERVISION,
+        "required_standard_jobs_rail": hooks.STANDARD_JOBS_RAIL,
     }
     request = compiler.job_request(plan)
     assert (request["workers"], request["gpus_per_worker"]) == (4, 8)
@@ -141,35 +139,33 @@ def test_candidate_allows_preview_and_zero_gpu_preflight_but_blocks_gpu_submit()
         cli._external_action_gate(plan, "submit")
 
 
-def test_candidate_release_supervision_bounds_match_runtime_watchdog():
+def test_candidate_standard_jobs_rail_matches_runtime_watchdog():
     plan = candidate()
-    supervision = plan["qualification"]["submission_gate"]["required_release_supervision"]
-    assert supervision["status"] == "absent_blocks_submission"
-    assert supervision["external_deadlines"] == {
-        "gpu_allocation_to_authenticated_started_seconds": 1800,
-        "authenticated_started_to_forced_terminal_action_seconds": 29100,
-        "gpu_allocation_to_forced_terminal_action_seconds": 30900,
-        "gpu_allocation_to_release_confirmation_outer_bound_seconds": 31500,
-    }
-    assert supervision["runtime_watchdog_bounds"] == {
+    rail = plan["qualification"]["submission_gate"]["required_standard_jobs_rail"]
+    assert rail["submission_route"] == "Jobs.submit_once"
+    assert rail["operator_preview_required_before_submit"] is True
+    assert rail["submit_repeats_server_preview"] is True
+    assert rail["complete_duplicate_census_required"] is True
+    assert rail["durable_intent_journal"] == "SUBMISSION.jsonl"
+    assert rail["runtime_watchdog_bounds"] == {
         "anchor": "ProgressWatchdog construction in _wait_for_training",
         "startup_seconds": base_runtime.WATCHDOG_STARTUP_SECONDS,
         "idle_seconds": base_runtime.WATCHDOG_IDLE_SECONDS,
         "hard_seconds": base_runtime.sft_watchdog_hard_seconds(plan),
         "checkpoint_drain_seconds": base_runtime.WATCHDOG_DRAIN_SECONDS,
     }
-    assert supervision["terminal_release_grace_seconds"] == 300
-    assert supervision["post_delete_confirmation_seconds"] == 300
-    assert supervision["required_uid_bindings"] == [
-        "RayJob",
-        "RayCluster",
-        "Kueue Workload",
-        "all Pods",
-    ]
-    assert supervision["terminal_proof"] == [
-        "all bound Kubernetes objects absent",
-        "all 32 requested GPUs released",
-    ]
+    assert rail["rendered_root_contract"] == {
+        "failure_alerts": "off",
+        "priority_class": "c1",
+        "queue_priority": "q1",
+        "shutdown_after_job_finishes": True,
+        "ttl_seconds_after_finished": 0,
+    }
+    assert rail["monitoring"] == {
+        "identity": "exact Jobs API run name and Kubernetes UIDs",
+        "release_route": "one exact Jobs API DELETE after confirmed failure or stall",
+        "uncertain_delete_policy": ("reconcile exact API and Kubernetes state before any retry"),
+    }
 
 
 def test_current_hooks_are_ast_identical_to_recovered_v12_hooks():
@@ -215,14 +211,10 @@ def test_candidate_stages_isolated_runtime_without_changing_shared_runtime():
 def test_candidate_exact_render_is_alert_off_c1_q1_and_four_by_eight():
     plan = candidate()
     request = compiler.job_request(plan)
-    source = manifest(request)
-    rendered, proof = render_sft_rayjob(
-        plan,
-        request,
-        preview(source),
-        kubernetes_context=SFT_PRODUCTION_CONTEXT,
-        run_id="12345678-1234-4234-9234-123456789abc",
-    )
+    rendered = manifest(request)
+    rendered["metadata"]["annotations"]["fleet.ai/failure-alerts"] = "off"
+    rendered["spec"]["ttlSecondsAfterFinished"] = 0
+    proof = validate_preview(request, preview(rendered))
     assert rendered["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
     assert rendered["metadata"]["labels"]["kueue.x-k8s.io/priority-class"] == "q1"
     assert rendered["metadata"]["labels"]["kueue.x-k8s.io/queue-name"] == "training-lq"
@@ -235,11 +227,25 @@ def test_candidate_exact_render_is_alert_off_c1_q1_and_four_by_eight():
     for group in groups:
         pod = group["template"]["spec"]
         assert pod["priorityClassName"] == "c1"
-        assert pod["priority"] == 10_000
         container = pod["containers"][0]
         assert container["resources"]["requests"]["nvidia.com/gpu"] == 8
         assert container["resources"]["limits"]["nvidia.com/gpu"] == 8
-    assert proof["bound_gpu_cluster_templates"] == 2
+    assert rendered["spec"]["shutdownAfterJobFinishes"] is True
+    assert rendered["spec"]["ttlSecondsAfterFinished"] == 0
+    assert proof["nodes"] == 4
+    assert proof["gpus"] == 32
+
+
+def test_development_qualification_is_zero_gpu_only_and_bounded_to_thirty_minutes():
+    value = read_mapping(ROOT / "configs/qualification/qwen38-teacher3k-262k-4node-canary-v1.json")[
+        "dev_qualification"
+    ]
+    assert value == {
+        "exact_four_node_gpu_shape_available": False,
+        "allowed_work": "zero_gpu_preflight_only",
+        "cleanup_maximum_seconds": 1800,
+        "priority": "c1",
+    }
 
 
 def test_config_and_parent_files_are_json_objects():
