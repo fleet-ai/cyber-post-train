@@ -1264,6 +1264,7 @@ def _validated_receipt(message: object, *, kind: str) -> dict | None:
     body = {key: item for key, item in value.items() if key != "sha256"}
     schemas = {
         "job": {
+            "cyber_qwen38_miles96_exact_image_preflight_v1",
             "cyber_skyrl_topology_probe_cpu_preflight_v1",
             "cyber_skyrl_topology_probe_cpu_preflight_rejection_v1",
             "cyber_skyrl_model_artifact_stage_receipt_v1",
@@ -1369,6 +1370,12 @@ class Observer:
                 DIRECT_RESULT_SCHEMA,
                 1800,
             ),
+            "production-cpu-recovery": (
+                PROD_CONTEXT,
+                RECOVERY_ARMED_SCHEMA,
+                RECOVERY_RESULT_SCHEMA,
+                1800,
+            ),
             "production-operator": (
                 PROD_CONTEXT,
                 DIRECT_ARMED_SCHEMA,
@@ -1403,6 +1410,8 @@ class Observer:
             raise ObserverError("production direct observer requires a root RayJob")
         if profile == "production-recovery" and kind != "rayjob":
             raise ObserverError("production recovery observer requires a root RayJob")
+        if profile == "production-cpu-recovery" and kind != "job":
+            raise ObserverError("production CPU recovery observer requires a root Job")
         if profile == "production-cpu" and kind != "job":
             raise ObserverError("production CPU observer requires a root Job")
         if profile == "production-operator" and kind != "job":
@@ -1410,7 +1419,7 @@ class Observer:
         if profile == "production-reload" and kind != "rayjob":
             raise ObserverError("production reload observer requires a root RayJob")
         is_prod8_terminal_probe = kind == "job" and name == prod8.NAME
-        if profile == "production-recovery":
+        if profile in {"production-recovery", "production-cpu-recovery"}:
             try:
                 UUID(expected_uid)
             except (TypeError, ValueError) as exc:
@@ -1805,6 +1814,27 @@ class Observer:
             )
             self.snapshot.prod8_last_listed_pod_count = len(pods)
             self._capture_pods(pods, job_template=job_template)
+        elif self.profile in {"production-cpu", "production-cpu-recovery"}:
+            pods = self._list(
+                "pod",
+                "--selector",
+                f"batch.kubernetes.io/controller-uid={self.snapshot.uid}",
+            )
+            for pod in pods:
+                owners = pod.get("metadata", {}).get("ownerReferences", [])
+                controllers = [
+                    owner
+                    for owner in owners
+                    if isinstance(owner, dict) and owner.get("controller") is True
+                ]
+                if len(controllers) != 1 or not (
+                    controllers[0].get("apiVersion") == "batch/v1"
+                    and controllers[0].get("kind") == "Job"
+                    and controllers[0].get("name") == self.name
+                    and controllers[0].get("uid") == self.snapshot.uid
+                ):
+                    raise ObserverError("observed Pod does not belong to the exact Job")
+            self._capture_pods(pods)
         else:
             pods = self._list("pod", "--selector", f"job-name={self.name}")
             self._capture_pods(pods)
@@ -2213,7 +2243,8 @@ class Observer:
                 ),
                 **(
                     {"recovered_existing_target_uid": self.expected_uid}
-                    if self.profile == "production-recovery" and self.expected_uid
+                    if self.profile in {"production-recovery", "production-cpu-recovery"}
+                    and self.expected_uid
                     else (
                         {"creation_bound_uid": self.expected_uid}
                         if self._is_prod8_terminal_probe()
@@ -2382,6 +2413,7 @@ def main() -> None:
             "development",
             "production-direct",
             "production-cpu",
+            "production-cpu-recovery",
             "production-reload",
             "production-recovery",
         ),
@@ -2410,6 +2442,7 @@ def main() -> None:
             in {
                 "development",
                 "production-cpu",
+                "production-cpu-recovery",
                 "production-reload",
             }
             and result["status"] != "released"

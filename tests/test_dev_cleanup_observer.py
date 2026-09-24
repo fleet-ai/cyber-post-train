@@ -92,7 +92,18 @@ class FakeJobCluster:
             return NS(returncode=0, stdout=json.dumps(value) if value else "", stderr="")
         if args[:2] == ["get", "pod"] and "--selector" in args:
             pod = {
-                "metadata": _metadata("preflight-pod", 2),
+                "metadata": {
+                    **_metadata("preflight-pod", 2),
+                    "ownerReferences": [
+                        {
+                            "apiVersion": "batch/v1",
+                            "kind": "Job",
+                            "name": "preflight",
+                            "uid": _metadata("preflight", 1)["uid"],
+                            "controller": True,
+                        }
+                    ],
+                },
                 "spec": {"containers": [{"resources": {"requests": {}}}]},
                 "status": {
                     "containerStatuses": [
@@ -944,6 +955,63 @@ def test_production_recovery_observer_rejects_another_live_uid(tmp_path) -> None
         observer.arm()
 
 
+def test_production_cpu_recovery_observer_adopts_exact_job_uid(tmp_path) -> None:
+    cluster = FakeJobCluster()
+    cluster.target_reads = 1
+    uid = _metadata("preflight", 1)["uid"]
+    observer = _observer(
+        tmp_path,
+        cluster,
+        context=cleanup.PROD_CONTEXT,
+        profile="production-cpu-recovery",
+        expected_uid=uid,
+    )
+    result = observer.run()
+    assert result["schema"] == cleanup.RECOVERY_RESULT_SCHEMA
+    assert result["recovered_existing_target_uid"] == uid
+    assert result["status"] == "released"
+    assert cluster.delete_calls == 1
+
+
+def test_production_cpu_observer_uses_controller_uid_and_rejects_foreign_pod(
+    tmp_path,
+) -> None:
+    observer = _observer(
+        tmp_path,
+        FakeJobCluster(),
+        context=cleanup.PROD_CONTEXT,
+        profile="production-cpu",
+    )
+    observer.snapshot.uid = _metadata("preflight", 1)["uid"]
+    selectors = []
+    pod = {
+        "metadata": {
+            **_metadata("preflight-pod", 2),
+            "ownerReferences": [
+                {
+                    "apiVersion": "batch/v1",
+                    "kind": "Job",
+                    "name": "preflight",
+                    "uid": _metadata("foreign", 9)["uid"],
+                    "controller": True,
+                }
+            ],
+        }
+    }
+
+    def listed(resource, *arguments):
+        selectors.append((resource, arguments))
+        return [pod] if resource == "pod" else []
+
+    observer._list = listed
+    with pytest.raises(cleanup.ObserverError, match="exact Job"):
+        observer._observe_job({"metadata": {"labels": {}}, "status": {}})
+    assert selectors[0] == (
+        "pod",
+        ("--selector", f"batch.kubernetes.io/controller-uid={observer.snapshot.uid}"),
+    )
+
+
 def test_observer_rejects_prod_route_or_excess_deadline(tmp_path) -> None:
     with pytest.raises(cleanup.ObserverError, match="development cluster"):
         _observer(tmp_path, FakeJobCluster(), context="prod")
@@ -962,6 +1030,19 @@ def test_observer_accepts_only_digest_valid_sanitized_failure_receipt() -> None:
     )
     assert cleanup._validated_receipt(json.dumps(receipt), kind="job") == receipt
     receipt["phase"] = "changed"
+    assert cleanup._validated_receipt(json.dumps(receipt), kind="job") is None
+
+
+def test_observer_accepts_only_sealed_miles_image_preflight_receipt() -> None:
+    receipt = _seal(
+        {
+            "schema": "cyber_qwen38_miles96_exact_image_preflight_v1",
+            "status": "passed",
+        }
+    )
+    assert cleanup._validated_receipt(json.dumps(receipt), kind="job") == receipt
+    assert cleanup._validated_receipt(json.dumps(receipt), kind="rayjob") is None
+    receipt["status"] = "changed"
     assert cleanup._validated_receipt(json.dumps(receipt), kind="job") is None
 
 
