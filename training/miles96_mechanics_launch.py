@@ -774,6 +774,61 @@ def capacity_gate(
     )
 
 
+def validate_reviewed_transition(
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    *,
+    approved: dict[str, Any] | None,
+    candidate: dict[str, Any] | None,
+    parent_review: dict[str, Any] | None,
+    live_task_receipt: dict[str, Any] | None,
+    now: float,
+) -> dict[str, Any] | None:
+    """Require the exact root-reviewed phase-1 transition before any POST."""
+    from training import miles96_signal_qualification as signal
+
+    artifacts = (approved, candidate, parent_review, live_task_receipt)
+    if plan.get("schema") != signal.SCHEMA:
+        if any(value is not None for value in artifacts):
+            raise JobsError("reviewed signal transition cannot authorize a mechanics request")
+        return None
+    if any(value is None for value in artifacts):
+        raise JobsError("signal qualification requires a reviewed launch transition")
+
+    from training import miles_signal_transition as transition
+
+    try:
+        reviewed_at = datetime.fromtimestamp(now, UTC)
+        expected = transition.approve_review_candidate(
+            candidate,
+            parent_review,
+            live_task_receipt,
+            reviewed_at=reviewed_at,
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise JobsError("reviewed signal transition is invalid or stale") from exc
+    if approved != expected:
+        raise JobsError("reviewed signal transition differs from its exact predecessor")
+
+    evidence = approved["future_bindings"]
+    lanes = evidence["lanes"]
+    matches = [row for row in lanes if row.get("name") == request.get("name")]
+    source_closure = "sha256:" + mechanics.digest(plan["runtime_sources"])
+    if (
+        len(matches) != 1
+        or matches[0].get("plan_sha256") != "sha256:" + mechanics.digest(plan)
+        or matches[0].get("request_sha256") != "sha256:" + digest(request)
+        or matches[0].get("authority_config_sha256")
+        != plan["selection_authority"]["authority_config_sha256"]
+        or matches[0].get("live_binding_receipt_sha256")
+        != plan["selection_authority"]["current_binding_sha256"]
+        or evidence["adapter"].get("source_closure_sha256") != source_closure
+        or evidence["adapter"].get("runtime_image") != request.get("image")
+    ):
+        raise JobsError("reviewed signal transition does not bind this exact request")
+    return approved
+
+
 def submit_once(
     plan: dict[str, Any],
     request: dict[str, Any],
@@ -788,12 +843,25 @@ def submit_once(
     capacity_reader: Callable[..., dict[str, Any]] = live_capacity_census,
     now: Callable[[], float] = time.time,
     start_observer: Callable[[Path], subprocess.Popen[bytes]] = _start_observer,
+    reviewed_transition: dict[str, Any] | None = None,
+    transition_candidate: dict[str, Any] | None = None,
+    parent_review: dict[str, Any] | None = None,
+    live_task_receipt: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Preview, arm, recheck, journal, and issue exactly one Jobs API POST."""
     plan = _validate_plan(plan)
     if request != _expected_request(plan, request, receipt):
         raise JobsError("request differs from the exact immutable mechanics plan")
     validate_request(request)
+    validate_reviewed_transition(
+        plan,
+        request,
+        approved=reviewed_transition,
+        candidate=transition_candidate,
+        parent_review=parent_review,
+        live_task_receipt=live_task_receipt,
+        now=now(),
+    )
     paths = _paths(directory)
     if directory.exists() and any(directory.iterdir()):
         raise JobsError("launch evidence directory is not create-once empty")
@@ -882,6 +950,15 @@ def submit_once(
         # Keep this separate from the duplicate read so a coordinator that
         # exits during that final read cannot leave an unwatched allocation.
         validate_armed_observer(plan, request, directory, now=now())
+        validate_reviewed_transition(
+            plan,
+            request,
+            approved=reviewed_transition,
+            candidate=transition_candidate,
+            parent_review=parent_review,
+            live_task_receipt=live_task_receipt,
+            now=now(),
+        )
     except Exception:
         observer.terminate()
         raise
@@ -914,6 +991,10 @@ def main() -> None:
     parser.add_argument("--receipt")
     parser.add_argument("--output-absence-receipt")
     parser.add_argument("--output")
+    parser.add_argument("--reviewed-transition")
+    parser.add_argument("--transition-candidate")
+    parser.add_argument("--parent-review")
+    parser.add_argument("--live-task-receipt")
     parser.add_argument("--attempt", type=int, default=1)
     args = parser.parse_args()
     plan = _validate_plan(json.loads(Path(args.plan).read_text()))
@@ -969,6 +1050,19 @@ def main() -> None:
         if args.output_absence_receipt
         else None
     )
+    transition_paths = (
+        args.reviewed_transition,
+        args.transition_candidate,
+        args.parent_review,
+        args.live_task_receipt,
+    )
+    if any(transition_paths) and not all(transition_paths):
+        parser.error("signal transition requires all four reviewed artifacts")
+    reviewed_transition, transition_candidate, parent_review, live_task_receipt = (
+        [json.loads(Path(path).read_text()) for path in transition_paths]
+        if all(transition_paths)
+        else [None, None, None, None]
+    )
     token = os.environ.get("FLEET_API_KEY")
     if not token:
         parser.error("--submit requires FLEET_API_KEY in the process environment")
@@ -980,6 +1074,10 @@ def main() -> None:
             directory,
             receipt=receipt,
             output_absence_receipt=output_absence_receipt,
+            reviewed_transition=reviewed_transition,
+            transition_candidate=transition_candidate,
+            parent_review=parent_review,
+            live_task_receipt=live_task_receipt,
         )
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))
 
