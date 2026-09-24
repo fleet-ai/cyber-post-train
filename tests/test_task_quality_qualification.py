@@ -311,6 +311,48 @@ def test_plan_excludes_protected_heldout_atom_and_duplicate_family(monkeypatch):
     assert plan["selection"]["excluded_counts"]["protected_heldout_atom_overlap"] == 1
     assert plan["selection"]["zero_protected_heldout_atom_intersection"] is True
 
+    exact = qualification.build_plan(
+        inventory=inventory,
+        coverage=coverage,
+        split=split,
+        inventory_sha256="sha256:" + "1" * 64,
+        coverage_sha256="sha256:" + "2" * 64,
+        split_sha256="sha256:" + "3" * 64,
+        client=object(),
+        wave_id="exact-canary",
+        qa_statuses={"clean"},
+        limit=1,
+        concurrency=1,
+        source={"fixture": True, "merged_to_origin_main": True},
+        exact_task_identity=("candidate-c", TASK_VERSION),
+    )
+    assert exact["selection"]["exact_task_identity"] == {
+        "task_key": "candidate-c",
+        "task_version_id": TASK_VERSION,
+    }
+    assert [(row["task_key"], row["task_version_id"]) for row in exact["tasks"]] == [
+        ("candidate-c", TASK_VERSION)
+    ]
+
+
+def test_exact_task_selection_requires_one_cell():
+    with pytest.raises(qualification.QualificationError, match="limit=1 and concurrency=1"):
+        qualification.build_plan(
+            inventory={},
+            coverage={},
+            split={},
+            inventory_sha256="sha256:" + "1" * 64,
+            coverage_sha256="sha256:" + "2" * 64,
+            split_sha256="sha256:" + "3" * 64,
+            client=object(),
+            wave_id="exact-canary",
+            qa_statuses={"clean"},
+            limit=2,
+            concurrency=1,
+            source={"fixture": True, "merged_to_origin_main": True},
+            exact_task_identity=("candidate-c", TASK_VERSION),
+        )
+
 
 def test_plan_accepts_repaired_clean_heldout_protocol_and_checks_reviewed_family(monkeypatch):
     heldout = _selected("heldout-a", "00000000-0000-4000-8000-000000000001")

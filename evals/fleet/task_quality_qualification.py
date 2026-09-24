@@ -501,6 +501,7 @@ def build_plan(
     concurrency: int,
     source: dict[str, Any],
     excluded_catalog: dict[str, Any] | None = None,
+    exact_task_identity: tuple[str, str] | None = None,
 ) -> dict[str, Any]:
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", wave_id):
         raise QualificationError("wave ID is not DNS-safe")
@@ -508,6 +509,17 @@ def build_plan(
         raise QualificationError("wave limit/concurrency must be within 1..64")
     if not qa_statuses or not qa_statuses <= {"clean", "agent_failure", "not_analyzed"}:
         raise QualificationError("wave QA statuses are unsupported")
+    if exact_task_identity is not None:
+        exact_task_key, exact_task_version_id = exact_task_identity
+        if (
+            not isinstance(exact_task_key, str)
+            or not exact_task_key
+            or not isinstance(exact_task_version_id, str)
+        ):
+            raise QualificationError("exact task identity is invalid")
+        _uuid(exact_task_version_id, "exact task version")
+        if limit != 1 or concurrency != 1:
+            raise QualificationError("exact task selection requires limit=1 and concurrency=1")
     if "not_analyzed" in qa_statuses and (
         excluded_catalog is None or excluded_catalog.get("schema") != ATTEMPTED_CATALOG_SCHEMA
     ):
@@ -590,6 +602,10 @@ def build_plan(
             and row.get("task_key") in missing_keys
             and row.get("qa_status") in qa_statuses
             and (row.get("task_key"), row.get("task_version_id")) not in excluded_ids
+            and (
+                exact_task_identity is None
+                or (row.get("task_key"), row.get("task_version_id")) == exact_task_identity
+            )
         ),
         key=lambda row: (str(row.get("task_key")), str(row.get("task_version_id"))),
     )
@@ -633,6 +649,14 @@ def build_plan(
         },
         "selection": {
             "qa_statuses": sorted(qa_statuses),
+            "exact_task_identity": (
+                {
+                    "task_key": exact_task_identity[0],
+                    "task_version_id": exact_task_identity[1],
+                }
+                if exact_task_identity is not None
+                else None
+            ),
             "requested_limit": limit,
             "selected_task_versions": len(selected_bindings),
             "maximum_task_versions_per_family": 1,
@@ -1721,6 +1745,14 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
     excluded = (
         _read(Path(args.exclude_catalog), "excluded catalog") if args.exclude_catalog else None
     )
+    exact_identity_values = (args.exact_task_key, args.exact_task_version_id)
+    if (exact_identity_values[0] is None) != (exact_identity_values[1] is None):
+        raise QualificationError("exact task key and version must be supplied together")
+    exact_task_identity = (
+        None
+        if exact_identity_values[0] is None
+        else (exact_identity_values[0], exact_identity_values[1])
+    )
     with _client(os.environ.get("FLEET_API_KEY", "")) as client:
         _account(client)
         plan = build_plan(
@@ -1737,6 +1769,7 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
             concurrency=args.concurrency,
             source=source_provenance(require_merged=not args.allow_unmerged_preview),
             excluded_catalog=excluded,
+            exact_task_identity=exact_task_identity,
         )
     root = Path(args.private_base) / (
         f"task-quality-{args.wave_id}-{plan['sha256'].removeprefix('sha256:')[:12]}"
@@ -1794,6 +1827,8 @@ def parse_args() -> argparse.Namespace:
     prepare_parser.add_argument("--limit", type=int, required=True)
     prepare_parser.add_argument("--concurrency", type=int, required=True)
     prepare_parser.add_argument("--exclude-catalog")
+    prepare_parser.add_argument("--exact-task-key")
+    prepare_parser.add_argument("--exact-task-version-id")
     prepare_parser.add_argument("--private-base", required=True)
     prepare_parser.add_argument("--allow-unmerged-preview", action="store_true")
     run_parser = commands.add_parser("run")

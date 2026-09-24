@@ -1,0 +1,187 @@
+{
+  "candidate": {
+    "atom_artifact_keys": [
+      "cyber/atoms/concur/extract-job-status-missing-auth"
+    ],
+    "atom_source_locators": [
+      "cyber/atoms/concur/extract-job-status-missing-auth@0:atom_source"
+    ],
+    "lineage": {
+      "application": "concur",
+      "difficulty": "medium",
+      "task_family": "cyber/atoms/concur/extract-job-status-missing-auth",
+      "vulnerability_family": [
+        "atom:cyber/atoms/concur/extract-job-status-missing-auth"
+      ]
+    },
+    "lineage_binding_sha256": "sha256:5c5fd694b7fbb57b155206dc7cff8349c5f2f7b6db2f64ebc5f3b6c41926c56e",
+    "qa_status": "clean",
+    "shared_atom_component_id": "sha256:2d9ece4620167eca71c829e9ae37644999a82a138d8ef8ade7484bdd8cf4ade5",
+    "task_graph_source_locator": "cyber/task-graphs/single-atom-extract-job-status-missing-auth@2:task_graph_source",
+    "task_id": "ad41ad1d-e092-4839-8217-f02f5e0c6ba0",
+    "task_key": "cysec1-2-concur-gen_atoms-1_blackbox-703e845ecc4c1e020bb99309__blackbox_ctf_v1",
+    "task_version_id": "ae236a07-128d-4556-ba2b-25a248818497"
+  },
+  "future_cpu_canary_contract": {
+    "active_deadline_seconds_maximum": 1800,
+    "automatic_create_retry": false,
+    "backoff_limit": 0,
+    "cluster_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+    "create_attempts_maximum": 1,
+    "create_intent": {
+      "exclusive_create": true,
+      "fsync_file_and_parent": true,
+      "must_precede_create": true
+    },
+    "create_response_must_bind": [
+      "job_name",
+      "job_uid",
+      "job_resource_version",
+      "config_map_name",
+      "config_map_uid",
+      "config_map_resource_version"
+    ],
+    "exact_name_absence_checks": [
+      "before_server_previews",
+      "after_server_previews_before_create_intent"
+    ],
+    "gpu_limits": 0,
+    "gpu_requests": 0,
+    "inner_fleet_cleanup": {
+      "durable_create_request_claim_required": true,
+      "exact_instance_delete_required": true,
+      "owned_instance_absence_required": true
+    },
+    "namespace": "fleet-train-jobs",
+    "normalized_server_previews_must_match": true,
+    "outer_kubernetes_cleanup": {
+      "delete_preconditions": [
+        "exact_name",
+        "exact_uid",
+        "exact_resource_version"
+      ],
+      "fresh_predelete_readback_must_match_exact_uid": true,
+      "foreground_propagation": true,
+      "owned_pod_and_workload_absence_required": true,
+      "root_and_config_map_absence_required": true,
+      "zero_gpu_release_receipt_required": true
+    },
+    "priority_class_name": "c1",
+    "queue_name": "training-lq",
+    "restart_policy": "Never",
+    "root_kind": "Job",
+    "root_metadata_annotations": {
+      "fleet.ai/failure-alerts": "off"
+    },
+    "server_preview_count": 2,
+    "uncertain_create_response": "reconcile_only_never_retry",
+    "zero_gpu_must_hold_for_all_init_and_regular_containers": true
+  },
+  "inputs": {
+    "lineage_census": {
+      "file_sha256": "sha256:976fc1d4f6c8765bd03fecd30280668097998af84ad9806d43e7355459b9845a",
+      "logical_sha256": "sha256:70bb11654272dd0adfa9519522df028a9d5a7f1fea42d98b2b47bfdb5271a07c",
+      "path": "configs/data/fleet-blackbox-shared-atom-lineage-census-20260924-v1.json"
+    },
+    "lineage_qualification_decision": {
+      "file_sha256": "sha256:be2b889f18dd9a5ac5ad27b9ae25fb199f32b16f9fcbc5eae7ec4900a42fea21",
+      "logical_sha256": "sha256:6f8d3925d7da8668ef4d2e3d2f2b7c13c159d929811f6e6c490df286ee76082a",
+      "path": "docs/evidence/qwen38-study/2026-09-24-fleet-blackbox-qa33-lineage-qualification-v1.json"
+    },
+    "live_lineage": {
+      "file_sha256": "sha256:8f5a0e8f08a8b193ef785bd18741f46f9355fa24b49694b49e9f7ca07c58373a",
+      "logical_sha256": "sha256:7622ce3870f74a3a9896575d1e42a122826743b6cf15307f1d411694135bea6b",
+      "path": "configs/data/fleet-blackbox-qa33-live-lineage-20260924-v1.json"
+    },
+    "qa_candidates": {
+      "file_sha256": "sha256:b3d551863655bc8ad92c76bb1b2b0f87c8bcec812b5c42987fc9c0c28c1a5b2a",
+      "logical_sha256": "sha256:4f61fd78b4d92c933030f026e0137abe199e0157fd72b2f959df0354df489be8",
+      "path": "configs/data/fleet-blackbox-qa-candidates-20260924-v1.json"
+    },
+    "qualification_controller": {
+      "file_sha256": "sha256:580c88906d13822ad566aa76f378f0351a74e3e61f6f59e21cad6d21e340bd53",
+      "path": "evals/fleet/task_quality_qualification.py"
+    },
+    "qualification_requirements": {
+      "file_sha256": "sha256:51456f43a871f3fe7f0435a35387180490c38ec086bde65f956698a11a5f5676",
+      "logical_sha256": "sha256:ee0cf30871afbc14a52e8608e06aab24c423b6cf2ed3e94780a06cf447202390",
+      "path": "configs/qualification/fleet-blackbox-current-task-quality-20260924-v2.requirements.json"
+    }
+  },
+  "missing_launch_gates": [
+    "merge_this_reviewed_packet_and_any_launcher_source_to_origin_main",
+    "prepare_a_fresh_private_one_task_plan_from_that_exact_merged_source",
+    "preserve_merged_source_provenance_inside_the_packaged_cpu_job",
+    "review_and_test_the_narrow_kubernetes_job_launcher",
+    "receive_explicit_root_authorization_for_one_canary",
+    "prove_the_exact_job_and_config_map_names_absent",
+    "obtain_two_identical_server_previews_of_the_exact_bundle",
+    "prove_the_server_rendered_root_job_has_failure_alerts_off_c1_and_zero_gpus",
+    "arm_uid_bound_outer_cleanup_before_the_single_create"
+  ],
+  "no_launch_receipt": {
+    "external_mutations": 0,
+    "kubernetes_objects_created": 0,
+    "launch_authorized": false,
+    "launch_performed": false,
+    "launchable": false,
+    "server_previews_performed": 0,
+    "status": "prepared_no_launch"
+  },
+  "privacy": {
+    "credentials_included": false,
+    "private_outputs_included": false,
+    "prompts_traces_answers_flags_or_scores_included": false,
+    "sanitized_exact_identities_only": true
+  },
+  "qualification": {
+    "candidate_count": 1,
+    "canonical_controller": "evals/fleet/task_quality_qualification.py",
+    "concurrency": 1,
+    "fixed_negative_control": "no_flag",
+    "fresh_plan_exact_task_identity": {
+      "exact_task_key": "cysec1-2-concur-gen_atoms-1_blackbox-703e845ecc4c1e020bb99309__blackbox_ctf_v1",
+      "exact_task_version_id": "ae236a07-128d-4556-ba2b-25a248818497"
+    },
+    "model_calls": 0,
+    "required_checks": [
+      "exact_task_binding",
+      "durable_create_claim_routes_deployed",
+      "environment_started",
+      "bash_reachable",
+      "submit_report_reachable",
+      "verifier_completed",
+      "finite_authoritative_outcome",
+      "metadata_only_session_ingested",
+      "environment_cleanup_completed"
+    ],
+    "required_live_tool_names": [
+      "bash",
+      "submit_report"
+    ],
+    "tool_catalog_rule": "exact_name_set_and_live_schema_admits_fixed_probes",
+    "training_data_eligible": false
+  },
+  "schema": "fleet_blackbox_qa33_zero_model_canary_review_packet_v1",
+  "selection": {
+    "deterministic_funnel": {
+      "clean_candidates": 8,
+      "clean_single_app_single_atom_medium_candidates": 7,
+      "lineage_bound_candidates": 33,
+      "teacher3k_exact_and_shared_atom_unexposed_after_shape_filter": 1
+    },
+    "representative_reason": "The candidate has the modal medium, single-application, single-atom shape. Its clean QA label minimizes first-canary ambiguity, and it is the only candidate of that shape with no exact-version or shared-atom exposure to the bound teacher3k corpus.",
+    "selection_does_not_prove": [
+      "runtime_health",
+      "cpu_compatibility",
+      "global_training_non_exposure",
+      "exploitability"
+    ]
+  },
+  "sha256": "sha256:9a7a7ac1cf8a7aa53c6e15ac69b572b81148a6ab85423911c13995da07fddaaa",
+  "source": {
+    "lineage_authority_git_commit": "4235f54749b739bb2ec1af38d113715b1c156914",
+    "lineage_authority_git_tree": "43f01376fb2f5e44eedd48b4492c49bd10c9f2e8",
+    "review_packet_merged_to_origin_main": false
+  }
+}
