@@ -123,9 +123,12 @@ Keeping the current proportions requires 300 distinct qualified families:
 - 68 development
 - 32 final test
 
-That is 225 more qualified families than exist today. Even if all 33 pending QA
-candidates became valid, distinct new families, the population would be 108 and
-the proportional heldout would be only 36—still 64 short of 100.
+That is 225 more qualified families than exist today. The original design also
+recorded an explicit best case in which all 33 pending exact versions were
+distinct families. The completed shared-atom census now shows that they are 26
+transitive components. If all 26 components gain complete receipts, the
+population would be 101 and the proportional heldout would be 34—still 66 short
+of 100. Reaching 300 would then require 199 more distinct qualified components.
 
 Before a new family can extend the split, it needs:
 
@@ -139,6 +142,8 @@ Before a new family can extend the split, it needs:
 6. Deterministic anchored assignment that does not move any existing family.
 
 The 1,035 unproven rows are a large discovery pool, not an evaluation set. The
-next useful action is to qualify and bind at least 225 distinct families, then
-rerun the deterministic builder. No cluster or evaluation job was launched by
-this design work.
+next useful action is to qualify one preregistered representative per transitive
+component, then rerun the deterministic builder. The corrected current and
+conditional ceilings are in
+[`FLEET_BLACKBOX_HELDOUT_COMPONENT_CEILINGS_2026-09-24.md`](FLEET_BLACKBOX_HELDOUT_COMPONENT_CEILINGS_2026-09-24.md).
+No cluster or evaluation job was launched by this design work.
