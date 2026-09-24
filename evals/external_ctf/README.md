@@ -203,3 +203,56 @@ closed until their model-free remote runtime receipts pass. Fleet Kubernetes is
 not used as a fallback because these official benchmarks require isolated
 Docker workloads; forcing them into a GPU training node would be less reliable
 and would waste the eight-node training budget.
+
+## Six-model pass@4 campaign adapter
+
+[`campaign_adapter.py`](./campaign_adapter.py) connects these existing
+benchmark runtimes to the generic resumable controller in
+[`evals/campaign.py`](../campaign.py). It does not copy or replace the native
+graders. A reviewed private binding file supplies the frozen six-model matrix,
+exact serving-route checks, the existing capacity handoff, the model-free
+qualification packet, and one accepted qualification summary per benchmark.
+The adapter then renders 1,464 candidate cells: 61 available tasks × six exact
+model weights × four attempts. Every attempt has a null seed and a unique,
+deterministic provider name that includes its stable experiment key.
+
+The controller runs canary cells one at a time, then permits at most four of
+this campaign's sandboxes at once. Its shared TensorLake capacity and duplicate
+checks still apply. Valid cells resume independently, so one infrastructure
+failure does not discard other completed cells. Scoring is local and uses only
+the benchmark's pinned deterministic grader; no GPT judge is called.
+
+Render a controller configuration without creating a sandbox:
+
+```sh
+uv run python -m evals.external_ctf.campaign_adapter \
+  --bindings /private/path/external-ctf-campaign-bindings.json \
+  render --output /private/path/external-ctf-campaign.json
+```
+
+Prepare the immutable campaign state and generate read-only previews through
+the standalone controller:
+
+```sh
+uv run python -m evals.campaign prepare \
+  /private/path/external-ctf-campaign.json \
+  --output /private/path/external-ctf-campaign-state
+uv run python -m evals.campaign step \
+  /private/path/external-ctf-campaign-state
+```
+
+Only a later, reviewed `step --execute` may create work. This adapter and its
+template do not execute that command or authorize a provider request.
+
+The binding file is create-once evidence, not a convenient defaults file. It
+must bind the exact protocol, capacity handoff, qualification packet and
+summaries, six route checks, matrix digest, budget digest, harness digests, and
+scoring digests. The adapter rechecks all of them before readiness and again
+under the shared create lock immediately before a provider request.
+
+CVE-Bench's 40 available tasks can advance after those gates pass. NYU's 16
+available rows and Cybench's five available rows are present in the same plan
+but truthfully remain deferred while their scored adapters are unqualified.
+Their four declared unavailable tasks remain in the campaign template's
+official denominators and are never converted into model failures. This change
+performed no external create and authorizes none by itself.

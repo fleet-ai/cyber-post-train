@@ -22,6 +22,7 @@ def test_template_is_held_and_binds_the_current_external_protocol() -> None:
     value = _load()
     protocol = load_protocol()
     binding = value["external_protocol"]
+    controller = value["controller_contract"]
 
     assert value["status"].startswith("held_")
     assert value["launch_authorized"] is False
@@ -30,6 +31,9 @@ def test_template_is_held_and_binds_the_current_external_protocol() -> None:
     assert binding["protocol_sha256"] == protocol["protocol_sha256"]
     assert value["checkpoint_matrix"]["selection_must_predate_external_results"] is True
     assert value["data_policy"] == "evaluation_only_never_training_tuning_or_checkpoint_selection"
+    assert controller["source_sha256"] == _sha256(ROOT / controller["source_path"])
+    assert controller["driver_adapter_sha256"] == _sha256(ROOT / controller["driver_adapter_path"])
+    assert controller["binding_schema"] == "external_ctf_campaign_bindings_v1"
 
 
 def test_six_arm_pass4_universe_preserves_official_unavailable_rows() -> None:
