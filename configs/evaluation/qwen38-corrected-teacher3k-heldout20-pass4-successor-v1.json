@@ -3,7 +3,7 @@
   "status": "proposal_blocked_pending_corrected_corpus_checkpoint_and_integrated_adapter",
   "launch_authorized": false,
   "purpose": "Define the fail-closed successor to the Teacher3K heldout20 protocol for one exact base-versus-corrected-teacher-SFT comparison without copying private task content.",
-  "prepared_from_main": "9859a27d09b4fd881dfe04bbf9a1dcf7413083b8",
+  "prepared_from_main": "0ae3e0923c1e74e65bea3a91f102c1ac7a12917d",
   "predecessor_protocol": {
     "pull_request": "https://github.com/fleet-ai/cyber-post-train/pull/578",
     "commit": "942b332115a8bfecc48da76d197786ee86280cae",
@@ -138,6 +138,53 @@
   "reporting": {
     "primary_unit": "reviewed task family",
     "per_task_metric": "pass@4: at least one authoritative success among four valid attempts",
+    "analysis_contract": {
+      "primary_stratum": "dev13",
+      "eligible_primary_pairs": "All 13 clean development families with complete, outcome-valid paired base and corrected-teacher-SFT pass@4 cells after any predeclared whole-pair replacement.",
+      "estimand": "delta_dev=(1/13)*sum_i(corrected_pass4_i-base_pass4_i), the absolute paired task-family pass@4 risk difference for the exact terminal checkpoint versus the exact base.",
+      "discordant_counts": {
+        "corrected_win": "b=count(base_pass4=0, corrected_pass4=1)",
+        "base_win": "c=count(base_pass4=1, corrected_pass4=0)",
+        "discordant_total": "D=b+c"
+      },
+      "primary_test": {
+        "method": "one-sided exact McNemar conditional binomial test",
+        "null": "Pr(corrected win | discordant pair) <= 0.5",
+        "alternative": "Pr(corrected win | discordant pair) > 0.5",
+        "p_value": "Pr[Binomial(D,0.5)>=b] evaluated exactly; when D=0 set p=1",
+        "alpha": 0.05,
+        "mid_p": false
+      },
+      "uncertainty": {
+        "method": "two-sided 95% Clopper-Pearson exact interval",
+        "parameter": "theta=Pr(corrected win | discordant pair)",
+        "confidence_level": 0.95,
+        "mapping_for_reporting": "Also report the interval mapped to the observed-D paired risk-difference scale as (D/13)*(2*theta-1); label it conditional on observed D.",
+        "zero_discordance": "When D=0, report delta_dev=0, theta as not estimable, the theta interval as [0,1], and the mapped interval as [0,0]."
+      },
+      "development_decision": {
+        "minimum_absolute_delta": {
+          "numerator": 3,
+          "denominator": 13
+        },
+        "positive": "Only if all 13 primary pairs are valid, delta_dev>=3/13, and the one-sided exact p-value<=0.05.",
+        "harm": "Only if all 13 primary pairs are valid, delta_dev<=-3/13, and the reverse one-sided exact p-value<=0.05.",
+        "otherwise": "not confirmed; do not reinterpret as equivalence, benefit, or harm"
+      },
+      "final_test_role": {
+        "stratum": "final7",
+        "unseal_condition": "Unseal once only after the frozen dev13 positive rule passes; otherwise leave final7 sealed.",
+        "role": "Independent one-shot generalization check, never a tuning, checkpoint-selection, or pooled-primary stratum.",
+        "reporting": "Report the same paired delta, discordant counts, exact one-sided p-value, and conditional exact interval separately.",
+        "directional_consistency_floor": {
+          "numerator": 2,
+          "denominator": 7
+        },
+        "interpretation": "Call the final result directionally consistent only when delta_final>=2/7; this descriptive label is not a second powered superiority claim. Otherwise report that final-set directional consistency was not observed. Never pool final7 with dev13 to rescue the primary decision."
+      },
+      "multiplicity": "One primary dev13 superiority test. The final7 check and union20 summaries do not create additional confirmatory claims.",
+      "training_seed_scope": "One fixed training seed is evaluated. The estimand describes this exact trained checkpoint, not the expected effect of the training procedure across seeds."
+    },
     "required_strata": [
       "dev13",
       "final7"
@@ -162,5 +209,5 @@
     "routes_created_or_mutated": 0,
     "results_unsealed": false
   },
-  "sha256": "sha256:f66cbd9c02b3d33e0c8f07153f7af1262fb4971628c35bca673f485f5d8d35d4"
+  "sha256": "sha256:756b6cabf665dab351c0e8a661782cf33ee7a4fc785f04aeca32d4e23929e315"
 }

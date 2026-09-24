@@ -5,10 +5,12 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+MAIN_COMMIT = "0ae3e0923c1e74e65bea3a91f102c1ac7a12917d"
 PLAN_PATH = ROOT / "configs" / "qualification" / "qwen38-corrected-teacher-sft-minimum-plan-v1.json"
 EVAL_PATH = (
     ROOT / "configs" / "evaluation" / "qwen38-corrected-teacher3k-heldout20-pass4-successor-v1.json"
 )
+DOC_PATH = ROOT / "docs" / "QWEN38_CORRECTED_TEACHER_SFT_MINIMUM_PLAN_2026-09-24.md"
 
 
 def _load(path: Path) -> dict:
@@ -36,13 +38,18 @@ def _all_keys(value: object) -> set[str]:
 def test_minimum_plan_is_self_digesting_blocked_and_cross_binds_evaluation() -> None:
     plan = _load(PLAN_PATH)
     evaluation = _load(EVAL_PATH)
+    documentation = DOC_PATH.read_text(encoding="utf-8")
 
     assert plan["sha256"] == _logical_digest(plan)
     assert evaluation["sha256"] == _logical_digest(evaluation)
+    assert plan["sha256"].removeprefix("sha256:") in documentation
+    assert evaluation["sha256"].removeprefix("sha256:") in documentation
+    assert "TO_BE_RECOMPUTED" not in documentation
     assert plan["status"] == "proposal_blocked_no_launch"
     assert plan["launch_authorized"] is False
     assert evaluation["launch_authorized"] is False
-    assert plan["prepared_from_main"] == "9859a27d09b4fd881dfe04bbf9a1dcf7413083b8"
+    assert plan["prepared_from_main"] == MAIN_COMMIT
+    assert evaluation["prepared_from_main"] == MAIN_COMMIT
     assert plan["evidence"]["heldout_successor"] == {
         "path": "configs/evaluation/qwen38-corrected-teacher3k-heldout20-pass4-successor-v1.json",
         "file_sha256": _file_digest(EVAL_PATH),
@@ -69,9 +76,26 @@ def test_minimum_plan_is_self_digesting_blocked_and_cross_binds_evaluation() -> 
         "per_teacher_token_concentration",
         "per_source_token_cap",
         "per_family_token_cap",
+        "cap_policy_sha256",
+        "cap_implementation_commit",
+        "cap_implementation_file_sha256",
+        "cap_regression_test_file_sha256",
+        "prepacking_cap_enforcement_receipt_sha256",
         "admission_receipt_sha256",
     }
     assert all(admission[field] is None for field in required_unknowns)
+    assert admission["status"] == "blocked_missing_cap_policy_implementation_and_receipts"
+    assert "before packing" in admission["reason"]
+
+    boundary = plan["scientific_boundary"]
+    assert boundary["historical_step1000_role"]["label"] == "historical flawed-treatment comparator"
+    assert "only that combined treatment" in boundary["causality_boundary"]
+    retained_limits = boundary["retained_mismatches_and_limits"]
+    assert any("training-seed variance" in limit for limit in retained_limits)
+    assert any("262K" in limit for limit in retained_limits)
+    followup = plan["fixed_vs_changed"]["smallest_followup_after_confirmed_step1000_regression"]
+    assert "matched supervised-target-token exposure" in followup
+    assert "no launch authority" in followup
 
     formulas = plan["phases"]["optimizer_canary"]["formulas"]
     assert formulas == {
@@ -119,6 +143,27 @@ def test_heldout_successor_fails_closed_on_new_corpus_and_outcome_validity() -> 
     assert evaluation["treatment"]["job_contract"]["root_metadata_annotations"] == {
         "fleet.ai/failure-alerts": "off"
     }
+    analysis = evaluation["reporting"]["analysis_contract"]
+    assert analysis["primary_stratum"] == "dev13"
+    assert analysis["primary_test"] == {
+        "method": "one-sided exact McNemar conditional binomial test",
+        "null": "Pr(corrected win | discordant pair) <= 0.5",
+        "alternative": "Pr(corrected win | discordant pair) > 0.5",
+        "p_value": "Pr[Binomial(D,0.5)>=b] evaluated exactly; when D=0 set p=1",
+        "alpha": 0.05,
+        "mid_p": False,
+    }
+    assert analysis["uncertainty"]["method"] == "two-sided 95% Clopper-Pearson exact interval"
+    assert analysis["development_decision"]["minimum_absolute_delta"] == {
+        "numerator": 3,
+        "denominator": 13,
+    }
+    assert analysis["final_test_role"]["unseal_condition"].startswith("Unseal once only")
+    assert analysis["final_test_role"]["directional_consistency_floor"] == {
+        "numerator": 2,
+        "denominator": 7,
+    }
+    assert evaluation["reporting"]["union20"] == "descriptive_only"
     assert evaluation["containment"] == {
         "external_evaluations_in_scope": False,
         "external_benchmark_content_present": False,

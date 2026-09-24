@@ -6,9 +6,9 @@ Status: proposal only; blocked; no corpus, training, serving, or evaluation work
 The machine-readable authority for this proposal is
 [`qwen38-corrected-teacher-sft-minimum-plan-v1.json`](../configs/qualification/qwen38-corrected-teacher-sft-minimum-plan-v1.json)
 at logical SHA-256
-`6277e8a3fe4117b80e9b9858cd88db8c90a8928b1eb956893d6d230edfd462f0`.
+`d60cbe89fa125cc7c88966e15f0e031682a599844f9869b3837d8679db9d56a8`.
 It was prepared from `cyber-post-train` main commit
-`9859a27d09b4fd881dfe04bbf9a1dcf7413083b8` and is intentionally not a job
+`0ae3e0923c1e74e65bea3a91f102c1ac7a12917d` and is intentionally not a job
 request.
 
 ## Decision
@@ -23,9 +23,14 @@ Run one combined correction, not another sweep:
 
 This answers whether the combined corrected-corpus and conservative-optimizer
 treatment works. It does not attribute an effect among message boundaries,
-formal tools, learning rate, or warmup. The already accepted step1000 export is
-the negative diagnostic control; rerunning the malformed corpus would add no
-decisive evidence.
+formal tools, successful-report provenance, heldout exclusion, learning rate,
+or warmup. The already accepted step1000 export is a **historical
+flawed-treatment comparator**, not a negative control: its weight audit proves
+real training and correct serving identity, but the earlier outcome and lineage
+defects mean its capability direction is not yet established. It may be called
+a negative treatment comparator only if a fresh outcome-valid, alias-clean,
+exact-harness matched base-versus-step1000 comparison meets a preregistered
+negative rule.
 
 The formal-tool mismatch is a confirmed structural defect: the retired dense
 path rendered no tool schemas and bare `bash`/`submit_report` targets, while the
@@ -78,9 +83,12 @@ There is one additional admission gap: repository scientific policy requires
 unique supervised target tokens, source and family counts,
 distribution/concentration, and explicit per-source and per-family token caps
 applied before packing. PR #584 currently records teacher session counts but
-does not emit the complete per-task/session/teacher token concentration and cap
-evidence. Those fields and all resulting counts/digests must be sealed before
-training; retired corpus counts cannot fill them.
+does not define a reviewed numeric cap policy, enforce both caps in versioned
+builder code, regression-test that enforcement, or emit complete
+per-task/session/teacher token concentration evidence. Training remains blocked
+until immutable receipts bind the cap policy, implementation commit and file,
+regression test, prepacking enforcement result, and admitted manifest. Every
+field must be non-null; retired corpus counts cannot fill them.
 
 ## 2. Optimizer canary
 
@@ -126,7 +134,7 @@ staging, serving-registration, and live-parity receipts.
 The fail-closed proposal is
 [`qwen38-corrected-teacher3k-heldout20-pass4-successor-v1.json`](../configs/evaluation/qwen38-corrected-teacher3k-heldout20-pass4-successor-v1.json)
 at logical SHA-256
-`f66cbd9c02b3d33e0c8f07153f7af1262fb4971628c35bca673f485f5d8d35d4`.
+`756b6cabf665dab351c0e8a661782cf33ee7a4fc785f04aeca32d4e23929e315`.
 
 Re-run lineage reconciliation after corpus materialization and issue a new
 immutable protocol that binds its manifest. Preserve the exact 20-family roster
@@ -139,8 +147,74 @@ Reuse historical base cells only if every protocol and outcome-validity binding
 matches; otherwise run a fresh base arm. Preserve valid zeros. Hold output-limit
 and process errors outside the capability denominator, retain originals, and
 replace an invalid cell only as a score-blind whole base/candidate pair under a
-new immutable successor. Report development and final-test strata separately;
-the 20-family union is descriptive.
+new immutable successor.
+
+### Preregistered primary analysis
+
+The primary stratum is the 13 clean development families. The unit is one
+reviewed family and its binary endpoint is pass@4: at least one authoritative
+success among four valid attempts. All 13 paired cells must be complete after
+any predeclared whole-pair replacement. For family `i`, let `C_i` and `B_i` be
+the corrected and base endpoints. The estimand is the absolute paired
+task-family risk difference
+
+```text
+delta_dev = (1 / 13) * sum_i(C_i - B_i).
+```
+
+Let `b` count discordant corrected wins (`B_i=0, C_i=1`), let `c` count
+discordant base wins, and let `D=b+c`. Test superiority with the one-sided exact
+McNemar conditional-binomial p-value
+`Pr[Binomial(D, 0.5) >= b]`, with no mid-p correction and `p=1` when `D=0`.
+Report the two-sided 95% Clopper-Pearson exact interval for
+`theta=Pr(corrected win | discordant pair)` and its conditional-on-observed-`D`
+mapping `(D/13) * (2*theta - 1)` to the paired-risk-difference scale. When
+`D=0`, report `delta_dev=0`, theta as not estimable, the theta interval as
+`[0,1]`, and the mapped interval as `[0,0]`.
+
+Call the primary result positive only if all 13 pairs are valid,
+`delta_dev >= 3/13`, and the exact one-sided p-value is at most `0.05`. Call it
+evidence of harm only if `delta_dev <= -3/13` and the reverse exact one-sided
+p-value is at most `0.05`. Every other result is **not confirmed**, not evidence
+of equivalence. This is the single confirmatory test.
+
+Keep the seven final-test families sealed unless the development positive rule
+passes. Then unseal them exactly once, with no tuning or checkpoint change, and
+report the same paired delta, discordant counts, exact p-value, and conditional
+interval separately. `delta_final >= 2/7` earns only the descriptive label
+"directionally consistent"; it is not a second powered superiority claim. Do
+not pool the final seven with development to rescue the primary decision. The
+20-family union remains descriptive.
+
+### Attribution and retained limits
+
+A positive primary result supports only the combined treatment for this exact
+checkpoint and fixed training seed. It cannot attribute an effect among message
+alignment, formal tool schemas/names, successful-report provenance,
+alias-complete exclusion, learning rate, or warmup. Any component claim requires
+a separately preregistered factorial or single-factor ablation that holds source
+eligibility, provenance, exclusions, supervised-token exposure, model, and
+evaluation fixed.
+
+If the fresh matched base-versus-step1000 comparison first confirms a historical
+regression, the smallest bundle-separation follow-up is one separately
+preregistered corrected-corpus arm using the historical optimizer and schedule
+with matched supervised-target-token exposure. Exact base and step1000 cells may
+be reused only if every binding remains compatible. That arm tests the corrected
+corpus bundle at the historical optimizer; it still cannot distinguish message
+alignment, tool contract, successful-report provenance, and alias exclusion from
+one another. This plan does not authorize that arm.
+
+The minimum run intentionally retains these limits:
+
+- source system and task messages remain heterogeneous rather than normalized;
+- targets remain action-only demonstrations without student-visible teacher
+  reasoning;
+- training uses a 32K maximum sequence and 8K copied-context budget while Fleet
+  uses 262K native compaction/autocontinue;
+- one training seed provides no training-seed variance estimate; and
+- exact provider-request capture for the model-facing tool contract remains a
+  pre-training blocker, not an assumed wire-level identity.
 
 No WebExploitBench or other external evaluation is part of this plan. Every
 future rendered root `Job` or `RayJob` must prove
