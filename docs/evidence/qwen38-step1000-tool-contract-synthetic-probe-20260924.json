@@ -1,0 +1,79 @@
+{
+  "arms": {
+    "a_training_style": {
+      "assistant_tool_names": [
+        "bash",
+        "submit_report"
+      ],
+      "enable_thinking": true,
+      "tools_argument": []
+    },
+    "b_heldout_shape": {
+      "assistant_tool_names": [
+        "fleet_bash",
+        "fleet_submit_report"
+      ],
+      "enable_thinking": true,
+      "tool_schema_shape": "OpenAI function wrappers derived from the exact reviewed Fleet MCP catalog"
+    }
+  },
+  "caveat": "Synthetic magnitude probe, not a corpus or benchmark prompt.",
+  "created_at": "2026-09-24",
+  "digest_methods": {
+    "token_id_sequence": "SHA-256 of UTF-8 json.dumps(token_ids, separators=(',', ':')); array order preserved; no trailing newline",
+    "tool_catalog": "SHA-256 of UTF-8 json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True); no trailing newline"
+  },
+  "privacy": {
+    "contains_private_prompt_or_task_content": false,
+    "contains_rendered_prompt": false,
+    "contains_token_ids": false,
+    "fixture": "benign synthetic messages only"
+  },
+  "results": {
+    "full_trajectory": {
+      "arm_a_token_ids_sha256": "f30f30105fc3d38cf729f41b6232fa6a61e0e2fda8975ae46c372236cf543009",
+      "arm_a_tokens": 234,
+      "arm_b_token_ids_sha256": "a069b970b417d43bcdecb61106e68179cd6a297fd0ace6ca2f75b2988e3b9fd9",
+      "arm_b_tokens": 1111,
+      "common_prefix_tokens": 41,
+      "common_suffix_tokens": 91,
+      "first_differing_token_index_zero_based": 41,
+      "token_delta_b_minus_a": 877
+    },
+    "initial_context_with_generation_prompt": {
+      "arm_a_token_ids_sha256": "65f6463a355321094483d14683bb127cc4bf80f19575cba24f2c50436d3f4dfe",
+      "arm_a_tokens": 76,
+      "arm_b_token_ids_sha256": "29b69df267aed2b8ba598e8a6e0e6b9b35960572890185a90f9b8d8d9a8418d9",
+      "arm_b_tokens": 950,
+      "common_prefix_tokens": 41,
+      "common_suffix_tokens": 36,
+      "first_differing_token_index_zero_based": 41,
+      "token_delta_b_minus_a": 874
+    }
+  },
+  "schema": "cyber_qwen38_tool_contract_synthetic_probe_v1",
+  "structural_observations": [
+    "A nonempty tools argument causes this exact Qwen template to inject the tool schema and tool-call instructions into the rendered system section; tools=[] omits that block.",
+    "OpenCode exposes the Fleet MCP tools to the model as fleet_bash and fleet_submit_report, while the training serializer admitted bare bash and submit_report calls.",
+    "The first divergence occurs before the user message completes, and the 874-token initial-context delta is therefore a prompt-contract difference rather than an assistant-output-only difference.",
+    "The measured deltas are fixture-specific magnitude evidence and must not be interpreted as corpus-wide token counts."
+  ],
+  "tokenizer": {
+    "backend_sha256": "ffb7a28b27dabcc333662fd3e0b0005d9e79a1c22e31453ab5a3017fbd5f25c0",
+    "chat_template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "class": "Qwen2Tokenizer",
+    "model_max_length": 262144,
+    "repo": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "tokenizer_json_sha256": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+    "tokenizers_version": "0.23.1",
+    "transformers_version": "5.16.1",
+    "vocab_size": 248044
+  },
+  "tool_catalog": {
+    "canonical_sha256": "85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "path": "configs/data/qwen38-rl-filtered-canary-tool-catalog-v1.json",
+    "raw_file_sha256": "e4a3c4fb5b5c34cdaf64ec568eb31fcc0d55a63cc0a134808db348c65d7b6858"
+  },
+  "verification_script": "scripts/probe_qwen38_tool_contract_synthetic.py"
+}
