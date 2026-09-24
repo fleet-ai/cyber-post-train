@@ -1069,6 +1069,32 @@ def _local_record():
     }
 
 
+@pytest.mark.parametrize(
+    ("exit_code", "termination"),
+    [(0, "completed"), (0, "output_limit"), (1, "process_error")],
+)
+def test_cell_status_exposes_score_blind_agent_lifecycle(
+    pg_dsn, owned_cell, exit_code, termination
+):
+    record = {
+        **_local_record(),
+        "agent_exit_code": exit_code,
+        "agent_termination": termination,
+    }
+    rollout_postgres.record_local_result(pg_dsn, **owned_cell, record=record)
+    rollout_postgres.accept(pg_dsn, **owned_cell, receipt_digest="a" * 64)
+    status = rollout_postgres.cell_status(
+        pg_dsn,
+        task_version_id="version-0",
+        model_id="model",
+        model_revision="revision",
+        attempt=1,
+    )
+    assert status["local_results"] == 1
+    assert status["agent_exit_code"] == exit_code
+    assert status["agent_termination"] == termination
+
+
 def test_retry_review_summary_is_grouped_score_blind_and_read_only(tmp_path, pg_dsn):
     rollout_postgres.initialize(pg_dsn, _plan(tmp_path / "plan.csv", count=3))
 
