@@ -627,9 +627,7 @@ def test_create_uses_already_validated_package_without_second_build(tmp_path, mo
     assert result["config_map_uid"] == CONFIG_MAP_UID
 
 
-def test_create_rejects_wrong_prevalidated_path_or_digest_before_live_checks(
-    tmp_path, monkeypatch
-):
+def test_create_rejects_wrong_prevalidated_path_or_digest_before_live_checks(tmp_path, monkeypatch):
     from tests.test_fleet_heldout_launch import (  # noqa: PLC0415
         FakeCluster as LaunchCluster,
     )
