@@ -6,9 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
 LINEAGE = ROOT / "configs/data/qwen38-teacher3k-training-lineage-map-20260924-v1.json"
-PROTOCOL = (
-    ROOT / "configs/evaluation/qwen38-teacher3k-fleet-heldout20-pass4-protocol-v2.json"
-)
+PROTOCOL = ROOT / "configs/evaluation/qwen38-teacher3k-fleet-heldout20-pass4-protocol-v2.json"
 SPLIT = ROOT / "configs/data/fleet-blackbox-current-study-split-20260914-v2.json"
 INVENTORY = ROOT / "configs/data/fleet-blackbox-current-high-quality-20260914-v1.json"
 OLD = ROOT / "configs/evaluation/qwen38-teacher3k-fleet-heldout25-proposal-v1.json"
@@ -100,9 +98,7 @@ def test_all_25_tasks_are_classified_and_exact_exposures_are_recorded() -> None:
     assert classification["exact_task_version_overlap"] == 0
 
     exposed = {
-        row["task_key"]: {
-            alias["task_key"] for alias in row["training_aliases"]
-        }
+        row["task_key"]: {alias["task_key"] for alias in row["training_aliases"]}
         for row in classification["tasks"]
         if row["training_lineage_status"] == "exposed"
     }
@@ -142,13 +138,9 @@ def test_corrected_pass4_roster_is_exact_and_lineage_disjoint() -> None:
     assert len({row["group_id"] for row in selection["tasks"]}) == 20
 
     training_atoms = {
-        atom
-        for row in lineage["training_task_keys"]
-        for atom in row["atom_lineages"]
+        atom for row in lineage["training_task_keys"] for atom in row["atom_lineages"]
     }
-    selected_atoms = {
-        row["reviewed_task_family"] + ":atom_source" for row in selection["tasks"]
-    }
+    selected_atoms = {row["reviewed_task_family"] + ":atom_source" for row in selection["tasks"]}
     assert not training_atoms & selected_atoms
     assert protocol["effects"] == {
         "api_mutations": 0,
