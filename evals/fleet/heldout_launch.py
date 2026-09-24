@@ -1456,6 +1456,8 @@ def launch_package_once(
         "final_duplicate_census": final_census,
     }
     _write_new_record(journal, intent)
+    uid: str | None = None
+    config_map_uid: str | None = None
     try:
         created = cluster.create_once(package.packet.namespace, package.bundle)
         job = _response_object(
@@ -1513,12 +1515,21 @@ def launch_package_once(
         _assert_cpu_only(created_pod)
     except Exception as exc:
         observed = _created_name_observation(cluster, package.packet)
+        uncertain = {
+            "state": "KUBECTL_CREATE_RESPONSE_UNCERTAIN_DO_NOT_RETRY",
+            "observed_exact_names": observed,
+        }
+        if (
+            isinstance(uid, str)
+            and KUBERNETES_UID.fullmatch(uid) is not None
+            and isinstance(config_map_uid, str)
+            and KUBERNETES_UID.fullmatch(config_map_uid) is not None
+        ):
+            uncertain["returned_job_uid"] = uid
+            uncertain["returned_config_map_uid"] = config_map_uid
         _append_record(
             journal,
-            {
-                "state": "KUBECTL_CREATE_RESPONSE_UNCERTAIN_DO_NOT_RETRY",
-                "observed_exact_names": observed,
-            },
+            uncertain,
         )
         if isinstance(exc, HeldoutLaunchError):
             raise
