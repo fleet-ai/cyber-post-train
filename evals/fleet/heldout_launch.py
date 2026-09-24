@@ -132,6 +132,16 @@ class Database(Protocol):
 
     def summary(self, database: str) -> dict[str, Any]: ...
 
+    def cell_status(
+        self,
+        database: str,
+        *,
+        task_version_id: str,
+        model_id: str,
+        model_revision: str,
+        attempt: int,
+    ) -> dict[str, Any]: ...
+
 
 @dataclass(frozen=True)
 class LaunchPacket:
@@ -1294,6 +1304,19 @@ def _validate_server_preview(response: dict[str, Any], package: Package) -> str:
     return _canonical_digest({"job": stable_job, "config_map": stable_config_map})
 
 
+def preview_package(package: Package, *, cluster: Cluster) -> str:
+    """Return one stable digest after two identical server-side dry-runs."""
+    first = _validate_server_preview(
+        cluster.server_dry_run(package.packet.namespace, package.bundle), package
+    )
+    second = _validate_server_preview(
+        cluster.server_dry_run(package.packet.namespace, package.bundle), package
+    )
+    if first != second:
+        raise HeldoutLaunchError("server dry-run changed across identical previews")
+    return first
+
+
 def _write_new_record(path: Path, value: dict[str, Any]) -> None:
     if path.is_symlink() or path.exists():
         raise HeldoutLaunchError("create journal already exists; reconcile, never retry")
@@ -1372,14 +1395,7 @@ def launch_once(
     first_census = duplicate_census(
         package, cluster=cluster, database=database, output_exists=output_exists
     )
-    first_preview = _validate_server_preview(
-        cluster.server_dry_run(package.packet.namespace, package.bundle), package
-    )
-    second_preview = _validate_server_preview(
-        cluster.server_dry_run(package.packet.namespace, package.bundle), package
-    )
-    if first_preview != second_preview:
-        raise HeldoutLaunchError("server dry-run changed across identical previews")
+    first_preview = preview_package(package, cluster=cluster)
     final_census = duplicate_census(
         package, cluster=cluster, database=database, output_exists=output_exists
     )
@@ -1886,37 +1902,62 @@ class PostgresDatabase:
         except Exception:
             raise HeldoutLaunchError("database duplicate check failed") from None
 
+    def _database_dsn(self, database: str) -> str:
+        if not isinstance(database, str) or DATABASE_NAME.fullmatch(database) is None:
+            raise HeldoutLaunchError("database name is invalid")
+        original = urlsplit(self._dsn())
+        if (
+            original.scheme not in {"postgres", "postgresql"}
+            or not original.netloc
+            or original.fragment
+        ):
+            raise HeldoutLaunchError("database environment is not a supported PostgreSQL URI")
+        if {
+            key.casefold() for key, _ in parse_qsl(original.query, keep_blank_values=True)
+        } & {"database", "dbname"}:
+            raise HeldoutLaunchError(
+                "database environment must select its database only by URI path"
+            )
+        return urlunsplit(
+            (
+                original.scheme,
+                original.netloc,
+                "/" + quote(database, safe=""),
+                original.query,
+                "",
+            )
+        )
+
     def summary(self, database: str) -> dict[str, Any]:
         try:
             from evals.fleet import rollout_postgres
 
-            if not isinstance(database, str) or DATABASE_NAME.fullmatch(database) is None:
-                raise HeldoutLaunchError("database name is invalid")
-            original = urlsplit(self._dsn())
-            if (
-                original.scheme not in {"postgres", "postgresql"}
-                or not original.netloc
-                or original.fragment
-            ):
-                raise HeldoutLaunchError("database environment is not a supported PostgreSQL URI")
-            query_keys = {
-                key.casefold() for key, _ in parse_qsl(original.query, keep_blank_values=True)
-            }
-            if query_keys & {"database", "dbname"}:
-                raise HeldoutLaunchError(
-                    "database environment must select its database only by URI path"
-                )
-            dsn = urlunsplit(
-                (
-                    original.scheme,
-                    original.netloc,
-                    "/" + quote(database, safe=""),
-                    original.query,
-                    "",
-                )
-            )
-            return rollout_postgres.summary(dsn)
+            return rollout_postgres.summary(self._database_dsn(database))
         except HeldoutLaunchError:
             raise
         except Exception:
             raise HeldoutLaunchError("score-blind database summary failed") from None
+
+    def cell_status(
+        self,
+        database: str,
+        *,
+        task_version_id: str,
+        model_id: str,
+        model_revision: str,
+        attempt: int,
+    ) -> dict[str, Any]:
+        try:
+            from evals.fleet import rollout_postgres
+
+            return rollout_postgres.cell_status(
+                self._database_dsn(database),
+                task_version_id=task_version_id,
+                model_id=model_id,
+                model_revision=model_revision,
+                attempt=attempt,
+            )
+        except HeldoutLaunchError:
+            raise
+        except Exception:
+            raise HeldoutLaunchError("score-blind cell status failed") from None

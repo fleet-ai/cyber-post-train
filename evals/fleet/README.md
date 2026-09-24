@@ -89,6 +89,60 @@ retry treatment for every arm. This makes new larger train/development/final-
 test splits safe to introduce without silently changing the held-out family set
 or treatment used by a baseline-versus-checkpoint comparison.
 
+## Resumable pass@4 campaign adapter
+
+`evals.fleet.campaign_adapter` connects these sealed source Jobs to the generic
+`evals.campaign` controller. The campaign still has one independent cell for
+each model, task and attempt. A small bindings file may group several task cells
+that share one model and seed onto one CPU source Job. One declared leader cell
+creates that Job; the other cells reuse its immutable Job UID. This preserves
+per-task failure isolation without creating duplicate Jobs.
+
+The bindings file is immutable JSON with schema
+`cyber_fleet_campaign_bindings_v1`. It contains:
+
+- today's UTC rollout census: exact receipt digest, already-used count and the
+  fixed daily cap of 500;
+- each source packet's relative path and SHA-256 digest;
+- the leader and complete cell list for each source Job;
+- each campaign cell's exact task version, model alias/revision and source
+  attempt.
+
+Before creation, the adapter recompiles the plan with the evaluator code sealed
+inside the source packet, requires an exact cell match, checks the Fleet account
+and live serving route, runs the existing duplicate census, and relies on the
+existing double server dry-run. The source launcher still performs its own
+fresh checks immediately before its one create request. The server-rendered
+root Job must contain `fleet.ai/failure-alerts: "off"`, request no GPUs, use
+priority `c1`, have no retry, and have a bounded deadline.
+
+Daily capacity is reserved under the generic campaign's canonical local state
+directory while holding a file lock. The gate counts the frozen already-used
+census plus every persistent source-group reservation. Reopening the same exact
+group is idempotent; a changed reservation or a total above 500 fails closed.
+Use one authoritative census before the first campaign reservation each UTC
+day, and reuse that exact census for every campaign on the same controller host.
+
+Terminal observation is score-blind. The adapter binds the Job UID, reuses the
+existing terminal collector, and reads only one exact PostgreSQL cell's state
+and receipt digest. Cells become accepted independently. An accepted worker
+receipt already proves the Fleet instance was closed, its containers were
+removed, and the authoritative session was preserved; the adapter exposes that
+cleanup fact without exposing the score or any rollout content. A failed cell
+does not stop sibling cells, and neither rollout nor score creation is replayed
+after an uncertain launch intent.
+
+The four driver commands use this shape (add the corresponding prior-receipt
+argument for `ready`, `launch`, or `observe`):
+
+```sh
+python -m evals.fleet.campaign_adapter preview rollout \
+  {packet} {receipt} --bindings /absolute/bindings.json --context fleet-prod
+```
+
+The score phase is only a local evidence-binding phase: the Fleet worker has
+already run the exact task verifier. It never launches another rollout or judge.
+
 Each route requires `model` (one alias above), `served_id`, `task_versions`,
 `endpoint_origin: https://inference.flt.build`, and these expected projections:
 
