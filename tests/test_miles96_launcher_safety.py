@@ -222,6 +222,7 @@ def test_signal_submit_reuses_prepared_bundle_and_posts_once(monkeypatch, tmp_pa
     }
     bundle_checks = []
     transition_checks = []
+    prepost_order = []
 
     def check_bundle(_plan, _request, _bundle, checked_directory, **kwargs):
         assert checked_directory == directory
@@ -233,7 +234,11 @@ def test_signal_submit_reuses_prepared_bundle_and_posts_once(monkeypatch, tmp_pa
     monkeypatch.setattr(
         launch,
         "validate_reviewed_transition",
-        lambda *_args, **kwargs: transition_checks.append(kwargs["now"]) or {"launchable": True},
+        lambda *_args, **kwargs: (
+            transition_checks.append(kwargs["now"]),
+            prepost_order.append("transition"),
+            {"launchable": True},
+        )[-1],
     )
     monkeypatch.setattr(
         launch,
@@ -253,7 +258,10 @@ def test_signal_submit_reuses_prepared_bundle_and_posts_once(monkeypatch, tmp_pa
     monkeypatch.setattr(
         launch,
         "validate_armed_observer",
-        lambda *_args, **_kwargs: {"sha256": "sha256:" + "6" * 64},
+        lambda *_args, **_kwargs: (
+            prepost_order.append("observer"),
+            {"sha256": "sha256:" + "6" * 64},
+        )[-1],
     )
 
     class Client:
@@ -263,6 +271,7 @@ def test_signal_submit_reuses_prepared_bundle_and_posts_once(monkeypatch, tmp_pa
             raise AssertionError("reviewed signal submit regenerated its preview")
 
         def request(self, method, path, **kwargs):
+            prepost_order.append("post")
             self.calls.append((method, path, kwargs))
             return {
                 "name": request["name"] + "-1234abcd",
@@ -292,6 +301,7 @@ def test_signal_submit_reuses_prepared_bundle_and_posts_once(monkeypatch, tmp_pa
     assert result["job_id"] == "33333333-3333-4333-8333-333333333333"
     assert bundle_checks == [False, True]
     assert transition_checks == [100.0, 100.0]
+    assert prepost_order[-3:] == ["transition", "observer", "post"]
     assert client.calls == [("POST", "/v1/runs", {"json": request})]
     rows = [json.loads(line) for line in (directory / "SUBMISSION.jsonl").read_text().splitlines()]
     assert [row["state"] for row in rows] == ["POST_INTENT_DO_NOT_RETRY", "POST_RESPONSE"]
@@ -425,19 +435,75 @@ def _request() -> dict:
     }
 
 
+def _history_row(request: dict, job_id: str, name: str) -> dict:
+    return {
+        "image": request["image"],
+        "job_id": job_id,
+        "message": "private failure text is never retained",
+        "name": name,
+        "priority_class": request["priority_class"],
+        "priority_reason": "requested",
+        "queue_priority_class": "q1",
+        "requeueIfPreempted": request["requeueIfPreempted"],
+        "run_dir": request["run_dir"],
+        "status": "QUEUED",
+        "submitted_by": "researcher@example.invalid",
+        "submitted_by_profile_id": "00000000-0000-4000-8000-000000000099",
+    }
+
+
+def test_jobs_history_list_projection_is_exact_and_drops_message() -> None:
+    request = _request()
+    row = _history_row(
+        request,
+        "00000000-0000-4000-8000-000000000001",
+        request["name"] + "-1234abcd",
+    )
+    checked = launch._validated_jobs_history_row(row)
+    assert "message" not in checked
+    with pytest.raises(launch.JobsError, match="fields changed"):
+        launch._validated_jobs_history_row({**row, "config": request})
+
+
+def test_cleanup_coordinator_restart_reuses_exact_binding_and_checkpoint(
+    tmp_path, monkeypatch
+) -> None:
+    paths = launch._paths(tmp_path)
+    binding = {"sha256": "sha256:" + "1" * 64}
+    paths["binding"].write_text(json.dumps(binding))
+    paths["release"].write_text("{}")
+    observed = {}
+
+    class ResumeObserver:
+        def __init__(self, **kwargs):
+            observed.update(kwargs)
+
+        def run(self):
+            return {"sha256": "sha256:" + "2" * 64, "release_confirmed": False}
+
+    monkeypatch.setattr(cleanup, "JobsApiExactUidObserver", ResumeObserver)
+    monkeypatch.setattr(
+        launch,
+        "_guard",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("restart re-armed the prefix guard")
+        ),
+    )
+    launch.run_cleanup_coordinator({}, {}, tmp_path)
+    assert observed["binding_path"] == paths["binding"]
+    assert observed["release_contract_path"] == paths["release"]
+    assert observed["cleanup_checkpoint_path"] == paths["cleanup_checkpoint"]
+    result = json.loads(paths["coordinator"].read_text())
+    assert result["status"] == "finished"
+    assert result["release_confirmed"] is False
+
+
 def test_uncertain_post_reconciles_one_exact_authenticated_history_row(
     tmp_path, monkeypatch
 ) -> None:
     request = _request()
     job_id = str(uuid.UUID("33333333-3333-4333-8333-333333333333"))
-    _History.rows = [
-        {
-            **request,
-            "name": request["name"] + "-1234abcd",
-            "job_id": job_id,
-            "status": "QUEUED",
-        }
-    ]
+    _History.rows = [_history_row(request, job_id, request["name"] + "-1234abcd")]
     monkeypatch.setenv("FLEET_API_KEY", "secret")
     monkeypatch.setattr(launch, "Jobs", _History)
     journal = tmp_path / "SUBMISSION.jsonl"
@@ -473,14 +539,7 @@ def test_uncertain_post_reconciliation_polls_until_history_is_consistent(
             self.__class__.calls += 1
             if self.calls == 1:
                 return []
-            return [
-                {
-                    **request,
-                    "name": request["name"] + "-1234abcd",
-                    "job_id": job_id,
-                    "status": "QUEUED",
-                }
-            ]
+            return [_history_row(request, job_id, request["name"] + "-1234abcd")]
 
     monkeypatch.setenv("FLEET_API_KEY", "secret")
     monkeypatch.setattr(launch, "Jobs", DelayedHistory)
@@ -511,12 +570,11 @@ def test_uncertain_post_reconciliation_fails_closed_unless_unique(
 ) -> None:
     request = _request()
     _History.rows = [
-        {
-            **request,
-            "name": request["name"] + f"-{index + 1:08x}",
-            "job_id": str(uuid.UUID(int=index + 1)),
-            "status": "QUEUED",
-        }
+        _history_row(
+            request,
+            str(uuid.UUID(int=index + 1)),
+            request["name"] + f"-{index + 1:08x}",
+        )
         for index in range(count)
     ]
     monkeypatch.setenv("FLEET_API_KEY", "secret")

@@ -11,6 +11,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from .gpu_capacity import _effective_pod_quantity
@@ -221,12 +222,6 @@ def _render(
         DRIVER_ANNOTATION: driver_sha256,
         SOURCE_COMMIT_ANNOTATION: source_commit,
     }
-    labels = {
-        OWNER_LABEL: "chris",
-        ROLE_LABEL: JOB_ROLE,
-        QUEUE_LABEL: QUEUE,
-        QUEUE_PRIORITY_LABEL: QUEUE_PRIORITY,
-    }
     pod_environment = {
         "CUDA_VISIBLE_DEVICES": "",
         "NVIDIA_VISIBLE_DEVICES": "none",
@@ -237,7 +232,135 @@ def _render(
         "PYTHONDONTWRITEBYTECODE": "1",
         **environment,
     }
-    job = {
+    job = render_cpu_preflight_job(
+        name=name,
+        image=request["image"],
+        role=JOB_ROLE,
+        command=["python", "-u", "-c", source],
+        environment=pod_environment,
+        annotations=annotations,
+        resources={
+            "requests": {
+                "cpu": "4",
+                "memory": "32Gi",
+                "ephemeral-storage": "2Gi",
+            },
+            "limits": {
+                "cpu": "8",
+                "memory": "48Gi",
+                "ephemeral-storage": "4Gi",
+            },
+        },
+        image_pull_secrets=request.get("image_pull_secrets", []),
+        read_only_sfs=True,
+    )
+    return job, plan, request, prepared
+
+
+def render_cpu_preflight_job(
+    *,
+    name: str,
+    image: str,
+    role: str,
+    command: list[str],
+    environment: dict[str, str],
+    annotations: dict[str, str],
+    resources: dict[str, dict[str, str]],
+    image_pull_secrets: list[str] | tuple[str, ...] = (),
+    read_only_sfs: bool = False,
+    termination_message_path: str | None = None,
+) -> dict[str, Any]:
+    """Render the repository's one reviewed Kueue-managed zero-GPU Job shape.
+
+    Callers remain responsible for rebuilding and comparing their immutable
+    driver, bundle, and plan bytes.  This helper owns only the shared cluster
+    safety surface used by both SFT and Miles CPU preflights.
+    """
+    if re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", name) is None:
+        raise ValueError("CPU-preflight Job name is not a DNS label")
+    if re.fullmatch(r"[^\s]+@sha256:[a-f0-9]{64}", image) is None:
+        raise ValueError("CPU-preflight image is not immutable")
+    if re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", role) is None:
+        raise ValueError("CPU-preflight role is not a DNS label")
+    if (
+        not command
+        or any(not isinstance(value, str) or not value for value in command)
+        or any(
+            not isinstance(key, str) or not isinstance(value, str)
+            for key, value in environment.items()
+        )
+        or "JOB_NAME" in environment
+        or any(
+            not isinstance(key, str) or not isinstance(value, str)
+            for key, value in annotations.items()
+        )
+        or annotations.get(FAILURE_ALERT_ANNOTATION, FAILURE_ALERT_OFF) != FAILURE_ALERT_OFF
+        or type(read_only_sfs) is not bool
+        or any(
+            not isinstance(value, str)
+            or re.fullmatch(r"[a-z0-9](?:[-a-z0-9.]{0,251}[a-z0-9])?", value) is None
+            for value in image_pull_secrets
+        )
+    ):
+        raise ValueError("CPU-preflight command, environment, or policy is invalid")
+    if set(resources) != {"requests", "limits"} or any(
+        not isinstance(values, dict)
+        or set(values) != {"cpu", "memory", "ephemeral-storage"}
+        or any(not isinstance(value, str) or not value for value in values.values())
+        or "nvidia.com/gpu" in values
+        for values in resources.values()
+    ):
+        raise ValueError("CPU-preflight resources are invalid")
+    if termination_message_path is not None and (
+        not isinstance(termination_message_path, str)
+        or not termination_message_path.startswith("/tmp/")
+        or ".." in Path(termination_message_path).parts
+    ):
+        raise ValueError("CPU-preflight termination message path is unsafe")
+
+    annotations = {**annotations, FAILURE_ALERT_ANNOTATION: FAILURE_ALERT_OFF}
+    labels = {
+        OWNER_LABEL: "chris",
+        ROLE_LABEL: role,
+        QUEUE_LABEL: QUEUE,
+        QUEUE_PRIORITY_LABEL: QUEUE_PRIORITY,
+    }
+    volume_mounts = [{"name": "tmp", "mountPath": "/tmp"}]
+    volumes = [{"name": "tmp", "emptyDir": {"sizeLimit": "1Gi"}}]
+    if read_only_sfs:
+        volume_mounts.insert(0, {"name": "sfs", "mountPath": "/mnt/sfs", "readOnly": True})
+        volumes.insert(
+            0,
+            {
+                "name": "sfs",
+                "persistentVolumeClaim": {"claimName": "sfs-shared", "readOnly": True},
+            },
+        )
+    container = {
+        "name": "preflight",
+        "image": image,
+        "imagePullPolicy": "IfNotPresent",
+        "command": command,
+        "env": [{"name": "JOB_NAME", "value": name}]
+        + [{"name": key, "value": value} for key, value in environment.items()],
+        "resources": deepcopy(resources),
+        "securityContext": {
+            "allowPrivilegeEscalation": False,
+            "capabilities": {"drop": ["ALL"]},
+            "privileged": False,
+            "readOnlyRootFilesystem": True,
+            "runAsNonRoot": True,
+        },
+        "volumeMounts": volume_mounts,
+    }
+    if termination_message_path is not None:
+        container.update(
+            {
+                "terminationMessagePath": termination_message_path,
+                "terminationMessagePolicy": "File",
+            }
+        )
+    return {
         "apiVersion": "batch/v1",
         "kind": "Job",
         "metadata": {
@@ -263,51 +386,13 @@ def _render(
                     "automountServiceAccountToken": False,
                     "containers": [
                         {
-                            "name": "preflight",
-                            "image": request["image"],
-                            "imagePullPolicy": "IfNotPresent",
-                            "command": ["python", "-u", "-c", source],
-                            "env": [
-                                {
-                                    "name": "JOB_NAME",
-                                    "value": name,
-                                },
-                                *[
-                                    {"name": key, "value": value}
-                                    for key, value in pod_environment.items()
-                                ],
-                            ],
-                            "resources": {
-                                "requests": {
-                                    "cpu": "4",
-                                    "memory": "32Gi",
-                                    "ephemeral-storage": "2Gi",
-                                },
-                                "limits": {
-                                    "cpu": "8",
-                                    "memory": "48Gi",
-                                    "ephemeral-storage": "4Gi",
-                                },
-                            },
-                            "securityContext": {
-                                "allowPrivilegeEscalation": False,
-                                "capabilities": {"drop": ["ALL"]},
-                                "privileged": False,
-                                "readOnlyRootFilesystem": True,
-                                "runAsNonRoot": True,
-                            },
-                            "volumeMounts": [
-                                {"name": "sfs", "mountPath": "/mnt/sfs", "readOnly": True},
-                                {"name": "tmp", "mountPath": "/tmp"},
-                            ],
+                            **container,
                         }
                     ],
                     "hostIPC": False,
                     "hostNetwork": False,
                     "hostPID": False,
-                    "imagePullSecrets": [
-                        {"name": name} for name in request.get("image_pull_secrets", [])
-                    ],
+                    "imagePullSecrets": [{"name": value} for value in image_pull_secrets],
                     "nodeSelector": CPU_NODE_SELECTOR,
                     "priority": EFFECTIVE_C1_PRIORITY,
                     "priorityClassName": "c1",
@@ -328,21 +413,11 @@ def _render(
                             "effect": "NoSchedule",
                         }
                     ],
-                    "volumes": [
-                        {
-                            "name": "sfs",
-                            "persistentVolumeClaim": {
-                                "claimName": "sfs-shared",
-                                "readOnly": True,
-                            },
-                        },
-                        {"name": "tmp", "emptyDir": {"sizeLimit": "1Gi"}},
-                    ],
+                    "volumes": volumes,
                 },
             },
         },
     }
-    return job, plan, request, prepared
 
 
 def build_sft_cpu_preflight_job(
@@ -403,7 +478,26 @@ def validate_sft_cpu_preflight_job_response(
     admitted_workload: dict | None = None,
 ) -> dict:
     proof = validate_sft_cpu_preflight_job_package(package)
-    expected = deepcopy(package.job)
+    validate_cpu_preflight_job_response(
+        actual,
+        package.job,
+        require_uid=require_uid,
+        admitted=admitted,
+        admitted_workload=admitted_workload,
+    )
+    return proof
+
+
+def validate_cpu_preflight_job_response(
+    actual: dict,
+    expected_job: dict,
+    *,
+    require_uid: bool,
+    admitted: bool = False,
+    admitted_workload: dict | None = None,
+) -> dict[str, Any]:
+    """Validate one server-returned Job against an exact rebuilt CPU manifest."""
+    expected = deepcopy(expected_job)
     if admitted:
         expected["spec"]["suspend"] = False
         if admitted_workload is None:
@@ -427,7 +521,12 @@ def validate_sft_cpu_preflight_job_response(
         or _effective_pod_quantity(pod_spec, "limits") != 0
     ):
         raise ValueError("dense-SFT CPU preflight must remain effectively zero-GPU")
-    return proof
+    return {
+        "name": expected_job["metadata"]["name"],
+        "manifest_sha256": digest(expected_job),
+        "job_uid": uid,
+        "gpus": 0,
+    }
 
 
 def _cpu_millicores(value: object) -> int:
@@ -493,7 +592,25 @@ def validate_completed_sft_cpu_preflight_job(
     pods: dict,
     service_account: dict,
 ) -> tuple[str, dict]:
-    admitted_workload = _validate_admitted_workload(package, job, workloads)
+    return validate_completed_cpu_preflight_job(
+        package.job,
+        job,
+        workloads,
+        pods,
+        service_account,
+    )
+
+
+def validate_completed_cpu_preflight_job(
+    expected_job: dict,
+    job: dict,
+    workloads: dict,
+    pods: dict,
+    service_account: dict,
+) -> tuple[str, dict]:
+    """Bind one successful CPU-only Job, Workload, and Pod to exact bytes."""
+    surface = SimpleNamespace(job=expected_job)
+    admitted_workload = _validate_admitted_workload(surface, job, workloads)
     owned = [
         item
         for item in workloads.get("items", [])
@@ -502,7 +619,7 @@ def validate_completed_sft_cpu_preflight_job(
     if len(owned) != 1:
         raise ValueError("dense-SFT CPU-preflight Workload identity is ambiguous")
     assignments = owned[0]["status"]["admission"]["podSetAssignments"]
-    expected_resources = package.job["spec"]["template"]["spec"]["containers"][0]["resources"][
+    expected_resources = expected_job["spec"]["template"]["spec"]["containers"][0]["resources"][
         "requests"
     ]
     if (
@@ -515,9 +632,9 @@ def validate_completed_sft_cpu_preflight_job(
         )
     ):
         raise ValueError("dense-SFT CPU-preflight admitted resources drifted")
-    validate_sft_cpu_preflight_job_response(
+    validate_cpu_preflight_job_response(
         job,
-        package,
+        expected_job,
         require_uid=True,
         admitted=True,
         admitted_workload=admitted_workload,
@@ -554,7 +671,7 @@ def validate_completed_sft_cpu_preflight_job(
         raise ValueError("dense-SFT CPU-preflight Pod ownership differs from the Job UID")
     _validate_pod_spec(
         pod.get("spec", {}),
-        package.job["spec"]["template"]["spec"],
+        expected_job["spec"]["template"]["spec"],
         scheduled=True,
         service_account=service_account,
     )
@@ -573,8 +690,12 @@ def validate_completed_sft_cpu_preflight_job(
     terminated = statuses[0].get("state", {}).get("terminated", {})
     if statuses[0].get("restartCount") != 0 or terminated.get("exitCode") != 0:
         raise ValueError("dense-SFT CPU-preflight container restarted or exited nonzero")
-    image_digest = package.request["image"].rsplit("@", 1)[-1]
-    if not statuses[0].get("imageID", "").endswith("@" + image_digest):
+    image_digest = expected_job["spec"]["template"]["spec"]["containers"][0]["image"].rsplit(
+        "@", 1
+    )[-1]
+    image_id = statuses[0].get("imageID", "")
+    match = re.search(r"(?:@|://)(sha256:[0-9a-f]{64})$", image_id)
+    if match is None or match.group(1) != image_digest:
         raise ValueError("dense-SFT CPU-preflight image differs from the prepared request")
     name = metadata.get("name")
     if not isinstance(name, str) or not name:

@@ -427,8 +427,10 @@ def _validate_container(actual: Any, expected: dict) -> None:
         "container",
     )
     for key, value in _SERVER_CONTAINER_DEFAULTS.items():
-        if key in container and container[key] != value:
+        if key in container and key not in expected and container[key] != value:
             raise ValueError("server output-check container default drifted")
+        if key in expected and container.get(key) != expected[key]:
+            raise ValueError(f"server output-check container {key} drifted")
     if any(container.get(name) not in (None, []) for name in ("envFrom", "ports", "volumeDevices")):
         raise ValueError("server output-check container gained an unreviewed source or device")
     if any(

@@ -20,6 +20,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import yaml
 
@@ -73,6 +74,47 @@ _SFS_OBSERVER_ROLE = "sfs-output-check"
 _SFS_OBSERVER_NAME = re.compile(
     r"(?P<job>[a-z0-9](?:[-a-z0-9]*[a-z0-9])?-sfs-a[0-9]{2})(?:-[a-z0-9]+)?"
 )
+_JOBS_HISTORY_FIELDS = {
+    "image",
+    "job_id",
+    "message",
+    "name",
+    "priority_class",
+    "priority_reason",
+    "queue_priority_class",
+    "requeueIfPreempted",
+    "run_dir",
+    "status",
+    "submitted_by",
+    "submitted_by_profile_id",
+}
+
+
+def _validated_jobs_history_row(value: object) -> dict[str, Any]:
+    """Validate the deployed list-item projection without retaining its message."""
+    if not isinstance(value, dict) or set(value) != _JOBS_HISTORY_FIELDS:
+        raise JobsError("Jobs history row fields changed")
+    try:
+        UUID(value["job_id"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise JobsError("Jobs history row identity is invalid") from exc
+    if (
+        not isinstance(value.get("name"), str)
+        or not value["name"]
+        or not isinstance(value.get("run_dir"), str)
+        or not value["run_dir"]
+        or not isinstance(value.get("image"), str)
+        or not value["image"]
+        or not isinstance(value.get("priority_class"), str)
+        or not value["priority_class"]
+        or not isinstance(value.get("queue_priority_class"), str)
+        or not value["queue_priority_class"]
+        or type(value.get("requeueIfPreempted")) is not bool
+        or not isinstance(value.get("status"), str)
+        or not value["status"]
+    ):
+        raise JobsError("Jobs history row contract changed")
+    return {key: item for key, item in value.items() if key != "message"}
 
 
 def _validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
@@ -134,6 +176,7 @@ def _paths(directory: Path) -> dict[str, Path]:
         "armed": directory / "OBSERVER_ARMED.json",
         "binding": directory / "EXACT_BINDING.json",
         "release": directory / "EXACT_RELEASE_CONTRACT.json",
+        "cleanup_checkpoint": directory / "EXACT_CLEANUP_CHECKPOINT.json",
         "observer": directory / "EXACT_OBSERVER_RESULT.json",
         "coordinator": directory / "COORDINATOR_RESULT.json",
         "journal": directory / "SUBMISSION.jsonl",
@@ -279,15 +322,24 @@ def _reconcile_post_response(
                 # Authenticated run reads do not expose the submitted title.
                 # Bind the server-generated name to the exact create-once
                 # output, immutable image, priority and no-requeue policy.
-                matches = [
-                    row
-                    for row in client.all_runs()
-                    if pattern.fullmatch(str(row.get("name", "")))
-                    and row.get("run_dir") == request["run_dir"]
-                    and row.get("image") == request["image"]
-                    and row.get("priority_class") == request["priority_class"]
-                    and row.get("requeueIfPreempted") is False
-                ]
+                matches = []
+                for raw in client.all_runs():
+                    row = _validated_jobs_history_row(raw)
+                    identity_match = pattern.fullmatch(row["name"]) is not None
+                    output_match = row["run_dir"] == request["run_dir"]
+                    if not (identity_match or output_match):
+                        continue
+                    if (
+                        not identity_match
+                        or not output_match
+                        or row["image"] != request["image"]
+                        or row["priority_class"] != request["priority_class"]
+                        or row["requeueIfPreempted"] is not False
+                    ):
+                        raise cleanup.ObserverError(
+                            "uncertain POST candidate differs from the exact request"
+                        )
+                    matches.append(row)
         except JobsError:
             matches = []
         if len(matches) > 1:
@@ -299,8 +351,6 @@ def _reconcile_post_response(
         sleep(min(poll_seconds, max(0.0, deadline - monotonic())))
     observed = safe_status(matches[0])
     try:
-        from uuid import UUID
-
         UUID(observed["job_id"])
     except (TypeError, ValueError) as exc:
         raise cleanup.ObserverError("reconciled Jobs API identity is invalid") from exc
@@ -315,28 +365,35 @@ def run_cleanup_coordinator(plan: dict[str, Any], request: dict[str, Any], direc
     """Arm before POST, then bind and watch only the exact creator-returned UID."""
     paths = _paths(directory)
     try:
-        guard = _guard(plan, request, directory)
-        guard.arm()
-        response = _post_response(paths["journal"], time.monotonic() + 300)
-        if response is None:
-            response = _reconcile_post_response(
-                plan,
-                request,
-                paths["journal"],
-                deadline=time.monotonic() + POST_RECONCILIATION_SECONDS,
+        resume = paths["binding"].is_file() or paths["release"].is_file()
+        if resume:
+            if not paths["binding"].is_file() or not paths["release"].is_file():
+                raise cleanup.ObserverError("cleanup coordinator restart evidence is incomplete")
+            binding = json.loads(paths["binding"].read_text())
+        else:
+            guard = _guard(plan, request, directory)
+            guard.arm()
+            response = _post_response(paths["journal"], time.monotonic() + 300)
+            if response is None:
+                response = _reconcile_post_response(
+                    plan,
+                    request,
+                    paths["journal"],
+                    deadline=time.monotonic() + POST_RECONCILIATION_SECONDS,
+                )
+            binding = guard.bind_exact(
+                {
+                    "jobs_api_run_name": response.get("name"),
+                    "jobs_api_run_id": response.get("job_id"),
+                    "run_dir": response.get("run_dir"),
+                }
             )
-        binding = guard.bind_exact(
-            {
-                "jobs_api_run_name": response.get("name"),
-                "jobs_api_run_id": response.get("job_id"),
-                "run_dir": response.get("run_dir"),
-            }
-        )
-        _write_json_once(paths["release"], _release_contract(binding))
+            _write_json_once(paths["release"], _release_contract(binding))
         result = cleanup.JobsApiExactUidObserver(
             binding_path=paths["binding"],
             result_path=paths["observer"],
             release_contract_path=paths["release"],
+            cleanup_checkpoint_path=paths["cleanup_checkpoint"],
         ).run()
         final = _seal(
             {
@@ -433,16 +490,15 @@ def validate_armed_observer(
 
 
 def _jobs_absent(client: Any, request: dict[str, Any]) -> int:
-    rows = client.all_runs()
+    rows = [_validated_jobs_history_row(row) for row in client.all_runs()]
     for row in rows:
-        name = row.get("name", "")
+        name = row["name"]
         if (
-            row.get("run_dir") == request["run_dir"]
+            row["run_dir"] == request["run_dir"]
             or name == request["name"]
             or name.startswith(request["name"] + "-")
-            or row.get("title") == request["title"]
         ):
-            raise JobsError("Jobs history already owns this name, title, or output")
+            raise JobsError("Jobs history already owns this name or output")
     return len(rows)
 
 
@@ -1242,7 +1298,6 @@ def submit_once(
                 now=now(),
                 expect_post_intent=True,
             )
-        validate_armed_observer(plan, request, directory, now=now())
         validate_reviewed_transition(
             plan,
             request,
@@ -1255,6 +1310,9 @@ def submit_once(
             expected_reviewed_transition_sha256=expected_reviewed_transition_sha256,
             now=now(),
         )
+        # Keep liveness as the last fallible local gate before the only POST.
+        # A validated transition cannot make a dead observer safe.
+        validate_armed_observer(plan, request, directory, now=now())
     except Exception:
         if observer is not None:
             observer.terminate()

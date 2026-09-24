@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import json
 import subprocess
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace as NS
 
@@ -2084,5 +2084,52 @@ def test_jobs_api_exact_uid_observer_never_retries_uncertain_delete(tmp_path) ->
     cluster = UncertainDeleteCluster(binding, auto_release=False)
     result = _jobs_api_exact_observer(tmp_path, cluster, release_contract_path=contract).run()
     assert result["release_confirmed"] is True
+    assert result["cleanup_status"] == "exact_uid_delete_outcome_uncertain_not_retried"
+    assert cluster.delete_attempts == 1
+
+
+def test_jobs_api_exact_uid_observer_restart_resumes_reads_without_second_delete(
+    tmp_path, monkeypatch
+) -> None:
+    binding_path = _jobs_api_exact_binding(tmp_path)
+    binding = json.loads(binding_path.read_text())
+    contract = _jobs_api_release_contract(tmp_path, binding)
+
+    class CrashAfterDeleteCluster(FakeJobsApiExactObserverCluster):
+        delete_attempts = 0
+        crash_next_root_read = False
+
+        def __call__(self, command, **kwargs):
+            args = command[5:]
+            if args[:2] == ["delete", "--raw"]:
+                self.delete_attempts += 1
+                result = super().__call__(command, **kwargs)
+                self.deleted = False
+                self.crash_next_root_read = True
+                return result
+            if self.crash_next_root_read and args[:3] == [
+                "get",
+                "rayjob",
+                self.binding["rayjob_name"],
+            ]:
+                self.crash_next_root_read = False
+                raise RuntimeError("simulated coordinator crash")
+            return super().__call__(command, **kwargs)
+
+    cluster = CrashAfterDeleteCluster(binding, auto_release=False)
+    with pytest.raises(RuntimeError, match="simulated coordinator crash"):
+        _jobs_api_exact_observer(tmp_path, cluster, release_contract_path=contract).run()
+
+    checkpoint = tmp_path / "EXACT_OBSERVER_RESULT_CLEANUP_CHECKPOINT.json"
+    value = json.loads(checkpoint.read_text())
+    requested_at = cleanup._parse_stamp(value["cleanup_requested_at"])
+    monkeypatch.setattr(
+        cleanup,
+        "_now",
+        lambda: requested_at + timedelta(seconds=cleanup.DELETE_RELEASE_GRACE_SECONDS + 1),
+    )
+    result = _jobs_api_exact_observer(tmp_path, cluster, release_contract_path=contract).run()
+    assert result["status"] == "release_uncertain"
+    assert result["reason"] == "exact_uid_delete_grace_elapsed"
     assert result["cleanup_status"] == "exact_uid_delete_outcome_uncertain_not_retried"
     assert cluster.delete_attempts == 1

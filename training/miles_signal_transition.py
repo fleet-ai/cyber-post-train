@@ -8,12 +8,13 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import uuid
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from cyber_post_train.jobs import digest
+from cyber_post_train.jobs import JobsError, digest
 from evals.fleet import opencode_self_hosted as fleet
 
 from . import miles_signal_wave
@@ -34,18 +35,21 @@ OPERATOR_FREEZE_SCHEMA = "cyber_qwen38_miles96_operator_freeze_v1"
 POST_BUNDLE_SCHEMA = "cyber_qwen38_miles_signal_post_receipt_bundle_v1"
 TEST_RECEIPT_SCHEMA = "cyber_qwen38_miles96_focused_tests_v1"
 IMAGE_PREFLIGHT_SCHEMA = "cyber_qwen38_miles96_exact_image_preflight_v1"
-IMAGE_PREFLIGHT_EXECUTION_SCHEMA = "cyber_qwen38_miles96_exact_image_preflight_execution_v1"
 OPERATOR_SOURCE_PATHS = (
     "cyber_post_train/gpu_capacity.py",
     "cyber_post_train/jobs.py",
     "cyber_post_train/sfs_output.py",
+    "cyber_post_train/sfs_output_job.py",
+    "cyber_post_train/sft_cpu_preflight_job.py",
     "evals/fleet/opencode_self_hosted.py",
     "training/dev_cleanup_observer.py",
     "training/fleet.py",
     "training/miles96_exact_image_preflight.py",
+    "training/miles96_exact_image_preflight_driver.py",
     "training/miles96_mechanics_launch.py",
     "training/miles_signal_transition.py",
     "training/miles_signal_wave.py",
+    "training/skyrl_prod9_direct.py",
 )
 
 GATES = (
@@ -113,6 +117,24 @@ def _operator_source_manifest() -> dict[str, str]:
         path: "sha256:" + hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
         for path in OPERATOR_SOURCE_PATHS
     }
+
+
+def _source_manifest_at_commit(commit: str, paths: tuple[str, ...]) -> dict[str, str]:
+    """Hash exact repository bytes from an independently named Git commit."""
+    if COMMIT.fullmatch(commit) is None or not paths or len(set(paths)) != len(paths):
+        raise ValueError("source-closure commit or path set is invalid")
+    manifest = {}
+    for path in paths:
+        result = subprocess.run(
+            ["git", "show", f"{commit}:{path}"],
+            cwd=ROOT,
+            capture_output=True,
+            timeout=30,
+        )
+        if result.returncode:
+            raise ValueError("source-closure commit does not contain every reviewed file")
+        manifest[path] = "sha256:" + hashlib.sha256(result.stdout).hexdigest()
+    return manifest
 
 
 def _lane_objects() -> list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]]:
@@ -353,226 +375,48 @@ def _validate_image_preflight(
     wrapper: dict[str, Any],
     *,
     expected_file_sha256: str,
-    expected_runtime_image: str,
-    expected_source_closure_sha256: str,
-    expected_driver_sha256: str,
-    expected_runtime_bundle_sha256: str,
-    expected_plan_sha256: str,
+    package: Any,
 ) -> dict[str, Any]:
     from training import miles96_exact_image_preflight as image_preflight
 
     body = _verify_loaded_receipt(wrapper, expected_file_sha256)
-    _verify_seal(body, IMAGE_PREFLIGHT_SCHEMA)
-    image_digest = "sha256:" + expected_runtime_image.rsplit("@sha256:", 1)[1]
-    checks = body.get("checks") or {}
-    if (
-        set(body)
-        != {
-            "schema",
-            "status",
-            "runtime_image",
-            "image_digest",
-            "source_closure_sha256",
-            "driver_sha256",
-            "runtime_bundle_sha256",
-            "plan_sha256",
-            "raw_tool_catalog_sha256",
-            "openai_tool_catalog_sha256",
-            "tool_transform_source_sha256",
-            "source_hashes",
-            "checks",
-            "observed_at",
-            "sha256",
-        }
-        or body.get("status") != "passed"
-        or body.get("runtime_image") != expected_runtime_image
-        or body.get("image_digest") != image_digest
-        or body.get("source_closure_sha256") != expected_source_closure_sha256
-        or body.get("driver_sha256") != expected_driver_sha256
-        or body.get("runtime_bundle_sha256") != expected_runtime_bundle_sha256
-        or body.get("plan_sha256") != expected_plan_sha256
-        or body.get("raw_tool_catalog_sha256")
-        != "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
-        or body.get("openai_tool_catalog_sha256")
-        != "sha256:9c3ad657a76c11423cdd1f543abb0d5363420dd4aae6244a2de73bb58913ce20"
-        or body.get("tool_transform_source_sha256")
-        != "sha256:0524f19dcc886b20d17b39c21bd6417f537423eec6ef2359487fc3911dad441c"
-        or body.get("source_hashes")
-        != {
-            name: "sha256:" + value
-            for name, value in image_preflight.EXPECTED_SOURCE_HASHES.items()
-        }
-        or checks
-        != {
-            "image_digest_exact": True,
-            "pinned_fti_imports": True,
-            "pinned_miles_sources": True,
-            "zero_update_entrypoint": True,
-            "sealed_raw_tool_catalog_exact": True,
-            "pinned_openai_projection_exact": True,
-            "session_open_exact_catalog_passed": True,
-            "session_open_visible_drift_rejected_and_closed": True,
-            "session_open_plan_drift_rejected_and_closed": True,
-            "session_open_plan_load_error_rejected_and_closed": True,
-        }
-    ):
-        raise ValueError("exact-image preflight receipt is incomplete")
-    _time(body["observed_at"])
-    return body
+    return image_preflight.validate_receipt(body, package)
 
 
-def _validate_image_preflight_execution(
+def _validate_image_preflight_release(
     wrapper: dict[str, Any],
     *,
     expected_file_sha256: str,
-    expected_runtime_image: str,
-    expected_preflight_sha256: str,
-    expected_packet: dict[str, Any],
-    expected_config_map: dict[str, Any],
-    expected_job: dict[str, Any],
+    package: Any,
+    preflight: dict[str, Any],
 ) -> dict[str, Any]:
     from training import miles96_exact_image_preflight as image_preflight
-    from training import miles96_mechanics_canary as mechanics
 
     body = _verify_loaded_receipt(wrapper, expected_file_sha256)
-    _verify_seal(body, IMAGE_PREFLIGHT_EXECUTION_SCHEMA)
-    image_digest = expected_runtime_image.rsplit("@", 1)[1]
-    if (
-        set(body)
-        != {
-            "schema",
-            "status",
-            "job_name",
-            "config_map_name",
-            "namespace",
-            "kubernetes_context",
-            "job_uid",
-            "pod_uid",
-            "pod_owner_job_uid",
-            "config_map_uid",
-            "workload_name",
-            "workload_uid",
-            "workload_owner_job_uid",
-            "runtime_image",
-            "observed_image_id",
-            "priority_class",
-            "queue_priority",
-            "root_failure_alerts",
-            "backoff_limit",
-            "restart_policy",
-            "requested_gpus",
-            "pod_restarts",
-            "exit_code",
-            "job_server_previews",
-            "config_map_server_previews",
-            "precreate_absence_receipt",
-            "created_at",
-            "job_manifest_sha256",
-            "config_map_manifest_sha256",
-            "driver_sha256",
-            "runtime_bundle_sha256",
-            "plan_sha256",
-            "preflight_receipt_sha256",
-            "precreate_job_absent",
-            "precreate_config_map_absent",
-            "absence_observed_at",
-            "cleanup_job_uid",
-            "cleanup_config_map_uid",
-            "job_delete_uid_precondition",
-            "config_map_delete_uid_precondition",
-            "job_delete_accepted",
-            "config_map_delete_accepted",
-            "workload_cleanup_mode",
-            "job_absent_after_cleanup",
-            "pod_absent_after_cleanup",
-            "config_map_absent_after_cleanup",
-            "workload_absent_after_cleanup",
-            "resources_released",
-            "observed_at",
-            "released_at",
-            "sha256",
-        }
-        or body.get("status") != "passed"
-        or body.get("job_name") != expected_packet["name"]
-        or body.get("config_map_name") != expected_packet["config_map"]
-        or body.get("namespace") != mechanics.NAMESPACE
-        or body.get("kubernetes_context") != mechanics.PROD_CONTEXT
-        or not _uuid(body.get("job_uid"))
-        or not _uuid(body.get("pod_uid"))
-        or body.get("pod_owner_job_uid") != body.get("job_uid")
-        or not _uuid(body.get("config_map_uid"))
-        or not isinstance(body.get("workload_name"), str)
-        or not body["workload_name"].startswith(expected_packet["name"] + "-")
-        or not _uuid(body.get("workload_uid"))
-        or body.get("workload_owner_job_uid") != body.get("job_uid")
-        or body.get("runtime_image") != expected_runtime_image
-        or _image_id_digest(body.get("observed_image_id")) != image_digest
-        or body.get("priority_class") != "c1"
-        or body.get("queue_priority") != "q1"
-        or body.get("root_failure_alerts") != "off"
-        or body.get("backoff_limit") != 0
-        or body.get("restart_policy") != "Never"
-        or body.get("requested_gpus") != 0
-        or body.get("pod_restarts") != 0
-        or body.get("exit_code") != 0
-        or body.get("job_manifest_sha256") != expected_packet["job_manifest_sha256"]
-        or body.get("config_map_manifest_sha256") != expected_packet["config_map_manifest_sha256"]
-        or body.get("driver_sha256") != expected_packet["driver_sha256"]
-        or body.get("runtime_bundle_sha256") != expected_packet["runtime_bundle_sha256"]
-        or body.get("plan_sha256") != expected_packet["plan_sha256"]
-        or body.get("preflight_receipt_sha256") != expected_preflight_sha256
-        or body.get("precreate_job_absent") is not True
-        or body.get("precreate_config_map_absent") is not True
-        or body.get("cleanup_job_uid") != body.get("job_uid")
-        or body.get("cleanup_config_map_uid") != body.get("config_map_uid")
-        or body.get("job_delete_uid_precondition") != body.get("job_uid")
-        or body.get("config_map_delete_uid_precondition") != body.get("config_map_uid")
-        or body.get("job_delete_accepted") is not True
-        or body.get("config_map_delete_accepted") is not True
-        or body.get("workload_cleanup_mode") != "job_foreground_cascade"
-        or body.get("job_absent_after_cleanup") is not True
-        or body.get("pod_absent_after_cleanup") is not True
-        or body.get("config_map_absent_after_cleanup") is not True
-        or body.get("workload_absent_after_cleanup") is not True
-        or body.get("resources_released") is not True
-        or _time(body["created_at"]) < _time(body["absence_observed_at"])
-        or _time(body["observed_at"]) < _time(body["created_at"])
-        or _time(body["released_at"]) < _time(body["observed_at"])
-    ):
-        raise ValueError("exact-image preflight execution receipt is incomplete")
-    job_previews = body.get("job_server_previews")
-    config_previews = body.get("config_map_server_previews")
-    absence = body.get("precreate_absence_receipt")
-    if (
-        not isinstance(job_previews, list)
-        or len(job_previews) != 2
-        or not isinstance(config_previews, list)
-        or len(config_previews) != 2
-        or not isinstance(absence, dict)
-    ):
-        raise ValueError("exact-image preflight execution receipt is incomplete")
     try:
-        for preview in job_previews:
-            image_preflight.validate_preview_receipt(preview, expected_job)
-        for preview in config_previews:
-            image_preflight.validate_preview_receipt(preview, expected_config_map)
-        image_preflight.validate_absence_receipt(absence)
-    except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError("exact-image preflight execution receipt is incomplete") from exc
-    created_at = _time(body["created_at"])
-    evidence_times = [
-        _time(preview["observed_at"]) for preview in (*job_previews, *config_previews)
-    ] + [_time(absence["observed_at"])]
+        image_preflight.validate_package(package)
+        image_preflight.validate_release(body, package, preflight)
+    except (KeyError, TypeError, ValueError, JobsError) as exc:
+        raise ValueError("exact-image preflight release receipt is incomplete") from exc
+    image_digest = package.request["image"].rsplit("@", 1)[-1]
+    image_ids = body.get("image_ids")
     if (
-        len({preview["normalized_manifest_sha256"] for preview in job_previews}) != 1
-        or len({preview["normalized_manifest_sha256"] for preview in config_previews}) != 1
-        or any(
-            not 0 <= (created_at - observed).total_seconds() <= FRESH_PREVIEW_SECONDS
-            for observed in evidence_times
+        not _uuid(body.get("uid"))
+        or not isinstance(body.get("workload_name"), str)
+        or not body["workload_name"]
+        or not _uuid(body.get("workload_uid"))
+        or not isinstance(body.get("pod_uids"), list)
+        or len(body["pod_uids"]) != 1
+        or not _uuid(body["pod_uids"][0])
+        or not isinstance(image_ids, list)
+        or len(image_ids) != 1
+        or _image_id_digest(image_ids[0]) != image_digest
+        or (
+            body.get("schema") == "cyber_direct_cleanup_recovery_observer_result_v1"
+            and body.get("recovered_existing_target_uid") != body.get("uid")
         )
-        or body["absence_observed_at"] != absence["observed_at"]
     ):
-        raise ValueError("exact-image preflight execution receipt is incomplete")
+        raise ValueError("exact-image preflight release receipt is incomplete")
     return body
 
 
@@ -583,6 +427,20 @@ def _validate_adapter_freeze(
     from training import miles96_signal_qualification as signal
 
     body = _verify_loaded_receipt(wrapper, expected_file_sha256)
+    runtime_manifest = signal.runtime_source_manifest()
+    synthetic_init = runtime_manifest.get("training/__init__.py")
+    committed_manifest = _source_manifest_at_commit(
+        expected_commit,
+        tuple(path for path in runtime_manifest if path != "training/__init__.py"),
+    )
+    source_backed_manifest = {
+        path: value for path, value in runtime_manifest.items() if path != "training/__init__.py"
+    }
+    if (
+        synthetic_init != "sha256:" + hashlib.sha256(b"").hexdigest()
+        or committed_manifest != source_backed_manifest
+    ):
+        raise ValueError("adapter runtime bytes differ from its frozen commit")
     excluded = {
         "optimizer_steps",
         "checkpoint",
@@ -608,7 +466,7 @@ def _validate_adapter_freeze(
             "source_closure_sha256",
             "tests_receipt_sha256",
             "exact_image_preflight_receipt_sha256",
-            "exact_image_preflight_execution_sha256",
+            "exact_image_preflight_release_sha256",
             "tests",
             "lanes",
         }
@@ -617,11 +475,11 @@ def _validate_adapter_freeze(
         or body.get("clean") is not True
         or body.get("authority_sha256") != miles_signal_wave.load()["sha256"]
         or body.get("runtime_image") != mechanics.IMAGE
-        or body.get("source_file_count") != len(signal.runtime_source_manifest())
-        or body.get("source_closure_sha256") != "sha256:" + digest(signal.runtime_source_manifest())
+        or body.get("source_file_count") != len(runtime_manifest)
+        or body.get("source_closure_sha256") != "sha256:" + digest(runtime_manifest)
         or not _sha(body.get("tests_receipt_sha256"))
         or not _sha(body.get("exact_image_preflight_receipt_sha256"))
-        or not _sha(body.get("exact_image_preflight_execution_sha256"))
+        or not _sha(body.get("exact_image_preflight_release_sha256"))
         or type(tests.get("passed")) is not int
         or tests["passed"] < 1
         or tests.get("failed") != 0
@@ -639,6 +497,8 @@ def _validate_operator_freeze(
 ) -> dict[str, Any]:
     body = _verify_loaded_receipt(wrapper, expected_file_sha256)
     manifest = _operator_source_manifest()
+    if _source_manifest_at_commit(expected_commit, OPERATOR_SOURCE_PATHS) != manifest:
+        raise ValueError("operator source bytes differ from its frozen commit")
     tests = body.get("tests") or {}
     if (
         set(body)
@@ -697,29 +557,22 @@ def _candidate_gate_status(
             raise ValueError("operator freeze references a different test receipt")
         from training import miles96_exact_image_preflight as image_preflight
 
-        packet, config_map, job = image_preflight.build_packet(operator["commit"])
+        package = image_preflight.build_package(operator["commit"])
         image = _validate_image_preflight(
             evidence["exact_image_preflight_receipt"],
             expected_file_sha256=pins["exact_image_preflight_receipt_file_sha256"],
-            expected_runtime_image=adapter["runtime_image"],
-            expected_source_closure_sha256=adapter["source_closure_sha256"],
-            expected_driver_sha256=packet["driver_sha256"],
-            expected_runtime_bundle_sha256=packet["runtime_bundle_sha256"],
-            expected_plan_sha256=packet["plan_sha256"],
+            package=package,
         )
-        image_execution = _validate_image_preflight_execution(
-            evidence["exact_image_preflight_execution_receipt"],
-            expected_file_sha256=pins["exact_image_preflight_execution_receipt_file_sha256"],
-            expected_runtime_image=adapter["runtime_image"],
-            expected_preflight_sha256=image["sha256"],
-            expected_packet=packet,
-            expected_config_map=config_map,
-            expected_job=job,
+        image_release = _validate_image_preflight_release(
+            evidence["exact_image_preflight_release_receipt"],
+            expected_file_sha256=pins["exact_image_preflight_release_receipt_file_sha256"],
+            package=package,
+            preflight=image,
         )
         if (
             adapter["tests_receipt_sha256"] != adapter_tests["sha256"]
             or adapter["exact_image_preflight_receipt_sha256"] != image["sha256"]
-            or adapter["exact_image_preflight_execution_sha256"] != image_execution["sha256"]
+            or adapter["exact_image_preflight_release_sha256"] != image_release["sha256"]
         ):
             raise ValueError("adapter freeze references different supporting receipts")
         adapter_ok = True

@@ -1,306 +1,103 @@
-"""CPU-only proof that the pinned Miles image can open the repaired Fleet session."""
+"""ConfigMap-free CPU proof for the maintained Miles96 signal runtime."""
 
 from __future__ import annotations
 
 import base64
-import datetime as dt
-import gzip
 import hashlib
-import importlib
 import json
-import os
-import pathlib
-import sys
-from copy import deepcopy
+import re
+import subprocess
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
-NAME = "chris-q38-m96-image-preflight-dual-v1"
-CONFIG_MAP = NAME + "-code"
-ADAPTER_COMMIT = "5bfff503224ea42ee9c3ae1da9cf5fda2ba6043c"
-KUBERNETES_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
-PREVIEW_SCHEMA = "cyber_qwen38_miles96_exact_image_server_preview_v1"
-ABSENCE_SCHEMA = "cyber_qwen38_miles96_exact_image_precreate_absence_v1"
+from cyber_post_train.jobs import digest
+from cyber_post_train.sft_cpu_preflight_job import (
+    render_cpu_preflight_job,
+    validate_completed_cpu_preflight_job,
+    validate_cpu_preflight_job_response,
+)
+from training import miles96_signal_qualification as signal
+from training import miles_signal_wave
+from training.miles96_exact_image_preflight_driver import (
+    ENV_DRIVER_SHA256,
+    ENV_PLAN_SHA256,
+    ENV_RECEIPT_PATH,
+    ENV_REQUEST_SHA256,
+    ENV_RUNTIME_IMAGE,
+    ENV_SOURCE_CLOSURE_SHA256,
+    LOG_PREFIX,
+    RUNTIME_BUNDLE,
+    RUNTIME_BUNDLE_SHA256,
+    SCHEMA,
+)
 
-EXPECTED_SOURCE_HASHES = {
-    "fti.fleet.v1": "0524f19dcc886b20d17b39c21bd6417f537423eec6ef2359487fc3911dad441c",
-    "fti.miles.v1.client_recording": (
-        "41292533ec356a51a722c2c98f92bdfd98c56fdce429537a816957bf7172e9dc"
-    ),
-    "fti.miles.v1.common": "0a6801afe0cea5e4c0b6a53ffe07c083cc7e3691cf231dff460889e79c1626b0",
-    "fti.trainers.miles.run_fleet": (
-        "ae82e3f03d14c81e52009bc2cbff857d9e844baf07a9d82d8266608cb8cba2b1"
-    ),
-    "miles.backends.megatron_utils.actor": (
-        "eecd72a4387511916add2c97d9e2dad6716db9097fd6ec471468c1f7edc074b9"
-    ),
-    "miles.backends.megatron_utils.hf_export": (
-        "4986684bb62acf2ccd0e18a5ab7cf6bd50391f42d42be35ad3a377b36bbd4a34"
-    ),
-    "miles.rollout.inference_rollout.inference_rollout_common": (
-        "96e3cba12ae033527e823ed3dd8cb43c31d244775756ecf0bab4ad81eb4f06a4"
-    ),
-    "miles.rollout.inference_rollout.inference_rollout_eval": (
-        "7c13e0e1ab49cc1cb7224c3f9f91245d4c0bd46c0b7c1785cba8b633ca587a26"
-    ),
-    "miles.utils.http_utils": "da630d6594c86d76e89a262d1060c7f81238da9659899dea917987c5f39fab86",
-    "miles.utils.tracking_utils.wandb_utils": (
-        "d2a2bb4463b0a2158b2cd31e72e6e209a7f0092e182bf358ac07aea7cc68d5fe"
-    ),
-}
-
-
-def sha256(path: pathlib.Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def canonical_digest(value: object) -> str:
-    payload = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
-    return hashlib.sha256(payload.encode()).hexdigest()
+NAME = "chris-q38-m96-image-pre-v3"
+ROLE = "miles96-image-preflight"
+ADAPTER_COMMIT = "978df19a1f6b344e2f88d9502060700a59294681"
+SOURCE_CLOSURE_SHA256 = "sha256:de52b39f55e92a079bef1c0ea14b9e823e4af5096318dca5cf48cc800225fd15"
+DRIVER_PATH = Path(__file__).with_name("miles96_exact_image_preflight_driver.py")
+DRIVER_ENV = "CYBER_MILES96_PREFLIGHT_DRIVER_B64"
+PLAN_ANNOTATION = "cyber-post-train.fleet.ai/plan-sha256"
+REQUEST_ANNOTATION = "cyber-post-train.fleet.ai/request-sha256"
+BUNDLE_ANNOTATION = "cyber-post-train.fleet.ai/runtime-bundle-sha256"
+DRIVER_ANNOTATION = "cyber-post-train.fleet.ai/preflight-driver-sha256"
+SOURCE_COMMIT_ANNOTATION = "cyber-post-train.fleet.ai/source-commit"
+ADAPTER_COMMIT_ANNOTATION = "cyber-post-train.fleet.ai/adapter-commit"
+CREATE_AUTHORIZATION_SCHEMA = "cyber_qwen38_miles96_image_preflight_create_auth_v1"
+RECONCILED_CREATE_SCHEMA = "cyber_qwen38_miles96_image_preflight_reconcile_v1"
+_SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
+_COMMIT = re.compile(r"[0-9a-f]{40}")
 
 
-def sealed(body: dict) -> dict:
-    return {**body, "sha256": "sha256:" + canonical_digest(body)}
+@dataclass(frozen=True)
+class MilesImagePreflightPackage:
+    job: dict[str, Any]
+    plan: dict[str, Any]
+    request: dict[str, Any]
+    source_commit: str
+    driver_sha256: str
+    runtime_bundle_sha256: str
 
 
-def normalize_server_manifest(value: dict) -> dict:
-    """Remove only API-server identity fields that change across dry runs."""
-    result = deepcopy(value)
-    result.pop("status", None)
-    metadata = result.setdefault("metadata", {})
-    for key in ("creationTimestamp", "generation", "managedFields", "resourceVersion", "uid"):
-        metadata.pop(key, None)
-    if result.get("kind") == "Job":
-        spec = result.setdefault("spec", {})
-        spec.pop("selector", None)
-        labels = spec.setdefault("template", {}).setdefault("metadata", {}).setdefault("labels", {})
-        for key in (
-            "batch.kubernetes.io/controller-uid",
-            "batch.kubernetes.io/job-name",
-            "controller-uid",
-            "job-name",
-        ):
-            labels.pop(key, None)
-    return result
+def _driver() -> tuple[str, str]:
+    raw = DRIVER_PATH.read_bytes()
+    try:
+        source = raw.decode()
+    except UnicodeDecodeError:
+        raise ValueError("Miles image-preflight driver is not UTF-8") from None
+    if source.encode() != raw:
+        raise ValueError("Miles image-preflight driver is not byte-stable")
+    return source, "sha256:" + hashlib.sha256(raw).hexdigest()
 
 
-def _contains(expected, actual) -> bool:
-    if isinstance(expected, dict):
-        return isinstance(actual, dict) and all(
-            key in actual and _contains(value, actual[key]) for key, value in expected.items()
-        )
-    if isinstance(expected, list):
-        return (
-            isinstance(actual, list)
-            and len(expected) == len(actual)
-            and all(_contains(left, right) for left, right in zip(expected, actual, strict=True))
-        )
-    return expected == actual
-
-
-def validate_server_manifest(rendered: dict, expected: dict) -> dict:
-    """Prove that a server-rendered preview preserves every safety-critical field."""
-    normalized = normalize_server_manifest(rendered)
-    if (
-        normalized.get("apiVersion") != expected["apiVersion"]
-        or normalized.get("kind") != expected["kind"]
-        or normalized.get("metadata", {}).get("name") != expected["metadata"]["name"]
-        or normalized.get("metadata", {}).get("namespace") != expected["metadata"]["namespace"]
-        or not _contains(normalize_server_manifest(expected), normalized)
-    ):
-        raise ValueError("server preview differs from the local manifest")
-    if expected["kind"] == "Job":
-        pod = normalized["spec"]["template"]["spec"]
-        if (
-            normalized["metadata"]["annotations"].get("fleet.ai/failure-alerts") != "off"
-            or normalized["spec"].get("suspend") is not True
-            or normalized["spec"].get("backoffLimit") != 0
-            or pod.get("restartPolicy") != "Never"
-            or pod.get("automountServiceAccountToken") is not False
-            or pod.get("priorityClassName") != "c1"
-            or len(pod.get("containers", [])) != 1
-            or pod.get("initContainers") not in (None, [])
-            or pod.get("ephemeralContainers") not in (None, [])
-            or len(pod.get("volumes", [])) != 1
-            or any(
-                "nvidia.com/gpu" in (container.get("resources", {}).get(section, {}))
-                for container in pod["containers"]
-                for section in ("requests", "limits")
-            )
-        ):
-            raise ValueError("server preview violates the zero-GPU safety contract")
-    elif normalized.get("immutable") is not True:
-        raise ValueError("server preview ConfigMap is mutable")
-    return normalized
-
-
-def preview_receipt(rendered: dict, expected: dict, *, observed_at: str) -> dict:
-    normalized = validate_server_manifest(rendered, expected)
-    body = {
-        "schema": PREVIEW_SCHEMA,
-        "kind": expected["kind"],
-        "name": expected["metadata"]["name"],
-        "namespace": expected["metadata"]["namespace"],
-        "local_manifest_sha256": "sha256:" + canonical_digest(expected),
-        "normalized_manifest": normalized,
-        "normalized_manifest_sha256": "sha256:" + canonical_digest(normalized),
-        "observed_at": observed_at,
-    }
-    return sealed(body)
-
-
-def validate_preview_receipt(receipt: dict, expected: dict) -> dict:
-    body = {key: value for key, value in receipt.items() if key != "sha256"}
-    if (
-        receipt.get("sha256") != "sha256:" + canonical_digest(body)
-        or body.get("schema") != PREVIEW_SCHEMA
-        or body.get("kind") != expected["kind"]
-        or body.get("name") != expected["metadata"]["name"]
-        or body.get("namespace") != expected["metadata"]["namespace"]
-        or body.get("local_manifest_sha256") != "sha256:" + canonical_digest(expected)
-        or body.get("normalized_manifest_sha256")
-        != "sha256:" + canonical_digest(body.get("normalized_manifest"))
-    ):
-        raise ValueError("server preview receipt is not exact")
-    validate_server_manifest(body["normalized_manifest"], expected)
-    dt.datetime.fromisoformat(body["observed_at"].replace("Z", "+00:00"))
-    return receipt
-
-
-def absence_receipt(
-    *,
-    job_absent: bool,
-    config_map_absent: bool,
-    pod_prefix_collision_count: int,
-    workload_prefix_collision_count: int,
-    observed_at: str,
-) -> dict:
-    return sealed(
-        {
-            "schema": ABSENCE_SCHEMA,
-            "job_name": NAME,
-            "config_map_name": CONFIG_MAP,
-            "namespace": "fleet-train-jobs",
-            "kubernetes_context": KUBERNETES_CONTEXT,
-            "job_absent": job_absent,
-            "config_map_absent": config_map_absent,
-            "pod_prefix_collision_count": pod_prefix_collision_count,
-            "workload_prefix_collision_count": workload_prefix_collision_count,
-            "observed_at": observed_at,
+def _runtime_transport(request: dict[str, Any]) -> tuple[dict[str, str], bytes]:
+    env = request["env"]
+    if RUNTIME_BUNDLE in env:
+        transport = {RUNTIME_BUNDLE: env[RUNTIME_BUNDLE]}
+        encoded = env[RUNTIME_BUNDLE]
+    else:
+        transport = {
+            key: value
+            for key, value in env.items()
+            if key.startswith(RUNTIME_BUNDLE + "_")
+            and key.removeprefix(RUNTIME_BUNDLE + "_").isdigit()
         }
-    )
-
-
-def validate_absence_receipt(receipt: dict) -> dict:
-    body = {key: value for key, value in receipt.items() if key != "sha256"}
-    if (
-        receipt.get("sha256") != "sha256:" + canonical_digest(body)
-        or body.get("schema") != ABSENCE_SCHEMA
-        or body.get("job_name") != NAME
-        or body.get("config_map_name") != CONFIG_MAP
-        or body.get("namespace") != "fleet-train-jobs"
-        or body.get("kubernetes_context") != KUBERNETES_CONTEXT
-        or body.get("job_absent") is not True
-        or body.get("config_map_absent") is not True
-        or body.get("pod_prefix_collision_count") != 0
-        or body.get("workload_prefix_collision_count") != 0
-    ):
-        raise ValueError("precreate absence receipt is incomplete")
-    dt.datetime.fromisoformat(body["observed_at"].replace("Z", "+00:00"))
-    return receipt
-
-
-def session_open_checks(mechanics, runtime: pathlib.Path, plan: dict) -> None:
-    """Exercise the repaired session gate with one raw tool read per open."""
-    from fti.fleet.v1 import openai_tools
-
-    raw = json.loads((runtime / mechanics.TOOL_CATALOG_PATH).read_text())
-    session_type = mechanics._evidence_session_class()
-    base = session_type.__mro__[1]
-
-    class FakeInstance:
-        def __init__(self) -> None:
-            self.calls = 0
-
-        def list_tools(self):
-            self.calls += 1
-            return deepcopy(raw)
-
-    def fake_base_open(self) -> None:
-        self.instance = FakeInstance()
-        self.tools = openai_tools(self.instance.list_tools())
-        if getattr(self, "_visible_drift", False):
-            self.tools[0]["function"]["name"] = "drifted"
-
-    def fake_close(self) -> None:
-        self.close_calls += 1
-
-    def new_session(*, visible_drift: bool = False):
-        session = session_type.__new__(session_type)
-        session.task_key = plan["task_binding"]["task_key"]
-        session.task_version_id = plan["task_binding"]["task_version_id"]
-        session.verifier_version_id = plan["task_binding"]["verifier_version_id"]
-        session.instance = None
-        session.tools = []
-        session.close_calls = 0
-        session._visible_drift = visible_drift
-        return session
-
-    base.open = fake_base_open
-    session_type.close = fake_close
-
-    exact = new_session()
-    exact.open()
-    if exact.instance.calls != 1 or exact.close_calls != 0:
-        raise ValueError("exact session-open contract did not pass once")
-
-    visible_drift = new_session(visible_drift=True)
+        indexes = sorted(int(key.removeprefix(RUNTIME_BUNDLE + "_")) for key in transport)
+        if indexes != list(range(len(indexes))):
+            raise ValueError("Miles runtime transport chunks are incomplete")
+        encoded = "".join(transport[f"{RUNTIME_BUNDLE}_{index}"] for index in indexes)
     try:
-        visible_drift.open()
-    except ValueError:
-        pass
-    else:
-        raise ValueError("visible tool drift did not fail closed")
-    if visible_drift.instance.calls != 1 or visible_drift.close_calls != 1:
-        raise ValueError("visible tool drift cleanup was not exact")
-
-    plan_path = runtime / "plan.json"
-    original_plan = plan_path.read_text()
-    changed = deepcopy(plan)
-    changed["tool_contract"]["openai_tool_catalog_sha256"] = "sha256:" + "0" * 64
-    plan_path.write_text(json.dumps(changed, sort_keys=True, separators=(",", ":")))
-    plan_drift = new_session()
-    try:
-        plan_drift.open()
-    except ValueError:
-        pass
-    else:
-        raise ValueError("plan tool-contract drift did not fail closed")
-    finally:
-        plan_path.write_text(original_plan)
-    if plan_drift.instance.calls != 1 or plan_drift.close_calls != 1:
-        raise ValueError("plan drift cleanup was not exact")
-
-    runtime_dir = os.environ["CYBER_RUNTIME_DIR"]
-    os.environ["CYBER_RUNTIME_DIR"] = "/tmp/absent-miles96-preflight-runtime"
-    plan_load_error = new_session()
-    try:
-        plan_load_error.open()
-    except ValueError:
-        pass
-    else:
-        raise ValueError("plan-load error did not fail closed")
-    finally:
-        os.environ["CYBER_RUNTIME_DIR"] = runtime_dir
-    if plan_load_error.instance.calls != 1 or plan_load_error.close_calls != 1:
-        raise ValueError("plan-load cleanup was not exact")
+        blob = base64.b64decode(encoded, validate=True)
+    except ValueError as exc:
+        raise ValueError("Miles runtime transport is not canonical base64") from exc
+    observed = "sha256:" + hashlib.sha256(blob).hexdigest()
+    if env.get(RUNTIME_BUNDLE_SHA256) != observed:
+        raise ValueError("Miles runtime transport digest changed")
+    return {**transport, RUNTIME_BUNDLE_SHA256: observed}, blob
 
 
-def build_packet(operator_commit: str) -> tuple[dict, dict, dict]:
-    """Rebuild the exact ConfigMap, Kueue-managed Job, and packet binding."""
-    from cyber_post_train.jobs import digest
-    from training import miles96_mechanics_canary as mechanics
-    from training import miles96_signal_qualification as signal
-    from training import miles_signal_wave
-
+def _plan_and_request() -> tuple[dict[str, Any], dict[str, Any]]:
     wave = miles_signal_wave.load()
     candidate = wave["candidates"][0]
     plan = signal.build_plan(
@@ -315,221 +112,461 @@ def build_packet(operator_commit: str) -> tuple[dict, dict, dict]:
         current_binding_sha256=candidate["live_binding_receipt_sha256"],
         production_split_sha256=wave["authorities"]["production_split"]["self_sha256"],
     )
-    request = signal.job_request(plan)
-    chunks = sorted(
-        (
-            (int(key.rsplit("_", 1)[1]), value)
-            for key, value in request["env"].items()
-            if key.startswith("CYBER_RUNTIME_BUNDLE_")
-            and key.removeprefix("CYBER_RUNTIME_BUNDLE_").isdigit()
-        )
+    return plan, signal.job_request(plan)
+
+
+def _bootstrap(driver_sha256: str) -> list[str]:
+    source = (
+        "import base64,hashlib,os;"
+        f"s=base64.b64decode(os.environ.pop({DRIVER_ENV!r}),validate=True);"
+        f"assert 'sha256:'+hashlib.sha256(s).hexdigest()=={driver_sha256!r};"
+        "exec(compile(s,'<miles96-image-preflight>','exec'))"
     )
-    encoded = request["env"].get("CYBER_RUNTIME_BUNDLE") or "".join(value for _, value in chunks)
-    blob = base64.b64decode(encoded, validate=True)
-    source_closure = "sha256:" + mechanics.digest(plan["runtime_sources"])
-    driver = pathlib.Path(__file__).read_text()
-    driver_sha = "sha256:" + hashlib.sha256(driver.encode()).hexdigest()
-    labels = {
-        "app.kubernetes.io/name": "q38-m96-image-preflight",
-        "fleet.ai/owner": "christopher",
-    }
-    annotations = {
-        "fleet.ai/adapter-commit": ADAPTER_COMMIT,
-        "fleet.ai/operator-commit": operator_commit,
-        "fleet.ai/driver-sha256": driver_sha,
-        "fleet.ai/source-closure-sha256": source_closure,
-    }
-    config_map = {
-        "apiVersion": "v1",
-        "kind": "ConfigMap",
-        "metadata": {
-            "name": CONFIG_MAP,
-            "namespace": mechanics.NAMESPACE,
-            "labels": labels,
-            "annotations": annotations,
+    return ["python", "-u", "-c", source]
+
+
+def _build(source_commit: str) -> MilesImagePreflightPackage:
+    if _COMMIT.fullmatch(source_commit) is None:
+        raise ValueError("Miles image-preflight source commit must be exact")
+    plan, request = _plan_and_request()
+    transport, blob = _runtime_transport(request)
+    driver, driver_sha256 = _driver()
+    plan_sha256 = "sha256:" + digest(plan)
+    request_sha256 = "sha256:" + digest(request)
+    bundle_sha256 = "sha256:" + hashlib.sha256(blob).hexdigest()
+    job = render_cpu_preflight_job(
+        name=NAME,
+        image=request["image"],
+        role=ROLE,
+        command=_bootstrap(driver_sha256),
+        environment={
+            "CUDA_VISIBLE_DEVICES": "",
+            "NVIDIA_VISIBLE_DEVICES": "none",
+            "WANDB_MODE": "disabled",
+            "PYTHONDONTWRITEBYTECODE": "1",
+            DRIVER_ENV: base64.b64encode(driver.encode()).decode(),
+            ENV_DRIVER_SHA256: driver_sha256,
+            ENV_PLAN_SHA256: plan_sha256,
+            ENV_REQUEST_SHA256: request_sha256,
+            ENV_SOURCE_CLOSURE_SHA256: SOURCE_CLOSURE_SHA256,
+            ENV_RUNTIME_IMAGE: request["image"],
+            ENV_RECEIPT_PATH: "/tmp/preflight.json",
+            **transport,
         },
-        "immutable": True,
-        "data": {"driver.py": driver, "runtime_bundle.b64": encoded},
-    }
-    job = {
-        "apiVersion": "batch/v1",
-        "kind": "Job",
-        "metadata": {
-            "name": NAME,
-            "namespace": mechanics.NAMESPACE,
-            "labels": {
-                **labels,
-                "kueue.x-k8s.io/queue-name": "training-lq",
-                "kueue.x-k8s.io/priority-class": "q1",
-            },
-            "annotations": {**annotations, "fleet.ai/failure-alerts": "off"},
+        annotations={
+            PLAN_ANNOTATION: plan_sha256,
+            REQUEST_ANNOTATION: request_sha256,
+            BUNDLE_ANNOTATION: bundle_sha256,
+            DRIVER_ANNOTATION: driver_sha256,
+            SOURCE_COMMIT_ANNOTATION: source_commit,
+            ADAPTER_COMMIT_ANNOTATION: ADAPTER_COMMIT,
         },
-        "spec": {
-            "suspend": True,
-            "backoffLimit": 0,
-            "activeDeadlineSeconds": 600,
-            "template": {
-                "metadata": {"labels": labels},
-                "spec": {
-                    "automountServiceAccountToken": False,
-                    "restartPolicy": "Never",
-                    "priorityClassName": "c1",
-                    "containers": [
-                        {
-                            "name": "preflight",
-                            "image": mechanics.IMAGE,
-                            "imagePullPolicy": "IfNotPresent",
-                            "command": ["python", "/preflight/driver.py"],
-                            "env": [
-                                {
-                                    "name": "EXPECTED_BUNDLE_SHA256",
-                                    "value": "sha256:" + hashlib.sha256(blob).hexdigest(),
-                                },
-                                {"name": "EXPECTED_DRIVER_SHA256", "value": driver_sha},
-                                {
-                                    "name": "EXPECTED_PLAN_SHA256",
-                                    "value": "sha256:" + mechanics.digest(plan),
-                                },
-                                {
-                                    "name": "EXPECTED_SOURCE_CLOSURE_SHA256",
-                                    "value": source_closure,
-                                },
-                                {"name": "EXPECTED_RUNTIME_IMAGE", "value": mechanics.IMAGE},
-                                {
-                                    "name": "EXPECTED_IMAGE_DIGEST",
-                                    "value": "sha256:" + mechanics.IMAGE.rsplit("@sha256:", 1)[1],
-                                },
-                                {"name": "RECEIPT_PATH", "value": "/tmp/preflight.json"},
-                            ],
-                            "resources": {
-                                "requests": {"cpu": "1", "memory": "2Gi"},
-                                "limits": {"cpu": "2", "memory": "4Gi"},
-                            },
-                            "volumeMounts": [
-                                {"name": "preflight", "mountPath": "/preflight", "readOnly": True}
-                            ],
-                        }
-                    ],
-                    "volumes": [{"name": "preflight", "configMap": {"name": CONFIG_MAP}}],
-                },
-            },
+        resources={
+            "requests": {"cpu": "1", "memory": "2Gi", "ephemeral-storage": "1Gi"},
+            "limits": {"cpu": "2", "memory": "4Gi", "ephemeral-storage": "2Gi"},
         },
-    }
-    body = {
-        "schema": "cyber_qwen38_miles96_exact_image_preflight_packet_v1",
+        image_pull_secrets=request.get("image_pull_secrets", []),
+        termination_message_path="/tmp/preflight.json",
+    )
+    return MilesImagePreflightPackage(
+        job=job,
+        plan=plan,
+        request=request,
+        source_commit=source_commit,
+        driver_sha256=driver_sha256,
+        runtime_bundle_sha256=bundle_sha256,
+    )
+
+
+def build_package(source_commit: str) -> MilesImagePreflightPackage:
+    package = _build(source_commit)
+    validate_package(package)
+    return package
+
+
+def validate_package(package: MilesImagePreflightPackage) -> dict[str, Any]:
+    if not isinstance(package, MilesImagePreflightPackage) or package != _build(
+        package.source_commit
+    ):
+        raise ValueError("Miles image-preflight package differs from rebuilt source bytes")
+    return {
         "name": NAME,
-        "config_map": CONFIG_MAP,
-        "adapter_commit": ADAPTER_COMMIT,
-        "operator_commit": operator_commit,
-        "driver_sha256": driver_sha,
-        "source_closure_sha256": source_closure,
-        "plan_sha256": "sha256:" + mechanics.digest(plan),
-        "request_sha256": "sha256:" + digest(request),
-        "runtime_bundle_sha256": "sha256:" + hashlib.sha256(blob).hexdigest(),
-        "runtime_image": mechanics.IMAGE,
-        "job_manifest_sha256": "sha256:" + digest(job),
-        "config_map_manifest_sha256": "sha256:" + digest(config_map),
-        "requested_gpus": 0,
-        "external_post_count": 0,
+        "plan_sha256": "sha256:" + digest(package.plan),
+        "request_sha256": "sha256:" + digest(package.request),
+        "manifest_sha256": "sha256:" + digest(package.job),
+        "driver_sha256": package.driver_sha256,
+        "runtime_bundle_sha256": package.runtime_bundle_sha256,
+        "source_commit": package.source_commit,
+        "gpus": 0,
     }
-    return {**body, "sha256": "sha256:" + digest(body)}, config_map, job
 
 
-def main() -> None:
-    encoded = pathlib.Path("/preflight/runtime_bundle.b64").read_text()
-    blob = base64.b64decode(encoded, validate=True)
-    if "sha256:" + hashlib.sha256(blob).hexdigest() != os.environ["EXPECTED_BUNDLE_SHA256"]:
-        raise ValueError("runtime bundle digest changed")
-    driver_sha256 = "sha256:" + sha256(pathlib.Path(__file__))
-    if driver_sha256 != os.environ["EXPECTED_DRIVER_SHA256"]:
-        raise ValueError("preflight driver changed")
-    package = json.loads(gzip.decompress(blob))
-    runtime = pathlib.Path("/tmp/runtime")
-    runtime.mkdir(mode=0o700)
-    for name, content in package["files"].items():
-        path = runtime / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content)
-    sys.path.insert(0, str(runtime))
-    os.environ["CYBER_RUNTIME_DIR"] = str(runtime)
-    importlib.invalidate_caches()
-
-    from training import miles96_mechanics_canary as mechanics
-    from training import miles96_signal_qualification as signal
-
-    plan = signal.validate_plan(json.loads((runtime / "plan.json").read_text()))
-    if "sha256:" + mechanics.digest(plan) != os.environ["EXPECTED_PLAN_SHA256"]:
-        raise ValueError("signal plan digest changed")
-    if plan["qualification"]["optimizer_steps"] != 0 or plan["acceptance"]["optimizer_steps"] != 0:
-        raise ValueError("signal plan is not zero-update")
-    if plan["runtime_sources"] != signal.runtime_source_manifest():
-        raise ValueError("runtime source manifest changed")
+def validate_receipt(
+    receipt: dict[str, Any], package: MilesImagePreflightPackage
+) -> dict[str, Any]:
+    proof = validate_package(package)
+    body = {key: value for key, value in receipt.items() if key != "sha256"}
+    tools = package.plan["tool_contract"]
     if (
-        "sha256:" + mechanics.digest(plan["runtime_sources"])
-        != os.environ["EXPECTED_SOURCE_CLOSURE_SHA256"]
-    ):
-        raise ValueError("runtime source closure changed")
-
-    binding = signal._runtime_signal_binding(plan)
-    session_open_checks(mechanics, runtime, plan)
-    arguments = signal.native_arguments(plan)
-    positions = {value: index for index, value in enumerate(arguments)}
-    if (
-        arguments[:2] != ["-m", "fti.trainers.miles.run_fleet"]
-        or arguments[positions["--mode"] + 1] != "eval"
-        or arguments[positions["--n-samples-per-prompt"] + 1] != "8"
-        or arguments[positions["--rollout-batch-size"] + 1] != "1"
-        or any(value in arguments for value in ("--save", "--save-interval", "--post-save"))
-        or binding["sample_count"] != 8
-        or binding["max_concurrent_envs"] != 2
-        or binding["outer_episode_replacements"] != 0
-    ):
-        raise ValueError("zero-update evaluation entrypoint changed")
-
-    import fti
-
-    if fti.__version__ != "0.10.27":
-        raise ValueError("installed FTI version changed")
-    observed = {}
-    for module_name, expected in EXPECTED_SOURCE_HASHES.items():
-        module = importlib.import_module(module_name)
-        value = sha256(pathlib.Path(module.__file__))
-        if value != expected:
-            raise ValueError(f"installed source drift: {module_name}")
-        observed[module_name] = "sha256:" + value
-
-    body = {
-        "schema": "cyber_qwen38_miles96_exact_image_preflight_v1",
-        "status": "passed",
-        "runtime_image": os.environ["EXPECTED_RUNTIME_IMAGE"],
-        "image_digest": os.environ["EXPECTED_IMAGE_DIGEST"],
-        "source_closure_sha256": os.environ["EXPECTED_SOURCE_CLOSURE_SHA256"],
-        "driver_sha256": driver_sha256,
-        "runtime_bundle_sha256": os.environ["EXPECTED_BUNDLE_SHA256"],
-        "plan_sha256": os.environ["EXPECTED_PLAN_SHA256"],
-        "raw_tool_catalog_sha256": mechanics.RAW_TOOL_CATALOG_SHA256,
-        "openai_tool_catalog_sha256": mechanics.OPENAI_TOOL_CATALOG_SHA256,
-        "tool_transform_source_sha256": "sha256:" + mechanics.FTI_V1_SHA256,
-        "source_hashes": observed,
-        "checks": {
-            "image_digest_exact": True,
-            "pinned_fti_imports": True,
-            "pinned_miles_sources": True,
+        set(receipt)
+        != {
+            "schema",
+            "status",
+            "gpus",
+            "job_name",
+            "runtime_image",
+            "image_digest",
+            "source_closure_sha256",
+            "driver_sha256",
+            "runtime_bundle_sha256",
+            "plan_sha256",
+            "request_sha256",
+            "runtime_binding_sha256",
+            "raw_tool_catalog_sha256",
+            "openai_tool_catalog_sha256",
+            "tool_transform_source_sha256",
+            "checks",
+            "observed_at_unix",
+            "sha256",
+        }
+        or receipt.get("sha256") != "sha256:" + digest(body)
+        or receipt.get("schema") != SCHEMA
+        or receipt.get("status") != "passed"
+        or receipt.get("gpus") != 0
+        or receipt.get("job_name") != NAME
+        or receipt.get("runtime_image") != package.request["image"]
+        or receipt.get("image_digest") != package.request["image"].rsplit("@", 1)[-1]
+        or receipt.get("source_closure_sha256") != SOURCE_CLOSURE_SHA256
+        or receipt.get("driver_sha256") != proof["driver_sha256"]
+        or receipt.get("runtime_bundle_sha256") != proof["runtime_bundle_sha256"]
+        or receipt.get("plan_sha256") != proof["plan_sha256"]
+        or receipt.get("request_sha256") != proof["request_sha256"]
+        or _SHA256.fullmatch(str(receipt.get("runtime_binding_sha256"))) is None
+        or receipt.get("raw_tool_catalog_sha256") != tools["raw_tool_catalog_sha256"]
+        or receipt.get("openai_tool_catalog_sha256") != tools["openai_tool_catalog_sha256"]
+        or receipt.get("tool_transform_source_sha256") != tools["transform_source_sha256"]
+        or receipt.get("checks")
+        != {
+            "pinned_runtime_binding": True,
             "zero_update_entrypoint": True,
-            "sealed_raw_tool_catalog_exact": True,
-            "pinned_openai_projection_exact": True,
-            "session_open_exact_catalog_passed": True,
-            "session_open_visible_drift_rejected_and_closed": True,
-            "session_open_plan_drift_rejected_and_closed": True,
-            "session_open_plan_load_error_rejected_and_closed": True,
-        },
-        "observed_at": dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z"),
-    }
-    receipt = {**body, "sha256": "sha256:" + canonical_digest(body)}
-    payload = json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n"
-    pathlib.Path(os.environ["RECEIPT_PATH"]).write_text(payload)
-    print(payload, end="")
+            "session_open_exact_catalog": True,
+            "session_open_raw_drift_rejected_and_closed": True,
+        }
+        or type(receipt.get("observed_at_unix")) not in {int, float}
+    ):
+        raise ValueError("Miles exact-image preflight receipt is incomplete")
+    return receipt
 
 
-if __name__ == "__main__":
-    main()
+def validate_completed_preflight(
+    package: MilesImagePreflightPackage,
+    job: dict[str, Any],
+    workloads: dict[str, Any],
+    pods: dict[str, Any],
+    service_account: dict[str, Any],
+    logs: str,
+) -> dict[str, Any]:
+    validate_package(package)
+    validate_completed_cpu_preflight_job(package.job, job, workloads, pods, service_account)
+    lines = logs.splitlines()
+    if len(lines) != 1 or not lines[0].startswith(LOG_PREFIX):
+        raise ValueError("Miles image-preflight logs do not contain one sanitized receipt")
+    try:
+        receipt = json.loads(lines[0].removeprefix(LOG_PREFIX))
+    except json.JSONDecodeError as exc:
+        raise ValueError("Miles image-preflight receipt is invalid JSON") from exc
+    return validate_receipt(receipt, package)
+
+
+def validate_response(
+    actual: dict[str, Any],
+    package: MilesImagePreflightPackage,
+    *,
+    require_uid: bool,
+    admitted: bool = False,
+    admitted_workload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    validate_package(package)
+    return validate_cpu_preflight_job_response(
+        actual,
+        package.job,
+        require_uid=require_uid,
+        admitted=admitted,
+        admitted_workload=admitted_workload,
+    )
+
+
+def authorize_create_once(
+    package: MilesImagePreflightPackage,
+    *,
+    prod_previews: list[dict[str, Any]],
+    observer: dict[str, Any],
+    operation_root: Path,
+    parent_review_sha256: str,
+) -> dict[str, Any]:
+    """Wrap the proven stage create core with a Miles/root-review binding."""
+    from training import skyrl_prod9_direct as direct
+
+    proof = validate_package(package)
+    if (
+        len(prod_previews) != 2
+        or _SHA256.fullmatch(parent_review_sha256) is None
+        or operation_root.is_symlink()
+        or not operation_root.is_absolute()
+        or not operation_root.is_dir()
+    ):
+        raise ValueError("Miles image-preflight create authority is incomplete")
+    previews = [
+        direct.validate_cpu_preview_proof(
+            package.job,
+            preview,
+            purpose="preflight",
+            context=direct.PROD_CONTEXT,
+            fresh=True,
+        )
+        for preview in prod_previews
+    ]
+    if previews[0].get("server_render_sha256") != previews[1].get("server_render_sha256"):
+        raise ValueError("Miles image-preflight production previews differ")
+    armed = direct._observer_pid(
+        observer,
+        kind="job",
+        name=NAME,
+        plan_sha256=proof["plan_sha256"],
+        manifest_sha256=proof["manifest_sha256"],
+        gpus=0,
+        maximum_seconds=direct.CPU_MAXIMUM_SECONDS,
+    )
+    core = direct._seal(
+        {
+            "schema": direct.STAGE_AUTHORIZATION_SCHEMA,
+            "status": "authorized_for_one_create",
+            "stage_spec_sha256": proof["plan_sha256"],
+            "manifest_sha256": proof["manifest_sha256"],
+            # The create core only freshness-checks these two reviewed proofs;
+            # the outer Miles receipt above proves both are production previews.
+            "dev_preview": previews[0],
+            "prod_preview": previews[1],
+            "observer": armed,
+            "operation_root": str(operation_root.resolve()),
+        }
+    )
+    return direct._seal(
+        {
+            "schema": CREATE_AUTHORIZATION_SCHEMA,
+            "status": "authorized_for_one_create",
+            "parent_review_sha256": parent_review_sha256,
+            "plan_sha256": proof["plan_sha256"],
+            "manifest_sha256": proof["manifest_sha256"],
+            "source_commit": package.source_commit,
+            "core_authorization": core,
+        }
+    )
+
+
+def create_once(
+    package: MilesImagePreflightPackage,
+    operation_root: Path,
+    authorization: dict[str, Any],
+    *,
+    expected_parent_review_sha256: str,
+    runner=subprocess.run,
+    dev_duplicate_proof: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Issue the shared rail's only mutating call for the exact Miles package."""
+    from training import skyrl_prod9_direct as direct
+
+    auth = direct._validate_seal(authorization, CREATE_AUTHORIZATION_SCHEMA)
+    if auth.get("parent_review_sha256") != expected_parent_review_sha256:
+        raise ValueError("Miles image-preflight parent review changed")
+    expected = authorize_create_once(
+        package,
+        prod_previews=[
+            auth["core_authorization"]["dev_preview"],
+            auth["core_authorization"]["prod_preview"],
+        ],
+        observer=auth["core_authorization"]["observer"],
+        operation_root=operation_root,
+        parent_review_sha256=expected_parent_review_sha256,
+    )
+    if auth != expected:
+        raise ValueError("Miles image-preflight create authorization changed")
+    proof = validate_package(package)
+    return direct._create_cpu_once(
+        operation_root,
+        package.job,
+        auth["core_authorization"],
+        purpose="stage",
+        name=NAME,
+        plan_sha256=proof["plan_sha256"],
+        runner=runner,
+        dev_duplicate_proof=dev_duplicate_proof,
+    )
+
+
+def reconcile_create_intent(
+    package: MilesImagePreflightPackage,
+    operation_root: Path,
+    authorization: dict[str, Any],
+    *,
+    expected_parent_review_sha256: str,
+    runner=subprocess.run,
+) -> dict[str, Any]:
+    """Read back an ambiguous create by exact name/UID; never issue a create."""
+    from types import SimpleNamespace
+
+    from cyber_post_train.sfs_output_job import _validate_admitted_workload
+    from training import skyrl_prod9_direct as direct
+
+    proof = validate_package(package)
+    auth = direct._validate_seal(authorization, CREATE_AUTHORIZATION_SCHEMA)
+    core = direct._validate_seal(auth.get("core_authorization"), direct.STAGE_AUTHORIZATION_SCHEMA)
+    journal = operation_root / "PROD9_STAGE_CREATE.jsonl"
+    if (
+        auth.get("parent_review_sha256") != expected_parent_review_sha256
+        or auth.get("plan_sha256") != proof["plan_sha256"]
+        or auth.get("manifest_sha256") != proof["manifest_sha256"]
+        or auth.get("source_commit") != package.source_commit
+        or core.get("stage_spec_sha256") != proof["plan_sha256"]
+        or core.get("manifest_sha256") != proof["manifest_sha256"]
+        or operation_root.resolve() != Path(core.get("operation_root", ""))
+        or journal.is_symlink()
+        or not journal.is_file()
+    ):
+        raise ValueError("Miles image-preflight reconciliation authority is incomplete")
+    lines = journal.read_text().splitlines()
+    if len(lines) not in {1, 2}:
+        raise ValueError("Miles image-preflight create journal is invalid")
+    try:
+        intent = json.loads(lines[0])
+    except json.JSONDecodeError as exc:
+        raise ValueError("Miles image-preflight create intent is invalid") from exc
+    if (
+        intent.get("state") != "CREATE_INTENT_DO_NOT_RETRY"
+        or intent.get("purpose") != "stage"
+        or intent.get("plan_sha256") != proof["plan_sha256"]
+        or intent.get("manifest_sha256") != proof["manifest_sha256"]
+        or intent.get("authorization_sha256") != core["sha256"]
+        or not isinstance(intent.get("duplicate_checks"), dict)
+    ):
+        raise ValueError("Miles image-preflight create intent changed")
+    if len(lines) == 2:
+        try:
+            return direct._cpu_created(
+                json.loads(lines[1]),
+                purpose="stage",
+                name=NAME,
+                plan_sha256=proof["plan_sha256"],
+                manifest_sha256=proof["manifest_sha256"],
+                authorization_sha256=core["sha256"],
+            )
+        except json.JSONDecodeError as exc:
+            raise ValueError("Miles image-preflight create receipt is invalid") from exc
+
+    result = direct._kubectl(
+        runner,
+        direct.PROD_CONTEXT,
+        "get",
+        "job",
+        NAME,
+        "--ignore-not-found",
+        "-o",
+        "json",
+    )
+    if result.returncode:
+        raise ValueError("Miles image-preflight exact-name reconciliation failed")
+    if not result.stdout.strip():
+        return direct._seal(
+            {
+                "schema": RECONCILED_CREATE_SCHEMA,
+                "status": "not_observed_after_consumed_intent",
+                "name": NAME,
+                "plan_sha256": proof["plan_sha256"],
+                "manifest_sha256": proof["manifest_sha256"],
+                "recovery_observer_required": False,
+            }
+        )
+    try:
+        job = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Miles image-preflight exact-name response is invalid") from exc
+    admitted = job.get("spec", {}).get("suspend") is False
+    workload = None
+    if admitted:
+        workload_result = direct._kubectl(
+            runner,
+            direct.PROD_CONTEXT,
+            "get",
+            "workload",
+            "--selector",
+            f"kueue.x-k8s.io/job-uid={job.get('metadata', {}).get('uid')}",
+            "-o",
+            "json",
+        )
+        if workload_result.returncode:
+            raise ValueError("Miles image-preflight Workload reconciliation failed")
+        try:
+            workload = _validate_admitted_workload(
+                SimpleNamespace(job=package.job), job, json.loads(workload_result.stdout)
+            )
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            raise ValueError("Miles image-preflight admitted identity is invalid") from exc
+    observed = validate_response(
+        job,
+        package,
+        require_uid=True,
+        admitted=admitted,
+        admitted_workload=workload,
+    )
+    created_at = job.get("metadata", {}).get("creationTimestamp")
+    direct._timestamp(created_at)
+    return direct._seal(
+        {
+            "schema": RECONCILED_CREATE_SCHEMA,
+            "status": "observed_exact_job_requires_recovery_observer",
+            "name": NAME,
+            "plan_sha256": proof["plan_sha256"],
+            "manifest_sha256": proof["manifest_sha256"],
+            "job_uid": observed["job_uid"],
+            "created_at": created_at,
+            "admitted": admitted,
+            "recovery_observer_required": True,
+        }
+    )
+
+
+def validate_release(
+    release: dict[str, Any],
+    package: MilesImagePreflightPackage,
+    receipt: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate direct or exact-UID recovery cleanup through one shared contract."""
+    from training import dev_cleanup_observer as cleanup
+    from training import skyrl_prod9_direct as direct
+
+    proof = validate_package(package)
+    schema = release.get("schema") if isinstance(release, dict) else None
+    if schema not in {cleanup.DIRECT_RESULT_SCHEMA, cleanup.RECOVERY_RESULT_SCHEMA}:
+        raise ValueError("Miles image-preflight release schema changed")
+    direct._validate_seal(release, schema)
+    normalized = release
+    if schema == cleanup.RECOVERY_RESULT_SCHEMA:
+        normalized = direct._seal(
+            {
+                **{key: value for key, value in release.items() if key != "sha256"},
+                "schema": cleanup.DIRECT_RESULT_SCHEMA,
+            }
+        )
+    direct._cpu_release(
+        normalized,
+        receipt,
+        name=NAME,
+        plan_sha256=proof["plan_sha256"],
+        manifest_sha256=proof["manifest_sha256"],
+        fresh=False,
+    )
+    if schema == cleanup.RECOVERY_RESULT_SCHEMA and release.get(
+        "recovered_existing_target_uid"
+    ) != release.get("uid"):
+        raise ValueError("Miles recovery release UID changed")
+    return release

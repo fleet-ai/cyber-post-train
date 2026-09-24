@@ -40,6 +40,7 @@ JOBS_API_PREFIX_GUARD_SCHEMA = "cyber_jobs_api_prefix_guard_armed_v1"
 JOBS_API_EXACT_BINDING_SCHEMA = "cyber_jobs_api_exact_rayjob_binding_v1"
 JOBS_API_RELEASE_CONTRACT_SCHEMA = "cyber_jobs_api_exact_uid_release_contract_v1"
 JOBS_API_EXACT_OBSERVER_SCHEMA = "cyber_jobs_api_exact_uid_observer_result_v1"
+JOBS_API_CLEANUP_CHECKPOINT_SCHEMA = "cyber_jobs_api_cleanup_checkpoint_v1"
 TERMINAL_RAY_STATUSES = {
     "SUCCEEDED": "Succeeded",
     "FAILED": "Failed",
@@ -90,6 +91,13 @@ def _write_create_once(path: Path, value: dict) -> None:
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w") as stream:
         stream.write(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+    parent = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(parent)
+    finally:
+        os.close(parent)
 
 
 def _canonical_jobs_run_dir(value: object) -> str:
@@ -507,6 +515,7 @@ class JobsApiExactUidObserver:
         binding_path: Path,
         result_path: Path,
         release_contract_path: Path | None = None,
+        cleanup_checkpoint_path: Path | None = None,
         poll_seconds: float = 2.0,
         run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
     ) -> None:
@@ -521,6 +530,9 @@ class JobsApiExactUidObserver:
         self.binding = self._validate_binding(binding)
         self.binding_path = binding_path
         self.result_path = result_path
+        self.cleanup_checkpoint_path = cleanup_checkpoint_path or result_path.with_name(
+            result_path.stem + "_CLEANUP_CHECKPOINT.json"
+        )
         self.poll_seconds = poll_seconds
         self._run = run
         self.context = self.binding["context"]
@@ -562,6 +574,109 @@ class JobsApiExactUidObserver:
             "raycluster": {},
             "pod": {},
         }
+        self._restore_cleanup_checkpoint()
+
+    def _cleanup_checkpoint(self) -> dict:
+        return _seal(
+            {
+                "schema": JOBS_API_CLEANUP_CHECKPOINT_SCHEMA,
+                "status": "delete_intent_do_not_retry",
+                "binding_sha256": self.binding["sha256"],
+                "cleanup_requested_at": _stamp(self.cleanup_requested_at),
+                "terminal_status": self.terminal_status,
+                "allocated_at": _stamp(self.allocated_at) if self.allocated_at else "",
+                "deadline_at": _stamp(self.deadline_at) if self.deadline_at else "",
+                "root_seen": self.root_seen,
+                "inventory_seen": self.inventory_seen,
+                "raycluster_identity_observed": self.raycluster_identity_observed,
+                "peak_gpus": self.peak_gpus,
+                "known": self.known,
+                "gpu_pods": self.gpu_pods,
+                "runtime_images": self.runtime_images,
+                "receipt": self.receipt,
+                "pod_restarts": self.pod_restarts,
+                "pod_exit_codes": {uid: list(codes) for uid, codes in self.pod_exit_codes.items()},
+            }
+        )
+
+    def _restore_cleanup_checkpoint(self) -> None:
+        path = self.cleanup_checkpoint_path
+        if not path.exists():
+            return
+        if path.is_symlink() or not path.is_file():
+            raise ObserverError("Jobs API cleanup checkpoint is indirect")
+        try:
+            value = json.loads(path.read_text())
+        except (OSError, ValueError) as exc:
+            raise ObserverError("Jobs API cleanup checkpoint is unavailable") from exc
+        if not isinstance(value, dict):
+            raise ObserverError("Jobs API cleanup checkpoint is invalid")
+        fields = {
+            "schema",
+            "status",
+            "binding_sha256",
+            "cleanup_requested_at",
+            "terminal_status",
+            "allocated_at",
+            "deadline_at",
+            "root_seen",
+            "inventory_seen",
+            "raycluster_identity_observed",
+            "peak_gpus",
+            "known",
+            "gpu_pods",
+            "runtime_images",
+            "receipt",
+            "pod_restarts",
+            "pod_exit_codes",
+            "sha256",
+        }
+        body = {key: item for key, item in value.items() if key != "sha256"}
+        if (
+            set(value) != fields
+            or value.get("schema") != JOBS_API_CLEANUP_CHECKPOINT_SCHEMA
+            or value.get("status") != "delete_intent_do_not_retry"
+            or value.get("binding_sha256") != self.binding["sha256"]
+            or value.get("sha256") != "sha256:" + digest(body)
+        ):
+            raise ObserverError("Jobs API cleanup checkpoint is invalid")
+        try:
+            requested_at = _parse_stamp(value["cleanup_requested_at"])
+            allocated_at = _parse_stamp(value["allocated_at"]) if value["allocated_at"] else None
+            deadline_at = _parse_stamp(value["deadline_at"]) if value["deadline_at"] else None
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ObserverError("Jobs API cleanup checkpoint is invalid") from exc
+        if (
+            value.get("root_seen") is not True
+            or value.get("inventory_seen") is not True
+            or value.get("raycluster_identity_observed") is not True
+            or not isinstance(value.get("known"), dict)
+            or set(value["known"]) != {"workload", "raycluster", "pod"}
+            or not all(isinstance(items, dict) for items in value["known"].values())
+            or not isinstance(value.get("gpu_pods"), dict)
+            or not isinstance(value.get("runtime_images"), dict)
+            or not isinstance(value.get("pod_restarts"), dict)
+            or not isinstance(value.get("pod_exit_codes"), dict)
+            or type(value.get("peak_gpus")) is not int
+            or value["peak_gpus"] < 0
+        ):
+            raise ObserverError("Jobs API cleanup checkpoint is invalid")
+        self.cleanup_requested = True
+        self.cleanup_requested_at = requested_at
+        self.cleanup_status = "exact_uid_delete_outcome_uncertain_not_retried"
+        self.terminal_status = value["terminal_status"]
+        self.allocated_at = allocated_at
+        self.deadline_at = deadline_at
+        self.root_seen = True
+        self.inventory_seen = True
+        self.raycluster_identity_observed = True
+        self.peak_gpus = value["peak_gpus"]
+        self.known = value["known"]
+        self.gpu_pods = value["gpu_pods"]
+        self.runtime_images = value["runtime_images"]
+        self.receipt = value["receipt"]
+        self.pod_restarts = value["pod_restarts"]
+        self.pod_exit_codes = {uid: tuple(codes) for uid, codes in value["pod_exit_codes"].items()}
 
     def _validate_binding(self, value: object) -> dict:
         fields = {
@@ -1006,6 +1121,13 @@ class JobsApiExactUidObserver:
             "-f",
             "-",
         ]
+        # Publish the one-way mutation boundary before the DELETE.  A restarted
+        # coordinator resumes reads from this exact checkpoint and never issues
+        # another DELETE, regardless of whether the first response was lost.
+        self.cleanup_requested = True
+        self.cleanup_requested_at = _now()
+        self.cleanup_status = "exact_uid_delete_intent_do_not_retry"
+        _write_create_once(self.cleanup_checkpoint_path, self._cleanup_checkpoint())
         # A timed-out destructive mutation is uncertain.  Never replay it;
         # the UID precondition prevents deleting a replacement, and continued
         # reads below determine whether the original actually disappeared.
@@ -1020,8 +1142,6 @@ class JobsApiExactUidObserver:
             accepted = result.returncode == 0
         except subprocess.TimeoutExpired:
             accepted = False
-        self.cleanup_requested = True
-        self.cleanup_requested_at = _now()
         self.cleanup_status = (
             "requested_exact_uid_precondition"
             if accepted
