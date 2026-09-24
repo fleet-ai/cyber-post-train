@@ -127,10 +127,7 @@ def _maximum_seconds(plan: dict[str, Any], request: dict[str, Any]) -> int:
         samples = plan["qualification"]["samples"]
         post_rollout = 0
     elif schema == mechanics.SCHEMA:
-        samples = (
-            plan["optimization"]["prompt_groups"]
-            * plan["optimization"]["samples_per_prompt"]
-        )
+        samples = plan["optimization"]["prompt_groups"] * plan["optimization"]["samples_per_prompt"]
         post_rollout = (
             MECHANICS_OPTIMIZER_GRACE_SECONDS
             + MECHANICS_CHECKPOINT_GRACE_SECONDS

@@ -153,9 +153,7 @@ def _reviewed_artifacts(plan: dict, request: dict) -> tuple[dict, dict, dict, di
             "reviewed_at": transition._stamp(observed),
         }
     )
-    approved = transition.approve_review_candidate(
-        candidate, review, live, reviewed_at=observed
-    )
+    approved = transition.approve_review_candidate(candidate, review, live, reviewed_at=observed)
     return approved, candidate, review, live, observed.timestamp()
 
 
@@ -165,9 +163,7 @@ def test_signal_active_deadline_covers_four_bounded_serial_waves() -> None:
 
 
 def test_mechanics_active_deadline_adds_update_checkpoint_and_export_grace() -> None:
-    expected = (
-        1800 + 4 * (600 + 2400 + 900 + 2 * 120 + 60) + 1800 + 1800 + 3600 + 300
-    )
+    expected = 1800 + 4 * (600 + 2400 + 900 + 2 * 120 + 60) + 1800 + 1800 + 3600 + 300
     plan = _mechanics_plan()
     assert launch._maximum_seconds(plan, {"name": "train"}) == expected == 26100
     assert launch._maximum_seconds(plan, {"name": plan["identity"]["reload_name"]}) == 7200
@@ -277,9 +273,7 @@ def test_final_prepost_gate_rechecks_observer_jobs_and_kubernetes(monkeypatch, t
         ("maximum_seconds", 7199),
     ],
 )
-def test_armed_observer_receipt_binds_preview_pattern_and_deadline(
-    tmp_path, field, value
-) -> None:
+def test_armed_observer_receipt_binds_preview_pattern_and_deadline(tmp_path, field, value) -> None:
     plan = {
         "schema": "mechanics",
         "execution": {
