@@ -13,24 +13,40 @@ from typing import Any
 
 from training import miles96_mechanics_canary as mechanics
 
-SCHEMA = "cyber_qwen38_miles96_model_stage_packet_v2"
-RECEIPT_SCHEMA = "cyber_qwen38_miles96_model_stage_receipt_v1"
+SCHEMA = "cyber_qwen38_miles96_model_stage_packet_v3"
+RECEIPT_SCHEMA = "cyber_qwen38_miles96_model_stage_receipt_v2"
 LOG_PREFIX = "CYBER_MILES96_MODEL_STAGE="
 CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 NAMESPACE = "fleet-train-jobs"
-JOB_NAME = "chris-q38-m96-model-stage-a2"
+JOB_NAME = "chris-q38-m96-model-stage-a3"
 CONFIG_MAP_NAME = JOB_NAME + "-code"
 IMAGE = mechanics.IMAGE
 HF_SOURCE = Path("/source/hf")
 MEGATRON_SOURCE = Path("/source/megatron")
 DESTINATION = Path("/mnt/sfs/jobs/chris-q38-m96-prepared-v1")
-PARTIAL = Path("/mnt/sfs/jobs/.chris-q38-m96-prepared-v1.partial-a2")
+PARTIAL = Path("/mnt/sfs/jobs/.chris-q38-m96-prepared-v1.partial-a3")
+RETIRED_A2_PARTIAL = Path("/mnt/sfs/jobs/.chris-q38-m96-prepared-v1.partial-a2")
 MANIFEST = "PREPARED_MODEL.json"
 COMPLETE = ".complete"
 DRIVER = "from training.miles96_model_stage import runtime_main;runtime_main()\n"
 ROOT_ACCESS_JUSTIFICATION = (
     "the exact read-only HF and Megatron source roots reject uid 1000; uid 0 is used only "
     "to inventory and copy those immutable sources into one fresh SFS destination"
+)
+PHASES = (
+    "preflight",
+    "hf_inventory_before",
+    "megatron_inventory_before",
+    "create_partial",
+    "copy_hf",
+    "copy_megatron",
+    "hf_inventory_after",
+    "megatron_inventory_after",
+    "validate_partial",
+    "write_manifest",
+    "write_complete_marker",
+    "promote",
+    "validate_destination",
 )
 
 
@@ -83,20 +99,31 @@ def _write_once(path: Path, value: str) -> None:
         os.fsync(stream.fileno())
 
 
-def stage() -> dict[str, Any]:
+def stage(*, set_phase: Any = lambda _phase: None) -> dict[str, Any]:
+    set_phase("preflight")
     if DESTINATION.exists() or DESTINATION.is_symlink():
         raise FileExistsError("prepared-model destination already exists")
     if PARTIAL.exists() or PARTIAL.is_symlink():
         raise FileExistsError("prepared-model partial destination already exists")
+    if RETIRED_A2_PARTIAL.exists() or RETIRED_A2_PARTIAL.is_symlink():
+        raise FileExistsError("retired A2 partial destination still exists")
+    set_phase("hf_inventory_before")
     hf_before = _source_inventory(HF_SOURCE, hf=True)
+    set_phase("megatron_inventory_before")
     megatron_before = _source_inventory(MEGATRON_SOURCE, hf=False)
+    set_phase("create_partial")
     PARTIAL.mkdir(mode=0o755)
+    set_phase("copy_hf")
     _copy_tree(HF_SOURCE, PARTIAL / "Qwen3.8-27B")
+    set_phase("copy_megatron")
     _copy_tree(MEGATRON_SOURCE, PARTIAL / "qwen3.8-27B_torch_dist")
+    set_phase("hf_inventory_after")
     hf_after = _source_inventory(HF_SOURCE, hf=True)
+    set_phase("megatron_inventory_after")
     megatron_after = _source_inventory(MEGATRON_SOURCE, hf=False)
     if hf_before != hf_after or megatron_before != megatron_after:
         raise ValueError("source changed while staging")
+    set_phase("validate_partial")
     prepared = mechanics.prepared_model_inventory(PARTIAL)
     if prepared["hf_files"] != hf_before["files"]:
         raise ValueError("staged HF bytes differ from source")
@@ -113,9 +140,13 @@ def stage() -> dict[str, Any]:
         "megatron_bytes": megatron_before["bytes"],
     }
     manifest = {**manifest_body, "sha256": "sha256:" + digest(manifest_body)}
+    set_phase("write_manifest")
     _write_once(PARTIAL / MANIFEST, json.dumps(manifest, sort_keys=True) + "\n")
+    set_phase("write_complete_marker")
     _write_once(PARTIAL / COMPLETE, manifest["sha256"] + "\n")
+    set_phase("promote")
     mechanics._rename_noreplace(PARTIAL, DESTINATION)
+    set_phase("validate_destination")
     observed = mechanics.prepared_model_inventory(DESTINATION)
     if observed["sha256"] != prepared["sha256"]:
         raise ValueError("prepared-model binding changed after atomic promotion")
@@ -124,8 +155,16 @@ def stage() -> dict[str, Any]:
 
 def runtime_main() -> None:
     started = int(time.time())
+    phase = "preflight"
+
+    def set_phase(value: str) -> None:
+        nonlocal phase
+        if value not in PHASES:
+            raise ValueError("unknown staging phase")
+        phase = value
+
     try:
-        manifest = stage()
+        manifest = stage(set_phase=set_phase)
         body = {
             "schema": RECEIPT_SCHEMA,
             "status": "succeeded",
@@ -140,6 +179,7 @@ def runtime_main() -> None:
             "megatron_bytes": manifest["megatron_bytes"],
             "started_at_epoch": started,
             "finished_at_epoch": int(time.time()),
+            "finished_phase": phase,
             "gpus": 0,
             "container_uid": 0,
             "root_access_justification": ROOT_ACCESS_JUSTIFICATION,
@@ -156,6 +196,12 @@ def runtime_main() -> None:
             "schema": RECEIPT_SCHEMA,
             "status": "failed",
             "error_class": type(exc).__name__,
+            "failed_phase": phase,
+            "destination_exists": DESTINATION.exists() or DESTINATION.is_symlink(),
+            "partial_exists": PARTIAL.exists() or PARTIAL.is_symlink(),
+            "retired_a2_partial_exists": (
+                RETIRED_A2_PARTIAL.exists() or RETIRED_A2_PARTIAL.is_symlink()
+            ),
             "started_at_epoch": started,
             "finished_at_epoch": int(time.time()),
             "gpus": 0,
@@ -362,26 +408,18 @@ def build_packet() -> dict[str, Any]:
             "job_create_request_count": 1,
             "job_create_retry_allowed": False,
             "job_created_suspended": True,
-            "post_create_pre_unsuspend_checks": [
+            "post_create_checks": [
                 "exact_config_map_uid_bound",
                 "exact_job_uid_bound",
                 "rendered_root_failure_alerts_off",
                 "rendered_priority_class_c1",
                 "rendered_gpu_requests_and_limits_zero",
-                "rendered_suspend_true",
+                "preview_suspend_true",
+                "live_suspend_is_controller_managed",
             ],
-            "unsuspend": {
-                "request_count": 1,
-                "retry_allowed": False,
-                "content_type": "application/json-patch+json",
-                "uid_source": "exact_job_create_response.metadata.uid",
-                "operations_template": [
-                    {"op": "test", "path": "/metadata/uid", "value": "$JOB_UID"},
-                    {"op": "test", "path": "/spec/suspend", "value": True},
-                    {"op": "replace", "path": "/spec/suspend", "value": False},
-                ],
-            },
-            "post_unsuspend_create_or_patch_requests_allowed": False,
+            "controller_managed_unsuspend": True,
+            "operator_patch_request_count": 0,
+            "post_create_or_patch_requests_allowed": False,
             "exact_uid_terminal_monitor_required": True,
             "exact_uid_cleanup_required": True,
         },
@@ -418,15 +456,9 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:
         or sequence.get("job_create_request_count") != 1
         or sequence.get("job_create_retry_allowed") is not False
         or sequence.get("job_created_suspended") is not True
-        or sequence.get("unsuspend", {}).get("request_count") != 1
-        or sequence.get("unsuspend", {}).get("retry_allowed") is not False
-        or sequence.get("unsuspend", {}).get("operations_template")
-        != [
-            {"op": "test", "path": "/metadata/uid", "value": "$JOB_UID"},
-            {"op": "test", "path": "/spec/suspend", "value": True},
-            {"op": "replace", "path": "/spec/suspend", "value": False},
-        ]
-        or sequence.get("post_unsuspend_create_or_patch_requests_allowed") is not False
+        or sequence.get("controller_managed_unsuspend") is not True
+        or sequence.get("operator_patch_request_count") != 0
+        or sequence.get("post_create_or_patch_requests_allowed") is not False
     ):
         raise ValueError("Miles96 model-stage create/release sequence drifted")
     return {

@@ -146,13 +146,21 @@ sources.  The container is not privileged, drops every Linux capability,
 cannot gain privileges, has a read-only root filesystem and no service-account
 token, and requests no GPU.  Its public terminal receipt repeats those facts.
 
-The stager's Job begins suspended.  After two matching server previews, an
-operator creates the immutable ConfigMap once and the suspended Job once, binds
-both returned UIDs, and rechecks the rendered root alert annotation, c1
-priority, zero-GPU resources and suspended state.  It then sends exactly one
-JSON Patch which first tests the exact returned Job UID and suspended state and
-then changes `spec.suspend` to false.  None of those create or patch requests is
-retried.  Terminal monitoring and cleanup remain bound to that exact Job UID.
+The stager's rendered Job begins suspended.  After two matching server
+previews, an operator creates the immutable ConfigMap once and the Job once and
+binds both returned UIDs.  Kueue owns admission and may change
+`spec.suspend` to false before the operator can re-read the Job; the A2 staging
+attempt proved that this is normal controller behavior.  The operator therefore
+sends no unsuspend patch and never retries either create.  It only verifies the
+root alert annotation, c1 priority, zero-GPU resources and exact UID, then
+monitors the controller-managed Job.
+
+Every runtime operation has a fixed phase name.  A sanitized failure receipt
+records that phase, the exception class, and whether the exact destination,
+current partial directory, or retired A2 partial directory exists.  It never
+prints a source filename or model byte.  This closes the diagnostic gap in A2,
+whose `FileNotFoundError` receipt did not identify the failing operation.
+Terminal monitoring and cleanup remain bound to the exact Job UID.
 
 ## Mandatory live safety gates
 

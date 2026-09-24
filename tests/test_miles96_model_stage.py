@@ -26,10 +26,12 @@ def test_stage_copies_exact_sources_and_atomically_completes(tmp_path: Path, mon
     hf, megatron = _sources(tmp_path)
     destination = tmp_path / "prepared"
     partial = tmp_path / ".prepared.partial"
+    retired = tmp_path / ".prepared.retired"
     monkeypatch.setattr(stage, "HF_SOURCE", hf)
     monkeypatch.setattr(stage, "MEGATRON_SOURCE", megatron)
     monkeypatch.setattr(stage, "DESTINATION", destination)
     monkeypatch.setattr(stage, "PARTIAL", partial)
+    monkeypatch.setattr(stage, "RETIRED_A2_PARTIAL", retired)
     monkeypatch.setattr(
         stage.mechanics,
         "_hf_index",
@@ -60,14 +62,9 @@ def test_packet_is_zero_gpu_create_once_alerts_off_and_source_read_only() -> Non
     assert sequence["job_create_request_count"] == 1
     assert sequence["job_create_retry_allowed"] is False
     assert sequence["job_created_suspended"] is True
-    assert sequence["unsuspend"]["request_count"] == 1
-    assert sequence["unsuspend"]["retry_allowed"] is False
-    assert sequence["unsuspend"]["operations_template"] == [
-        {"op": "test", "path": "/metadata/uid", "value": "$JOB_UID"},
-        {"op": "test", "path": "/spec/suspend", "value": True},
-        {"op": "replace", "path": "/spec/suspend", "value": False},
-    ]
-    assert sequence["post_unsuspend_create_or_patch_requests_allowed"] is False
+    assert sequence["controller_managed_unsuspend"] is True
+    assert sequence["operator_patch_request_count"] == 0
+    assert sequence["post_create_or_patch_requests_allowed"] is False
     pod = job["spec"]["template"]["spec"]
     assert pod["priorityClassName"] == "c1"
     assert job["spec"]["suspend"] is True
@@ -93,3 +90,54 @@ def test_embedded_stager_is_exact() -> None:
     config_map = stage.build_packet()["bundle"]["items"][0]
     assert config_map["data"]["stage_module.py"] == Path(stage.__file__).read_text()
     assert config_map["data"]["driver.py"] == stage.DRIVER
+
+
+def test_stage_reports_the_exact_failed_phase(tmp_path: Path, monkeypatch) -> None:
+    hf, megatron = _sources(tmp_path)
+    destination = tmp_path / "prepared"
+    partial = tmp_path / ".prepared.partial"
+    retired = tmp_path / ".prepared.retired"
+    monkeypatch.setattr(stage, "HF_SOURCE", hf)
+    monkeypatch.setattr(stage, "MEGATRON_SOURCE", megatron)
+    monkeypatch.setattr(stage, "DESTINATION", destination)
+    monkeypatch.setattr(stage, "PARTIAL", partial)
+    monkeypatch.setattr(stage, "RETIRED_A2_PARTIAL", retired)
+    monkeypatch.setattr(
+        stage.mechanics,
+        "_hf_index",
+        lambda _root: {"model.embed_tokens.weight": "model-00001.safetensors"},
+    )
+    original = stage._source_inventory
+
+    def fail_hf(root: Path, *, hf: bool):
+        if hf:
+            raise FileNotFoundError("synthetic")
+        return original(root, hf=hf)
+
+    monkeypatch.setattr(stage, "_source_inventory", fail_hf)
+    observed = []
+    try:
+        stage.stage(set_phase=observed.append)
+    except FileNotFoundError:
+        pass
+    else:
+        raise AssertionError("synthetic failure was not raised")
+    assert observed == ["preflight", "hf_inventory_before"]
+
+
+def test_stage_rejects_retired_partial_before_reading_sources(tmp_path: Path, monkeypatch) -> None:
+    destination = tmp_path / "prepared"
+    partial = tmp_path / ".prepared.partial"
+    retired = tmp_path / ".prepared.retired"
+    retired.mkdir()
+    monkeypatch.setattr(stage, "DESTINATION", destination)
+    monkeypatch.setattr(stage, "PARTIAL", partial)
+    monkeypatch.setattr(stage, "RETIRED_A2_PARTIAL", retired)
+    observed = []
+    try:
+        stage.stage(set_phase=observed.append)
+    except FileExistsError as exc:
+        assert "retired A2" in str(exc)
+    else:
+        raise AssertionError("retired partial was not rejected")
+    assert observed == ["preflight"]
