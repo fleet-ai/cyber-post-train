@@ -19,6 +19,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from training import miles96_mechanics_canary as mechanics
 
@@ -26,13 +27,16 @@ SCHEMA = "cyber_qwen38_miles96_phase1a_plan_v1"
 PRIVATE_SCHEMA = "cyber_qwen38_miles96_phase1a_private_sample_v1"
 PUBLIC_SCHEMA = "cyber_qwen38_miles96_phase1a_terminal_v1"
 PREFLIGHT_SCHEMA = "cyber_qwen38_miles96_phase1a_runtime_preflight_v1"
+LIVE_TASK_SCHEMA = "cyber_qwen38_miles96_phase1a_live_task_v1"
 MANIFEST_PATH = "configs/qualification/qwen38-miles96-phase1a-7317-v1.json"
 MANIFEST_SHA256 = "sha256:0800ba0cb20acf9c1cac85fcae4d4cb7311fd4c23aac84e3e9df7995862faab2"
 PRIVATE_DIR = ".private-phase1a"
 PUBLIC_FILE = "PHASE1A_TERMINAL.json"
 PREFLIGHT_FILE = "PHASE1A_RUNTIME_PREFLIGHT.json"
 SAMPLES = 8
-NORMAL_DONE_REASONS = {"answered", "submitted", "boundary_stop", "max_turns"}
+NORMAL_DONE_REASONS = {"answered", "submitted", "boundary_stop"}
+LIVE_TASK_MAX_AGE_S = 900
+FLEET_TEAM_ID = "a1025f0b-ad67-49fc-a023-51800ab43e84"
 FTI_V1_SHA256 = "0524f19dcc886b20d17b39c21bd6417f537423eec6ef2359487fc3911dad441c"
 MILES_EVAL_SHA256 = "7c13e0e1ab49cc1cb7224c3f9f91245d4c0bd46c0b7c1785cba8b633ca587a26"
 EXPECTED_TASK_KEY = "cysec1-2-fakelook-gen_blackbox-7317189e8fefb9033c5be097__blackbox_ctf_v1"
@@ -181,33 +185,155 @@ def load_manifest(root: Path | None = None) -> dict[str, Any]:
 
 def validate_live_task_response(response: dict[str, Any]) -> dict[str, Any]:
     """Rebuild the complete frozen binding from one immediate Fleet task GET."""
-    from evals.fleet import opencode_self_hosted as fleet
-
     manifest = load_manifest()
     task, env = manifest["task"], manifest["environment"]
     if (
         response.get("id") != task["id"]
+        or response.get("key") != task["key"]
+        or response.get("eval_task_version_id") != task["version_id"]
         or response.get("environment_version_id") != env["version_id"]
         or response.get("task_lifecycle_status") != "production"
     ):
         raise ValueError("live task identity/lifecycle differs from task7317")
-    selected = {
-        "task_key": task["key"],
-        "task_version_id": task["version_id"],
-        "env_key": env["id"],
-        "env_version": env["version"],
-        "environment_version_id": env["version_id"],
-        "data_key": env["data_id"],
-        "data_version": env["data_version"],
+    seeds = response.get("seed_config")
+    if not isinstance(seeds, dict) or len(seeds) != 1:
+        raise ValueError("live task has no exact single runtime seed")
+    seed = next(iter(seeds.values()))
+    metadata = response.get("metadata")
+    verifier = response.get("verifier")
+    if (
+        not isinstance(seed, dict)
+        or not isinstance(metadata, dict)
+        or not isinstance(verifier, dict)
+    ):
+        raise ValueError("live task runtime binding is incomplete")
+    actual = {
+        "task": {
+            "key": response.get("key"),
+            "version_id": response.get("eval_task_version_id"),
+            "prompt_sha256": "sha256:"
+            + hashlib.sha256((response.get("prompt") or "").encode()).hexdigest(),
+            "env_variables_sha256": "sha256:" + digest(response.get("env_variables") or {}),
+            "output_json_schema_sha256": "sha256:" + digest(response.get("output_json_schema")),
+            "cyber_contract": metadata.get("cyber_contract"),
+        },
+        "environment": {
+            "id": response.get("environment_id"),
+            "version": response.get("version"),
+            "version_id": response.get("environment_version_id"),
+            "data_id": seed.get("data_key"),
+            "data_version": seed.get("data_version"),
+            "runtime_seed_content_sha256": (metadata.get("runtime_seed_manifest") or {}).get(
+                "content_sha256"
+            ),
+            "ttl_seconds": 32400,
+        },
+        "verifier": {
+            "id": response.get("verifier_id"),
+            "version_id": verifier.get("verifier_version_id"),
+            "version": verifier.get("version"),
+            "sha256": verifier.get("sha256"),
+            "function_name": "verify",
+        },
     }
-    live_task, live_env, live_verifier = fleet.bind_task(response, selected)
-    actual = {"task": live_task, "environment": live_env, "verifier": live_verifier}
+    if seed.get("env_key") != response.get("environment_id"):
+        raise ValueError("live task runtime seed differs from its environment")
     if actual != _live_binding(manifest):
         raise ValueError("live task/env/verifier binding differs from task7317")
     return {
         "live_binding_sha256": "sha256:" + digest(actual),
-        "tool_catalog_sha256": manifest["tools"]["raw_catalog_sha256"],
+        "raw_tool_catalog_sha256": manifest["tools"]["raw_catalog_sha256"],
+        "openai_tool_catalog_sha256": manifest["tools"]["openai_catalog_sha256"],
+        "tool_transform_source_sha256": manifest["tools"]["transform_source_sha256"],
     }
+
+
+def _live_task_static(plan: dict[str, Any], request: dict[str, Any]) -> dict[str, Any]:
+    plan = validate_plan(plan)
+    task, environment, verifier, tools = (
+        plan["task"],
+        plan["task"]["environment"],
+        plan["task"]["verifier"],
+        plan["task"]["tool_contract"],
+    )
+    return {
+        "schema": LIVE_TASK_SCHEMA,
+        "plan_sha256": "sha256:" + digest(plan),
+        "request_sha256": "sha256:" + digest(request),
+        "fleet_team_id": FLEET_TEAM_ID,
+        "fleet_team_name": "fleet",
+        "task_id": task["id"],
+        "task_key": task["key"],
+        "task_version_id": task["version_id"],
+        "task_lifecycle_status": "production",
+        "environment_id": environment["id"],
+        "environment_version": environment["version"],
+        "environment_version_id": environment["version_id"],
+        "data_id": environment["data_id"],
+        "data_version": environment["data_version"],
+        "runtime_seed_content_sha256": environment["runtime_seed_content_sha256"],
+        "verifier_id": verifier["id"],
+        "verifier_version_id": verifier["version_id"],
+        "verifier_sha256": verifier["sha256"],
+        "raw_tool_catalog_sha256": tools["raw_catalog_sha256"],
+        "openai_tool_catalog_sha256": tools["openai_catalog_sha256"],
+        "tool_transform_source_sha256": tools["transform_source_sha256"],
+        "task_get_tool_evidence": "runtime_probe_required",
+        "runtime_exact_tool_match_required": True,
+        "live_binding_sha256": plan["train_authority"]["live_binding_sha256"],
+    }
+
+
+def _live_task_receipt(
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    account: dict[str, Any],
+    response: dict[str, Any],
+    observed_at_epoch: int,
+) -> dict[str, Any]:
+    if (account.get("team_id"), account.get("team_name")) != (FLEET_TEAM_ID, "fleet"):
+        raise ValueError("FLEET_API_KEY does not resolve to the Fleet team")
+    live = validate_live_task_response(response)
+    body = {
+        **_live_task_static(plan, request),
+        **live,
+        "observed_at_epoch": observed_at_epoch,
+        "expires_at_epoch": observed_at_epoch + LIVE_TASK_MAX_AGE_S,
+    }
+    return {**body, "sha256": "sha256:" + digest(body)}
+
+
+def _read_live_task_receipt(
+    path: Path,
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    now_epoch: int,
+) -> tuple[dict[str, Any], str]:
+    if path.is_symlink() or not path.is_file() or stat.S_IMODE(path.stat().st_mode) != 0o600:
+        raise ValueError("live task receipt is absent or unsafe")
+    raw = path.read_bytes()
+    value = json.loads(raw)
+    body = {key: item for key, item in value.items() if key != "sha256"}
+    if raw != json.dumps(value, sort_keys=True, separators=(",", ":")).encode() + b"\n":
+        raise ValueError("live task receipt bytes are not canonical")
+    if value.get("sha256") != "sha256:" + digest(body):
+        raise ValueError("live task receipt seal changed")
+    if (
+        set(value) != set(body) | {"sha256"}
+        or type(value.get("observed_at_epoch")) is not int
+        or type(value.get("expires_at_epoch")) is not int
+        or value["expires_at_epoch"] != value["observed_at_epoch"] + LIVE_TASK_MAX_AGE_S
+        or not value["observed_at_epoch"] <= now_epoch <= value["expires_at_epoch"]
+    ):
+        raise ValueError("live task receipt is stale or malformed")
+    static = {
+        key: item
+        for key, item in value.items()
+        if key not in {"observed_at_epoch", "expires_at_epoch", "sha256"}
+    }
+    if static != _live_task_static(plan, request):
+        raise ValueError("live task receipt differs from the reviewed plan")
+    return value, "sha256:" + hashlib.sha256(raw).hexdigest()
 
 
 def _validate_train_sources(root: Path, manifest: dict[str, Any]) -> None:
@@ -791,6 +917,74 @@ def _write_once(path: Path, value: dict[str, Any]) -> None:
         os.close(directory_fd)
 
 
+def _fleet_get(client: Any, path: str, *, params: dict[str, str] | None = None) -> dict[str, Any]:
+    response = client.get(path, params=params)
+    if response.status_code != 200:
+        raise ValueError(f"Fleet read-only GET failed with HTTP {response.status_code}")
+    value = response.json()
+    if not isinstance(value, dict):
+        raise ValueError("Fleet read-only GET returned non-object JSON")
+    return value
+
+
+def submit_phase1a(
+    plan: dict[str, Any],
+    live_receipt_path: Path,
+    journal_path: Path,
+    journal_anchor: Path,
+    expected_preview_manifest_sha256: str,
+    fleet_client: Any,
+    jobs_client: Any,
+    *,
+    now: Any = time.time,
+) -> dict[str, Any]:
+    """Collect one fresh task binding, then make the sole reviewed Jobs POST."""
+    plan = validate_plan(plan)
+    request = job_request(plan)
+    expected_anchor_name = request["name"] + "-SUBMISSION.jsonl"
+    if (
+        live_receipt_path in {journal_path, journal_anchor}
+        or journal_anchor == journal_path
+        or journal_anchor.parent == journal_path.parent
+        or live_receipt_path.parent != journal_anchor.parent
+        or journal_anchor.name != expected_anchor_name
+        or journal_anchor.parent.is_symlink()
+        or not journal_anchor.parent.is_dir()
+    ):
+        raise ValueError("phase1-A journal anchor is not the exact retained path")
+    if "journal_anchor" not in inspect.signature(jobs_client.submit_once).parameters:
+        raise ValueError("Jobs submission rail lacks the required stable journal anchor")
+    deadline = int(now()) + LIVE_TASK_MAX_AGE_S
+
+    def collect_live_receipt(_preview: dict[str, Any]) -> str:
+        account = _fleet_get(fleet_client, "/v1/account")
+        response = _fleet_get(
+            fleet_client,
+            "/v1/tasks/" + quote(plan["task"]["key"], safe=""),
+            params={"version_id": plan["task"]["version_id"]},
+        )
+        observed = int(now())
+        if observed > deadline:
+            raise ValueError("live task receipt collection exceeded its submission deadline")
+        _write_once(
+            live_receipt_path,
+            _live_task_receipt(plan, request, account, response, observed),
+        )
+        _receipt, receipt_file_sha256 = _read_live_task_receipt(
+            live_receipt_path, plan, request, int(now())
+        )
+        return receipt_file_sha256
+
+    return jobs_client.submit_once(
+        request,
+        journal_path,
+        journal_anchor=journal_anchor,
+        expected_preview_manifest_sha256=expected_preview_manifest_sha256,
+        before_intent=collect_live_receipt,
+        not_after_epoch=deadline,
+    )
+
+
 def _slot_receipt(plan: dict[str, Any], index: int, output: Any) -> dict[str, Any]:
     state = _SLOT.get()
     if (
@@ -1104,13 +1298,57 @@ def main() -> None:
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--run", action="store_true")
     action.add_argument("--aggregate", action="store_true")
+    action.add_argument("--submit", action="store_true")
     parser.add_argument("--plan", required=True)
     parser.add_argument("--sha256", required=True)
+    parser.add_argument("--live-task-receipt")
+    parser.add_argument("--journal")
+    parser.add_argument("--journal-anchor")
+    parser.add_argument("--preview-manifest-sha256")
     args = parser.parse_args()
     plan = validate_plan(json.loads(Path(args.plan).read_text()))
     if digest(plan) != args.sha256:
         raise ValueError("phase1-A plan digest changed")
-    value = run(plan, args.sha256) if args.run else aggregate(plan)
+    if args.submit:
+        import httpx
+
+        from cyber_post_train.jobs import Jobs
+
+        required = (
+            args.live_task_receipt,
+            args.journal,
+            args.journal_anchor,
+            args.preview_manifest_sha256,
+        )
+        if any(value is None for value in required):
+            parser.error(
+                "--submit requires --live-task-receipt, --journal, --journal-anchor and "
+                "--preview-manifest-sha256"
+            )
+        token = os.environ.get("FLEET_API_KEY", "")
+        if not token:
+            parser.error("--submit requires FLEET_API_KEY")
+        headers = {"Accept": "application/json", "Authorization": "Bearer " + token}
+        with (
+            httpx.Client(
+                base_url="https://orchestrator.fleetai.com",
+                headers=headers,
+                timeout=120,
+                follow_redirects=False,
+            ) as fleet_client,
+            Jobs(token, base_url=plan["execution"]["jobs_api_base_url"]) as jobs_client,
+        ):
+            value = submit_phase1a(
+                plan,
+                Path(args.live_task_receipt),
+                Path(args.journal),
+                Path(args.journal_anchor),
+                args.preview_manifest_sha256,
+                fleet_client,
+                jobs_client,
+            )
+    else:
+        value = run(plan, args.sha256) if args.run else aggregate(plan)
     print(json.dumps(value, sort_keys=True, separators=(",", ":")))
 
 
