@@ -1,11 +1,11 @@
 {
   "classification": "operational-gate",
   "cleanup": {
-    "config_map_absent": false,
-    "job_absent": false,
-    "pod_absent": false,
-    "uid_preconditioned_cleanup_at": null,
-    "workload_absent": false
+    "config_map_absent": true,
+    "job_absent": true,
+    "pod_absent": true,
+    "uid_preconditioned_cleanup_at": "2026-09-24T06:43:44Z",
+    "workload_absent": true
   },
   "config_map": {
     "name": "chris-q38-m96-signal-a2-diagnosis-a3-code",
@@ -62,7 +62,7 @@
   },
   "reward_variation_conclusion": "not_established",
   "schema": "cyber_qwen38_miles96_signal_diagnosis_terminal_v3",
-  "sha256": "sha256:036a926ad3624667f79b71249dcc3c523f12eb9ecdd3187f34d9feea6ab631ad",
+  "sha256": "sha256:703176cbf0bce54f17ad120e091a945f052e6e16011daddcf8623b1d29eb073e",
   "workload": {
     "name": "job-chris-q38-m96-signal-a2-diagnosis-a3-aad20",
     "uid": "2fca39c7-b0d9-44d7-a24b-2ce5a1a07d28"
