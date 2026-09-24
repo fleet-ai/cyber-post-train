@@ -1912,9 +1912,10 @@ class PostgresDatabase:
             or original.fragment
         ):
             raise HeldoutLaunchError("database environment is not a supported PostgreSQL URI")
-        if {
-            key.casefold() for key, _ in parse_qsl(original.query, keep_blank_values=True)
-        } & {"database", "dbname"}:
+        if {key.casefold() for key, _ in parse_qsl(original.query, keep_blank_values=True)} & {
+            "database",
+            "dbname",
+        }:
             raise HeldoutLaunchError(
                 "database environment must select its database only by URI path"
             )

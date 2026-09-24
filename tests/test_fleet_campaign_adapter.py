@@ -157,12 +157,7 @@ def test_shared_source_job_is_created_once_and_siblings_resume(
     assert calls == 1
     assert first["remote_id"] == second["remote_id"] == JOB_UID
     reservations = list(
-        (
-            tmp_path
-            / "budget"
-            / bindings["budget"]["date_utc"]
-            / "reservations"
-        ).glob("*.json")
+        (tmp_path / "budget" / bindings["budget"]["date_utc"] / "reservations").glob("*.json")
     )
     assert len(reservations) == 1
     reservation = adapter._read(reservations[0])  # noqa: SLF001

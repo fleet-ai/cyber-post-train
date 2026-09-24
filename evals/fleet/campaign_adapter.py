@@ -42,9 +42,12 @@ class CapacityUnavailable(AdapterError):
 
 
 def _digest(value: object) -> str:
-    return "sha256:" + hashlib.sha256(
-        json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
-    ).hexdigest()
+    return (
+        "sha256:"
+        + hashlib.sha256(
+            json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        ).hexdigest()
+    )
 
 
 def _file_digest(path: Path) -> str:
@@ -120,8 +123,7 @@ def load_bindings(path: Path) -> dict[str, Any]:
             or not isinstance(members, list)
             or not members
             or any(
-                not isinstance(member, str) or _SHA.fullmatch(member) is None
-                for member in members
+                not isinstance(member, str) or _SHA.fullmatch(member) is None for member in members
             )
             or len(members) != len(set(members))
             or group["leader"] not in members
@@ -277,9 +279,7 @@ def _budget(
             _write_once(baseline_path, baseline)
         reservations = day / "reservations"
         reservations.mkdir(mode=0o700, exist_ok=True)
-        reservation_key = hashlib.sha256(
-            f"{binding['sha256']}:{group_id}".encode()
-        ).hexdigest()
+        reservation_key = hashlib.sha256(f"{binding['sha256']}:{group_id}".encode()).hexdigest()
         path = reservations / f"{reservation_key}.json"
         reservation = {
             "schema": RESERVATION_SCHEMA,
@@ -330,9 +330,9 @@ def _launch_record(path: Path) -> dict[str, Any] | None:
         return None
     value = _read(path)
     unsigned = {key: item for key, item in value.items() if key != "sha256"}
-    if value.get("schema") != "cyber_fleet_source_launch_v1" or value.get(
-        "sha256"
-    ) != _digest(unsigned):
+    if value.get("schema") != "cyber_fleet_source_launch_v1" or value.get("sha256") != _digest(
+        unsigned
+    ):
         raise AdapterError("shared Fleet source launch record is invalid")
     return value
 
