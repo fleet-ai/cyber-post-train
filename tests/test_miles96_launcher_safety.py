@@ -134,6 +134,8 @@ def _reviewed_artifacts(plan: dict, request: dict) -> tuple[dict, dict, dict, di
             "commit": "2" * 40,
             "clean": True,
             "tests_receipt_sha256": sha("operator"),
+            "source_manifest": launch.operator_source_manifest(),
+            "source_closure_sha256": "sha256:" + launch.digest(launch.operator_source_manifest()),
         },
         "lanes": lanes,
         "cleanup": {
@@ -210,6 +212,26 @@ def test_signal_post_rejects_transition_for_a_different_request() -> None:
     plan, request = _signal_plan_and_request()
     approved, candidate, review, live, now = _reviewed_artifacts(plan, request)
     request = {**request, "title": request["title"] + " drift"}
+    with pytest.raises(launch.JobsError, match="exact request"):
+        launch.validate_reviewed_transition(
+            plan,
+            request,
+            approved=approved,
+            candidate=candidate,
+            parent_review=review,
+            live_task_receipt=live,
+            now=now,
+        )
+
+
+def test_signal_post_rejects_operator_source_drift(monkeypatch) -> None:
+    plan, request = _signal_plan_and_request()
+    approved, candidate, review, live, now = _reviewed_artifacts(plan, request)
+    monkeypatch.setattr(
+        launch,
+        "operator_source_manifest",
+        lambda: {"training/miles96_mechanics_launch.py": "sha256:" + "0" * 64},
+    )
     with pytest.raises(launch.JobsError, match="exact request"):
         launch.validate_reviewed_transition(
             plan,

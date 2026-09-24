@@ -8,6 +8,7 @@ writes a durable intent before creation.  It never retries an uncertain POST.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -36,6 +37,18 @@ from training import dev_cleanup_observer as cleanup
 from training import miles96_mechanics_canary as mechanics
 
 KUBERNETES_RESOURCES = "rayjobs.ray.io,rayclusters.ray.io,jobs.batch,pods,workloads.kueue.x-k8s.io"
+ROOT = Path(__file__).resolve().parents[1]
+OPERATOR_SOURCE_PATHS = (
+    "cyber_post_train/gpu_capacity.py",
+    "cyber_post_train/jobs.py",
+    "cyber_post_train/sfs_output.py",
+    "training/dev_cleanup_observer.py",
+    "training/fleet.py",
+    "training/miles96_mechanics_launch.py",
+    "training/miles_signal_transition.py",
+    "training/miles_signal_wave.py",
+    "evals/fleet/opencode_self_hosted.py",
+)
 MAXIMUM_GUARD_SECONDS = 120
 MAXIMUM_ARM_AGE_SECONDS = 300
 CAPACITY_MAX_AGE_SECONDS = 120
@@ -72,6 +85,14 @@ def _identity_names(plan: dict[str, Any]) -> set[str]:
 
 def _seal(value: dict[str, Any]) -> dict[str, Any]:
     return {**value, "sha256": "sha256:" + digest(value)}
+
+
+def operator_source_manifest() -> dict[str, str]:
+    """Hash the complete caller-side launch/review/cleanup implementation."""
+    return {
+        path: "sha256:" + hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
+        for path in OPERATOR_SOURCE_PATHS
+    }
 
 
 def _write_json_once(path: Path, value: dict[str, Any]) -> None:
@@ -811,6 +832,7 @@ def validate_reviewed_transition(
     lanes = evidence["lanes"]
     matches = [row for row in lanes if row.get("name") == request.get("name")]
     source_closure = "sha256:" + mechanics.digest(plan["runtime_sources"])
+    operator_sources = operator_source_manifest()
     if (
         len(matches) != 1
         or matches[0].get("plan_sha256") != "sha256:" + mechanics.digest(plan)
@@ -821,6 +843,8 @@ def validate_reviewed_transition(
         != plan["selection_authority"]["current_binding_sha256"]
         or evidence["adapter"].get("source_closure_sha256") != source_closure
         or evidence["adapter"].get("runtime_image") != request.get("image")
+        or evidence["operator"].get("source_manifest") != operator_sources
+        or evidence["operator"].get("source_closure_sha256") != "sha256:" + digest(operator_sources)
     ):
         raise JobsError("reviewed signal transition does not bind this exact request")
     return approved
