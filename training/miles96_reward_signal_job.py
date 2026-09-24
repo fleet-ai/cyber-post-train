@@ -16,14 +16,14 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = "cyber_qwen38_miles96_reward_signal_job_packet_v1"
 CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 NAMESPACE = "fleet-train-jobs"
-JOB_NAME = "chris-q38-m96-signal-a1"
+JOB_NAME = "chris-q38-m96-signal-a2"
 CONFIG_MAP_NAME = JOB_NAME + "-code"
-OUTPUT = "/mnt/sfs/jobs/chris-q38-m96-signal-a1"
-DATABASE = "q38_m96_signal_a1"
+OUTPUT = "/mnt/sfs/jobs/chris-q38-m96-signal-a2"
+DATABASE = "q38_m96_signal_a2"
 SERVED_ID = signal.SERVED_ID
-INFERENCE_MODEL_UID = "eb8168a9-67fa-4662-b895-241b32f3c290"
+INFERENCE_MODEL_UID = "da760862-0903-46b8-b54b-2b21cc8052a0"
 MODEL_REVISION = signal.MODEL_REVISION
-MODEL_PATH = "/scratch/models/chris-autoresearch/chris-ar-q38-base-0918-v1"
+MODEL_PATH = "/scratch/models/chris-q38-base-pass4-v1"
 EVALUATOR_IMAGE = (
     "ghcr.io/astral-sh/uv:python3.12-bookworm@"
     "sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
@@ -84,7 +84,7 @@ def task_selection() -> dict[str, Any]:
 
 def evaluation_config() -> dict[str, Any]:
     return {
-        "name": "q38-m96-signal-a1",
+        "name": "q38-m96-signal-a2",
         "task_set": "task-selection.json",
         "models": {
             "base": {
