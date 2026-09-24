@@ -1,0 +1,132 @@
+{
+  "schema": "cyber_qwen38_top5_retention_fallback_evidence_v1",
+  "generated_at_utc": "2026-09-24T05:50:35Z",
+  "repository_commit": "2547cd522f9db2d1fa09f4abd72004375e62cad2",
+  "base_matrix": {
+    "path": "configs/evaluation/qwen38-top5-multibench-pass4-matrix-20260923-v1.json",
+    "file_sha256": "sha256:2f6fbf5b1956f05f1906fa77513afb742f0d96c5321fc6ea0a20ab0d1fc37dff",
+    "matrix_sha256": "sha256:f4459e4d939f99973ad04ab114b03643073da43b9e767681f375bc0e33685da6"
+  },
+  "scientific_boundary": {
+    "checkpoint_selection_was_frozen_before_this_amendment": true,
+    "substitution_reason": "selected_native_checkpoint_source_evicted_before_promotion",
+    "benchmark_outcomes_used": false,
+    "fleet_confirmation_outcomes_used": false,
+    "webexploitbench_outcomes_used": false,
+    "external_benchmark_outcomes_used": false,
+    "private_prompts_traces_flags_answers_or_scores_read": false
+  },
+  "read_only_source_observation": {
+    "observed_at_utc": "2026-09-24T05:49:52Z",
+    "cluster_context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+    "namespace": "fleet-train-jobs",
+    "observer_pod_name": "chris-q38-t3k96-s300-export-v1",
+    "observer_pod_uid": "f33da709-56e2-401c-8a29-21a0057a502b",
+    "observation_scope": "path_existence_booleans_only",
+    "selected_source_paths_absent": [
+      "/mnt/sfs/jobs/chris-q38-d32-b16-lr5e6-v1/checkpoints/global_step_300",
+      "/mnt/sfs/jobs/chris-q38-t3k64-b8-v5/checkpoints/global_step_285",
+      "/mnt/sfs/jobs/chris-q38-t3k32-lr1-v3/checkpoints/global_step_700"
+    ],
+    "replacement_export_paths_present": [
+      "/mnt/sfs/jobs/chris-q38-d32-b16-lr5e6-v1/hf-export-step200-v1",
+      "/mnt/sfs/jobs/chris-q38-t3k64-b8-v5/hf-export-step225-v1",
+      "/mnt/sfs/jobs/chris-q38-t3k32-lr1-v3/hf-export-step500-v1"
+    ]
+  },
+  "substitutions": [
+    {
+      "frozen_selected_artifact_id": "q38-d32-b16-lr5e6-step300",
+      "frozen_selected_checkpoint_receipt_file_sha256": "sha256:908fde2ba60c3ad14a85be1cc9560662b21f34a01a0f88b7f13e523e9a1bf451",
+      "frozen_selected_checkpoint_receipt_sha256": "sha256:cf48c5d3542581b84c9ee888b6e77921f2fd469d6dabd4d4f38622a64c1e2e5c",
+      "operational_artifact_id": "q38-d32-b16-lr5e6-step200",
+      "optimizer_step": 200,
+      "seal": {
+        "path": "/mnt/sfs/jobs/chris-q38-d32-b16-lr5e6-v1/checkpoint-seals-v1/step-200.json",
+        "file_sha256": "sha256:bffb88a7f046f96c64119aeb8e46e39b263878aef1032ef8ed2c5a418e115011",
+        "receipt_sha256": "sha256:8722e1f56c903ecac6334b690dc63489a7f08b5ffb4022438813cc8fe1172422"
+      },
+      "export": {
+        "path": "/mnt/sfs/jobs/chris-q38-d32-b16-lr5e6-v1/hf-export-step200-v1",
+        "receipt_path": "/mnt/sfs/jobs/chris-q38-d32-b16-lr5e6-v1/hf-export-step200-v1/EXPORT.json",
+        "file_sha256": "sha256:e77c973c82e1bbdf20cc315bd121a5ec322a2eee40ff550f429077a709dc84c6",
+        "receipt_sha256": "sha256:88edcde39542f3e32fc895acf93999230c421e93e794f242958d6f675400a72e",
+        "dtype": "BF16",
+        "optimizer_steps_executed": 0,
+        "tensor_bytes": 55562855904
+      },
+      "cpu_check": {
+        "path": "/mnt/sfs/jobs/chris-q38-d32-b16-lr5e6-v1/hf-export-step200-v1-cpu-check.json",
+        "file_sha256": "sha256:54fa3eb6a25ff3d3aa3bf2758e3a486ef3a62e91869377d34ea34fcc2a886819",
+        "receipt_sha256": "sha256:f58ef7427f656159a8cdc39cc2ae382f61f03bdb46a89187f8200663420b3aa1",
+        "pod_uid": "acb74c16-ca2a-41ea-abbb-138f0567543a",
+        "pod_phase": "Succeeded",
+        "pod_restarts": 0
+      }
+    },
+    {
+      "frozen_selected_artifact_id": "q38-t3k64-b8-step285",
+      "frozen_selected_checkpoint_receipt_file_sha256": "sha256:931cbf2585e64753cf6d8ad9e9978aef84c20e8570998dde402e146b5111b03f",
+      "frozen_selected_checkpoint_receipt_sha256": "sha256:fb0068f4d3f60ded3d3a725273343672822eeaeea718f4802edbc33a67e432d0",
+      "operational_artifact_id": "q38-t3k64-b8-step225",
+      "optimizer_step": 225,
+      "seal": {
+        "path": "/mnt/sfs/jobs/chris-q38-t3k64-b8-v5/checkpoint-seals-v1/step-225.json",
+        "file_sha256": "sha256:5c26ab986d502ee123ccbb2689307e85f5aa5ed54836007d788bd05ec0e51673",
+        "receipt_sha256": "sha256:71af4edce3d12401d362a2176673e0dd067920358442936135cf2cfafa560362"
+      },
+      "export": {
+        "path": "/mnt/sfs/jobs/chris-q38-t3k64-b8-v5/hf-export-step225-v1",
+        "receipt_path": "/mnt/sfs/jobs/chris-q38-t3k64-b8-v5/hf-export-step225-v1/EXPORT.json",
+        "file_sha256": "sha256:73c71f64f98bf30d4a930c42cf1c986fc7df3fff695aee0723b253e2f6ddde4b",
+        "receipt_sha256": "sha256:4e09a634106991b0f4b50b1a10f2c65a36c2eb3cf167514ea53c6d6cbae1a0b7",
+        "dtype": "BF16",
+        "optimizer_steps_executed": 0,
+        "tensor_bytes": 55562855904
+      },
+      "cpu_check": {
+        "path": "/mnt/sfs/jobs/chris-q38-t3k64-b8-v5/hf-export-step225-v1-cpu-check.json",
+        "file_sha256": "sha256:f2a0f6c5e84ad595305deb5a3e4fb90a8b454f66eb1380695bf1d6380e0433a6",
+        "receipt_sha256": "sha256:a50953292d34190e996e5fd1c157661dbdd4ef3b4d549393349e1576596e54bb",
+        "pod_uid": "06dee4a7-4950-457f-b8d6-3a00afb65db3",
+        "pod_phase": "Succeeded",
+        "pod_restarts": 0
+      }
+    },
+    {
+      "frozen_selected_artifact_id": "q38-t3k32-lr1-step700",
+      "frozen_selected_checkpoint_receipt_file_sha256": "sha256:25a8cdcc0b3d524ba26379465b52f1c24072a373b1e576e788dade36858a29da",
+      "frozen_selected_checkpoint_receipt_sha256": "sha256:fca45725b3ccede801c6fef5f143c51c508a0872413cbd0bbdf734d970fdbe98",
+      "operational_artifact_id": "q38-t3k32-lr1-step500",
+      "optimizer_step": 500,
+      "seal": {
+        "path": "/mnt/sfs/jobs/chris-q38-t3k32-lr1-v3/checkpoint-seals-v1/step-500.json",
+        "file_sha256": "sha256:6c47aac90696ed667ed320c29fad0cdd33ab99e6724f472e3a4fb291e17d72ae",
+        "receipt_sha256": "sha256:6a43bb802f600d053fecaa9dd848146ba8920b94165a03e9b26cd27b81ecae1f"
+      },
+      "export": {
+        "path": "/mnt/sfs/jobs/chris-q38-t3k32-lr1-v3/hf-export-step500-v1",
+        "receipt_path": "/mnt/sfs/jobs/chris-q38-t3k32-lr1-v3/hf-export-step500-v1/EXPORT.json",
+        "file_sha256": "sha256:20808327c5234713edff49a90808e7d5816f96f2ed6cc6be5bd8f77dbd47b075",
+        "receipt_sha256": "sha256:fc568b2b58c744788b7ad361d3bbe57b72e5974ddd7082d52f5ffe99db4fc65e",
+        "dtype": "BF16",
+        "optimizer_steps_executed": 0,
+        "tensor_bytes": 55562855904
+      },
+      "cpu_check": {
+        "path": "/mnt/sfs/jobs/chris-q38-t3k32-lr1-v3/hf-export-step500-v1-cpu-check.json",
+        "file_sha256": "sha256:0ab6332f5927c14eb763c92cef680c715c143cadefb9ae7888f58e7c5be9339e",
+        "receipt_sha256": "sha256:9ca8be5bcf02213b951468fd2ad2675e948fe98d69f5573ebddcd212358585ad",
+        "pod_uid": "e0b3daf1-2f5f-4ae5-b42b-a46727887d37",
+        "pod_phase": "Succeeded",
+        "pod_restarts": 0
+      }
+    }
+  ],
+  "operation": {
+    "workloads_created_by_this_audit": 0,
+    "routes_mutated_by_this_audit": 0,
+    "evaluation_outcomes_opened": 0
+  },
+  "sha256": "d7cfc11b8a71e121789ec2ae983ec92effa31d92a0658f224d9559683ef98147"
+}
