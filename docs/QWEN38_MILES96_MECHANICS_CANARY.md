@@ -131,6 +131,52 @@ The model root and task binding are deliberately arguments to `build_plan`.
 That prevents a future operator from accidentally reviving a stale path or a
 historical task receipt just because it exists in this repository.
 
+## Reward-signal qualification lesson (2026-09-24)
+
+The first eight-attempt signal check did not expose a Miles or Fleet-task
+contract defect.  Its preserved source Job has UID
+`d3388003-61ce-4b5d-95cf-5b85d7e6ac8b`.  A content-free classifier bound to
+that exact output reported the same result for all eight attempts:
+
+- OpenCode ended with `APIError`;
+- the HTTP status was `429`;
+- the category was `rate_limit` and OpenCode marked it retryable;
+- all eight failures shared one message fingerprint; and
+- session ingest, verifier output, and instance cleanup were present.
+
+The classifier receipt is
+`sha256:ee591a4f3b002486f0fe16ec06b668b9ca36d0698c5d87f02df69c659094e3e9`.
+It contains no prompt, trace, answer, flag, reward value, raw log, or error
+text.  Ingest and verifier output do not turn these attempts into completed
+training episodes: the harness still ended in error, so none may satisfy the
+reward-signal gate.
+
+This is transient serving pressure, not evidence for changing Miles, FTI, the
+task, tools, reward adapter, or OpenCode.  OpenCode 1.18.27 already retries a
+retryable 429 at most five times with bounded exponential backoff.  Adding a
+second nested request-retry loop would multiply load and make ownership harder
+to reason about.
+
+The next qualification should therefore be deliberately smaller:
+
+1. Run two fresh episodes with concurrency two, keeping the exact task,
+   verifier, model, sampling, context, tools, and limits unchanged.
+2. Keep OpenCode's existing five-request retry bound; do not add another
+   request retry layer.
+3. If one episode again ends in the exact retryable-429 category before a
+   gradeable completion, wait 120 seconds and replace only that failed cell
+   once with a fresh execution identity.  Record the original as an
+   infrastructure failure and never admit both attempts.
+4. If the one replacement also reaches 429, stop the wave and inspect serving
+   capacity.  Do not increase concurrency or continue retrying.
+5. Permit optimizer work only after at least two completed, gradeable episodes
+   have two distinct finite rewards, unique verifier executions, and exact
+   instance cleanup.
+
+This policy is a bounded infrastructure recovery for the qualification check;
+it is not permission to replay scientific evaluation cells or accepted
+training progress.
+
 ## Mandatory live safety gates
 
 `job_request` and `reload_request` only render generic Jobs API requests.
