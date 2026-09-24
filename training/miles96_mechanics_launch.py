@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import subprocess
@@ -38,15 +39,32 @@ KUBERNETES_RESOURCES = "rayjobs.ray.io,rayclusters.ray.io,jobs.batch,pods,worklo
 MAXIMUM_GUARD_SECONDS = 120
 MAXIMUM_ARM_AGE_SECONDS = 300
 CAPACITY_MAX_AGE_SECONDS = 120
+SIGNAL_MODEL_STARTUP_GRACE_SECONDS = 1800
+SIGNAL_SLOT_CLOSE_GRACE_SECONDS = 60
+SIGNAL_RELEASE_GRACE_SECONDS = 300
+POST_RECONCILIATION_SECONDS = 600
 PROJECT_OWNER_PREFIXES = ("chris-q38-",)
-PROJECT_MAX_NODES = 8
-PROJECT_MAX_GPUS = 64
+PROJECT_MAX_NODES = 10
+PROJECT_MAX_GPUS = 80
 COORDINATOR_RESULT_SCHEMA = "cyber_miles96_cleanup_coordinator_v1"
 CAPACITY_GATE_SCHEMA = "cyber_miles96_capacity_gate_v1"
 _SFS_OBSERVER_ROLE = "sfs-output-check"
 _SFS_OBSERVER_NAME = re.compile(
     r"(?P<job>[a-z0-9](?:[-a-z0-9]*[a-z0-9])?-sfs-a[0-9]{2})(?:-[a-z0-9]+)?"
 )
+
+
+def _validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
+    if plan.get("schema") == mechanics.SCHEMA:
+        return mechanics.validate_plan(plan)
+    from training import miles96_signal_qualification as signal
+
+    return signal.validate_plan(plan)
+
+
+def _identity_names(plan: dict[str, Any]) -> set[str]:
+    identity = plan["identity"]
+    return {identity[key] for key in ("name", "reload_name") if key in identity}
 
 
 def _seal(value: dict[str, Any]) -> dict[str, Any]:
@@ -88,11 +106,37 @@ def _paths(directory: Path) -> dict[str, Path]:
     }
 
 
-def _maximum_seconds(request: dict[str, Any]) -> int:
-    # Both modes need to cover image/model startup plus a V1 episode whose
-    # bounded rollout and verifier budgets alone can exceed one hour.  Keep a
-    # single two-hour active-allocation ceiling; queue time starts no clock.
-    return 7200
+def _maximum_seconds(plan: dict[str, Any], request: dict[str, Any]) -> int:
+    """Return the active-allocation bound; queue time starts no clock.
+
+    The mechanics canary has one episode and retains its reviewed two-hour
+    bound.  Signal qualification has eight immutable slots but admits only two
+    environments at once.  Its four serial waves therefore need their own
+    deterministic envelope instead of inheriting the shorter mechanics bound.
+    """
+    from training import miles96_signal_qualification as signal
+
+    if plan.get("schema") != signal.SCHEMA:
+        return 7200
+    episode = plan["episode"]
+    waves = math.ceil(
+        plan["qualification"]["samples"] / episode["max_concurrent_envs"]
+    )
+    per_wave = (
+        episode["ready_timeout_s"]
+        + episode["episode_timeout_s"]
+        + episode["grade_timeout_s"]
+        + 2 * episode["request_timeout_s"]
+        + SIGNAL_SLOT_CLOSE_GRACE_SECONDS
+    )
+    maximum = (
+        SIGNAL_MODEL_STARTUP_GRACE_SECONDS
+        + waves * per_wave
+        + SIGNAL_RELEASE_GRACE_SECONDS
+    )
+    if not 7200 < maximum <= 24 * 60 * 60:
+        raise JobsError("signal qualification active-runtime envelope is invalid")
+    return maximum
 
 
 def _guard(
@@ -108,7 +152,7 @@ def _guard(
         image=request["image"],
         plan_sha256="sha256:" + mechanics.digest(plan),
         manifest_sha256=preview["manifest_sha256"],
-        maximum_seconds=_maximum_seconds(request),
+        maximum_seconds=_maximum_seconds(plan, request),
         expected_gpus=request["workers"] * request["gpus_per_worker"],
         armed_path=paths["armed"],
         binding_path=paths["binding"],
@@ -140,13 +184,84 @@ def _post_response(journal: Path, deadline: float) -> dict[str, Any] | None:
                 rows = [json.loads(line) for line in journal.read_text().splitlines() if line]
             except (OSError, ValueError):
                 rows = []
-            matches = [row for row in rows if row.get("state") == "POST_RESPONSE"]
+            matches = [
+                row
+                for row in rows
+                if row.get("state") in {"POST_RESPONSE", "POST_RESPONSE_RECONCILED"}
+            ]
             if len(matches) > 1:
                 raise cleanup.ObserverError("submission journal contains duplicate POST responses")
             if matches:
                 return matches[0]
         time.sleep(0.25)
     return None
+
+
+def _append_journal(path: Path, value: dict[str, Any]) -> None:
+    with path.open("a") as stream:
+        stream.write(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
+def _reconcile_post_response(
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    journal: Path,
+    *,
+    deadline: float | None = None,
+    poll_seconds: float = 5.0,
+    monotonic: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> dict[str, Any]:
+    """Resolve one uncertain POST from authenticated history, never by retrying it."""
+    try:
+        rows = [json.loads(line) for line in journal.read_text().splitlines() if line]
+    except (OSError, ValueError) as exc:
+        raise cleanup.ObserverError("submission intent is unavailable for reconciliation") from exc
+    intents = [row for row in rows if row.get("state") == "POST_INTENT_DO_NOT_RETRY"]
+    if len(intents) != 1 or intents[0].get("request_sha256") != digest(request):
+        raise cleanup.ObserverError("submission intent differs during reconciliation")
+    token = os.environ.get("FLEET_API_KEY")
+    if not token:
+        raise cleanup.ObserverError("Jobs API credential is unavailable for reconciliation")
+    pattern = re.compile(re.escape(request["name"]) + r"-[a-f0-9]{8}")
+    while True:
+        try:
+            with Jobs(token, base_url=plan["execution"]["jobs_api_base_url"]) as client:
+                # Authenticated run reads do not expose the submitted title.
+                # Bind the server-generated name to the exact create-once
+                # output, immutable image, priority and no-requeue policy.
+                matches = [
+                    row
+                    for row in client.all_runs()
+                    if pattern.fullmatch(str(row.get("name", "")))
+                    and row.get("run_dir") == request["run_dir"]
+                    and row.get("image") == request["image"]
+                    and row.get("priority_class") == request["priority_class"]
+                    and row.get("requeueIfPreempted") is False
+                ]
+        except JobsError:
+            matches = []
+        if len(matches) > 1:
+            raise cleanup.ObserverError("uncertain POST reconciled to multiple runs")
+        if matches:
+            break
+        if deadline is None or monotonic() >= deadline:
+            raise cleanup.ObserverError("uncertain POST did not reconcile to exactly one run")
+        sleep(min(poll_seconds, max(0.0, deadline - monotonic())))
+    observed = safe_status(matches[0])
+    try:
+        from uuid import UUID
+
+        UUID(observed["job_id"])
+    except (TypeError, ValueError) as exc:
+        raise cleanup.ObserverError("reconciled Jobs API identity is invalid") from exc
+    if observed.get("run_dir") != request["run_dir"]:
+        raise cleanup.ObserverError("reconciled Jobs API output differs")
+    value = {"state": "POST_RESPONSE_RECONCILED", **observed}
+    _append_journal(journal, value)
+    return value
 
 
 def run_cleanup_coordinator(plan: dict[str, Any], request: dict[str, Any], directory: Path) -> None:
@@ -157,7 +272,12 @@ def run_cleanup_coordinator(plan: dict[str, Any], request: dict[str, Any], direc
         guard.arm()
         response = _post_response(paths["journal"], time.monotonic() + 300)
         if response is None:
-            raise cleanup.ObserverError("POST response was not journaled; reconcile possible leak")
+            response = _reconcile_post_response(
+                plan,
+                request,
+                paths["journal"],
+                deadline=time.monotonic() + POST_RECONCILIATION_SECONDS,
+            )
         binding = guard.bind_exact(
             {
                 "jobs_api_run_name": response.get("name"),
@@ -198,6 +318,7 @@ def validate_armed_observer(
     paths = _paths(directory)
     try:
         value = json.loads(paths["armed"].read_text())
+        preview = json.loads(paths["preview"].read_text())
     except (OSError, ValueError) as exc:
         raise JobsError("cleanup observer is not armed") from exc
     body = {key: item for key, item in value.items() if key != "sha256"}
@@ -209,9 +330,13 @@ def validate_armed_observer(
         or value.get("context") != plan["execution"]["kubernetes_context"]
         or value.get("namespace") != plan["execution"]["namespace"]
         or value.get("run_name_prefix") != request["name"]
+        or value.get("generated_name_pattern")
+        != "^" + re.escape(request["name"]) + r"-[a-f0-9]{8}$"
         or value.get("run_dir") != request["run_dir"]
         or value.get("image") != request["image"]
         or value.get("plan_sha256") != "sha256:" + mechanics.digest(plan)
+        or value.get("manifest_sha256") != preview.get("manifest_sha256")
+        or value.get("maximum_seconds") != _maximum_seconds(plan, request)
         or value.get("expected_gpus") != request["workers"] * request["gpus_per_worker"]
         or value.get("prefix_collision_count_before_post") != 0
         or type(pid) is not int
@@ -413,7 +538,7 @@ def fresh_absence_checks(
         observed_at=now(),
     )
     wandb_absent: bool | None = None
-    if request["name"] == plan["identity"]["name"]:
+    if "wandb" in plan and request["name"] == plan["identity"]["name"]:
         value = plan["wandb"]
         wandb_absent = not wandb_exists(value["entity"], value["project"], value["run_id"])
         if not wandb_absent:
@@ -433,6 +558,38 @@ def fresh_absence_checks(
             "sfs_output_absent": True,
             "sfs_output_absence_receipt_sha256": sfs_proof["sha256"],
             "wandb_run_id_absent": wandb_absent,
+            "observed_at_unix": finished,
+            "elapsed_seconds": finished - started,
+        }
+    )
+
+
+def final_prepost_checks(
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    client: Any,
+    directory: Path,
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+    now: Callable[[], float] = time.time,
+) -> dict[str, Any]:
+    """Recheck observer liveness and duplicate destinations immediately pre-POST."""
+    started = now()
+    armed = validate_armed_observer(plan, request, directory, now=started)
+    jobs_rows = _jobs_absent(client, request)
+    kubernetes_objects = _kubernetes_absent(plan, request, runner=runner)
+    finished = now()
+    if finished < started or finished - started > MAXIMUM_GUARD_SECONDS:
+        raise JobsError("final pre-POST checks expired")
+    return _seal(
+        {
+            "schema": "cyber_miles96_final_prepost_gate_v1",
+            "status": "passed",
+            "plan_sha256": "sha256:" + mechanics.digest(plan),
+            "request_sha256": "sha256:" + digest(request),
+            "observer_armed_sha256": armed["sha256"],
+            "jobs_history_rows_checked": jobs_rows,
+            "kubernetes_objects_checked": kubernetes_objects,
             "observed_at_unix": finished,
             "elapsed_seconds": finished - started,
         }
@@ -472,6 +629,10 @@ def _start_observer(directory: Path) -> subprocess.Popen[bytes]:
 def _expected_request(
     plan: dict[str, Any], request: dict[str, Any], receipt: dict[str, Any] | None
 ) -> dict[str, Any]:
+    from training import miles96_signal_qualification as signal
+
+    if plan.get("schema") == signal.SCHEMA and receipt is None:
+        return signal.job_request(plan)
     if request.get("name") == plan["identity"]["name"] and receipt is None:
         return mechanics.job_request(plan)
     if request.get("name") == plan["identity"]["reload_name"] and receipt is not None:
@@ -502,7 +663,7 @@ def capacity_gate(
     """Read and seal one fresh cross-namespace census immediately before create."""
     planned_gpus = request.get("workers", 0) * request.get("gpus_per_worker", 0)
     if (
-        request.get("name") not in {plan["identity"]["name"], plan["identity"]["reload_name"]}
+        request.get("name") not in _identity_names(plan)
         or not request["name"].startswith(PROJECT_OWNER_PREFIXES)
         or request.get("workers") != 1
         or planned_gpus not in {1, 8}
@@ -587,7 +748,7 @@ def submit_once(
     start_observer: Callable[[Path], subprocess.Popen[bytes]] = _start_observer,
 ) -> dict[str, Any]:
     """Preview, arm, recheck, journal, and issue exactly one Jobs API POST."""
-    plan = mechanics.validate_plan(plan)
+    plan = _validate_plan(plan)
     if request != _expected_request(plan, request, receipt):
         raise JobsError("request differs from the exact immutable mechanics plan")
     validate_request(request)
@@ -643,6 +804,18 @@ def submit_once(
     except Exception:
         observer.terminate()
         raise
+    try:
+        final_gate = final_prepost_checks(
+            plan,
+            request,
+            client,
+            directory,
+            runner=runner,
+            now=now,
+        )
+    except Exception:
+        observer.terminate()
+        raise
     descriptor = os.open(paths["journal"], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "w") as stream:
         stream.write(
@@ -652,6 +825,7 @@ def submit_once(
                     "request_sha256": digest(request),
                     "preview": preview_receipt,
                     "fresh_absence": guard,
+                    "final_prepost_gate": final_gate,
                     "final_sfs_output_absence_receipt_sha256": final_sfs_proof["sha256"],
                     "capacity_gate": capacity,
                 },
@@ -662,6 +836,13 @@ def submit_once(
         )
         stream.flush()
         os.fsync(stream.fileno())
+    try:
+        # Keep this separate from the duplicate read so a coordinator that
+        # exits during that final read cannot leave an unwatched allocation.
+        validate_armed_observer(plan, request, directory, now=now())
+    except Exception:
+        observer.terminate()
+        raise
     response = client.request("POST", "/v1/runs", json=request)
     # Persist the creator-returned identity before interpreting it.  If the
     # response is malformed, the detached coordinator still has the only
@@ -670,10 +851,7 @@ def submit_once(
     observed = safe_status(response)
     if observed.get("run_dir") is None:
         observed["run_dir"] = request["run_dir"]
-    with paths["journal"].open("a") as stream:
-        stream.write(json.dumps({"state": "POST_RESPONSE", **observed}, sort_keys=True) + "\n")
-        stream.flush()
-        os.fsync(stream.fileno())
+    _append_journal(paths["journal"], {"state": "POST_RESPONSE", **observed})
     if not re.fullmatch(re.escape(request["name"]) + r"-[a-f0-9]{8}", response.get("name", "")):
         raise JobsError("ambiguous submit response; reconcile journal, never repeat POST")
     if response.get("run_dir") not in (None, request["run_dir"]):
@@ -696,7 +874,7 @@ def main() -> None:
     parser.add_argument("--output")
     parser.add_argument("--attempt", type=int, default=1)
     args = parser.parse_args()
-    plan = mechanics.validate_plan(json.loads(Path(args.plan).read_text()))
+    plan = _validate_plan(json.loads(Path(args.plan).read_text()))
     request = json.loads(Path(args.request).read_text())
     directory = Path(args.directory)
     if args.observe:

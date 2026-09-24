@@ -1870,3 +1870,141 @@ def test_jobs_api_exact_uid_observer_deadline_is_bound_to_gpu_pod_creation(tmp_p
     assert result["deadline_at"] == "2000-01-01T00:00:01Z"
     assert result["cleanup_requested"] is False
     assert not any(call[0][:2] == ["delete", "--raw"] for call in cluster.calls)
+
+
+def test_jobs_api_exact_uid_observer_treats_stopped_as_terminal(tmp_path) -> None:
+    binding_path = _jobs_api_exact_binding(tmp_path)
+    binding = json.loads(binding_path.read_text())
+    cluster = FakeJobsApiExactObserverCluster(binding)
+    original = cluster._root
+
+    def stopped_root(**kwargs):
+        value = original(**kwargs)
+        value["status"]["jobStatus"] = "STOPPED"
+        return value
+
+    cluster._root = stopped_root
+    result = _jobs_api_exact_observer(tmp_path, cluster).run()
+    assert result["status"] == "released_after_terminal"
+    assert result["terminal_status"] == "Stopped"
+    assert result["release_confirmed"] is True
+
+
+def test_jobs_api_exact_uid_observer_sums_simultaneous_gpu_pods(tmp_path) -> None:
+    binding_path = _jobs_api_exact_binding(tmp_path)
+    binding = json.loads(binding_path.read_text())
+
+    class TwoPodCluster(FakeJobsApiExactObserverCluster):
+        def __call__(self, command, **kwargs):
+            args = command[5:]
+            if args[:3] == ["get", "pod", "--selector"]:
+                first = self._pod()
+                second = json.loads(json.dumps(first))
+                second["metadata"]["name"] = "collector-pod-2"
+                second["metadata"]["uid"] = _metadata("unused", 991)["uid"]
+                return NS(
+                    returncode=0,
+                    stdout=json.dumps({"items": [first, second]}),
+                    stderr="",
+                )
+            return super().__call__(command, **kwargs)
+
+    cluster = TwoPodCluster(binding, auto_release=False)
+    result = _jobs_api_exact_observer(tmp_path, cluster).run()
+    assert result["status"] == "release_uncertain"
+    assert result["peak_gpus"] == 16
+    assert result["reason"] == "observer_error"
+    assert not any(call[0][:2] == ["delete", "--raw"] for call in cluster.calls)
+
+
+def test_jobs_api_exact_uid_observer_recovers_after_exhausted_transient_read(tmp_path) -> None:
+    binding_path = _jobs_api_exact_binding(tmp_path)
+    binding = json.loads(binding_path.read_text())
+
+    class TransientCluster(FakeJobsApiExactObserverCluster):
+        remaining = cleanup.KUBECTL_ATTEMPTS
+
+        def __call__(self, command, **kwargs):
+            args = command[5:]
+            if args[:3] == ["get", "rayjob", self.binding["rayjob_name"]] and self.remaining:
+                self.remaining -= 1
+                raise subprocess.TimeoutExpired(command, 20)
+            return super().__call__(command, **kwargs)
+
+    cluster = TransientCluster(binding)
+    result = _jobs_api_exact_observer(tmp_path, cluster).run()
+    assert result["status"] == "released_after_terminal"
+    assert result["release_confirmed"] is True
+
+
+def test_jobs_api_exact_uid_observer_waits_for_root_and_children_after_delete(tmp_path) -> None:
+    binding_path = _jobs_api_exact_binding(tmp_path)
+    binding = json.loads(binding_path.read_text())
+    contract = _jobs_api_release_contract(tmp_path, binding)
+
+    class LingeringDeleteCluster(FakeJobsApiExactObserverCluster):
+        delete_accepted = False
+        post_delete_root_reads = 0
+        child_reads = {"workload": 0, "raycluster": 0, "pod": 0}
+
+        def __call__(self, command, **kwargs):
+            args = command[5:]
+            if args[:2] == ["delete", "--raw"]:
+                result = super().__call__(command, **kwargs)
+                self.deleted = False
+                self.delete_accepted = True
+                return result
+            if (
+                self.delete_accepted
+                and args[:3] == ["get", "rayjob", self.binding["rayjob_name"]]
+            ):
+                self.post_delete_root_reads += 1
+                value = self._root() if self.post_delete_root_reads <= 1 else None
+                return NS(returncode=0, stdout=json.dumps(value) if value else "", stderr="")
+            exact = {
+                ("workload", "collector-workload"): self._workload,
+                ("raycluster", "collector-cluster"): self._cluster,
+                ("pod", "collector-pod"): self._pod,
+            }
+            key = tuple(args[1:3]) if len(args) >= 3 and args[0] == "get" else None
+            if self.delete_accepted and key in exact:
+                resource = key[0]
+                self.child_reads[resource] += 1
+                value = exact[key]() if self.child_reads[resource] <= 1 else None
+                return NS(returncode=0, stdout=json.dumps(value) if value else "", stderr="")
+            return super().__call__(command, **kwargs)
+
+    cluster = LingeringDeleteCluster(binding, auto_release=False)
+    result = _jobs_api_exact_observer(
+        tmp_path, cluster, release_contract_path=contract
+    ).run()
+    assert result["status"] == "released_after_terminal"
+    assert result["release_confirmed"] is True
+    assert result["cleanup_requested"] is True
+    assert cluster.post_delete_root_reads >= 2
+    assert all(reads >= 2 for reads in cluster.child_reads.values())
+
+
+def test_jobs_api_exact_uid_observer_never_retries_uncertain_delete(tmp_path) -> None:
+    binding_path = _jobs_api_exact_binding(tmp_path)
+    binding = json.loads(binding_path.read_text())
+    contract = _jobs_api_release_contract(tmp_path, binding)
+
+    class UncertainDeleteCluster(FakeJobsApiExactObserverCluster):
+        delete_attempts = 0
+
+        def __call__(self, command, **kwargs):
+            args = command[5:]
+            if args[:2] == ["delete", "--raw"]:
+                self.delete_attempts += 1
+                self.deleted = True
+                raise subprocess.TimeoutExpired(command, 20)
+            return super().__call__(command, **kwargs)
+
+    cluster = UncertainDeleteCluster(binding, auto_release=False)
+    result = _jobs_api_exact_observer(
+        tmp_path, cluster, release_contract_path=contract
+    ).run()
+    assert result["release_confirmed"] is True
+    assert result["cleanup_status"] == "exact_uid_delete_outcome_uncertain_not_retried"
+    assert cluster.delete_attempts == 1

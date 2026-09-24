@@ -1,0 +1,258 @@
+import json
+import os
+import uuid
+from datetime import UTC, datetime
+
+import pytest
+
+from training import dev_cleanup_observer as cleanup
+from training import miles96_mechanics_launch as launch
+from training import miles96_signal_qualification as signal
+
+
+def _signal_plan() -> dict:
+    return {
+        "schema": signal.SCHEMA,
+        "qualification": {"samples": 8},
+        "episode": {
+            "max_concurrent_envs": 2,
+            "ready_timeout_s": 600,
+            "episode_timeout_s": 2400,
+            "grade_timeout_s": 900,
+            "request_timeout_s": 120,
+        },
+    }
+
+
+def test_signal_active_deadline_covers_four_bounded_serial_waves() -> None:
+    expected = 1800 + 4 * (600 + 2400 + 900 + 2 * 120 + 60) + 300
+    assert launch._maximum_seconds(_signal_plan(), {}) == expected == 18900
+    assert launch._maximum_seconds({"schema": "mechanics"}, {}) == 7200
+
+
+def test_final_prepost_gate_rechecks_observer_jobs_and_kubernetes(monkeypatch, tmp_path) -> None:
+    calls = []
+    monkeypatch.setattr(
+        launch,
+        "validate_armed_observer",
+        lambda *_args, **_kwargs: calls.append("observer") or {"sha256": "sha256:" + "a" * 64},
+    )
+    monkeypatch.setattr(
+        launch,
+        "_jobs_absent",
+        lambda *_args, **_kwargs: calls.append("jobs") or 1038,
+    )
+    monkeypatch.setattr(
+        launch,
+        "_kubernetes_absent",
+        lambda *_args, **_kwargs: calls.append("kubernetes") or 27,
+    )
+    times = iter([100.0, 101.0])
+    proof = launch.final_prepost_checks(
+        {"identity": {"name": "test"}},
+        {"name": "test"},
+        object(),
+        tmp_path,
+        now=lambda: next(times),
+    )
+    assert calls == ["observer", "jobs", "kubernetes"]
+    assert proof["status"] == "passed"
+    assert proof["jobs_history_rows_checked"] == 1038
+    assert proof["kubernetes_objects_checked"] == 27
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("generated_name_pattern", "^different-[a-f0-9]{8}$"),
+        ("manifest_sha256", "sha256:" + "b" * 64),
+        ("maximum_seconds", 7199),
+    ],
+)
+def test_armed_observer_receipt_binds_preview_pattern_and_deadline(
+    tmp_path, field, value
+) -> None:
+    plan = {
+        "schema": "mechanics",
+        "execution": {
+            "kubernetes_context": cleanup.PROD_CONTEXT,
+            "namespace": cleanup.NAMESPACE,
+        },
+    }
+    request = {
+        "name": "chris-q38-m96-test-a1",
+        "run_dir": "/mnt/sfs/jobs/chris-q38-m96-test-a1",
+        "image": "registry/image@sha256:" + "a" * 64,
+        "workers": 1,
+        "gpus_per_worker": 8,
+    }
+    preview = {"manifest_sha256": "sha256:" + "a" * 64}
+    (tmp_path / "SERVER_PREVIEW.json").write_text(json.dumps(preview))
+    body = {
+        "schema": cleanup.JOBS_API_PREFIX_GUARD_SCHEMA,
+        "status": "armed_non_destructive_prefix_guard",
+        "context": cleanup.PROD_CONTEXT,
+        "namespace": cleanup.NAMESPACE,
+        "run_name_prefix": request["name"],
+        "generated_name_pattern": "^" + launch.re.escape(request["name"]) + "-[a-f0-9]{8}$",
+        "run_dir": request["run_dir"],
+        "image": request["image"],
+        "plan_sha256": "sha256:" + launch.mechanics.digest(plan),
+        "manifest_sha256": preview["manifest_sha256"],
+        "maximum_seconds": 7200,
+        "expected_gpus": 8,
+        "armed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "observer_pid": os.getpid(),
+        "prefix_collision_count_before_post": 0,
+    }
+    body[field] = value
+    (tmp_path / "OBSERVER_ARMED.json").write_text(json.dumps(launch._seal(body)))
+    with pytest.raises(launch.JobsError, match="differs"):
+        launch.validate_armed_observer(
+            plan,
+            request,
+            tmp_path,
+            now=datetime.now(UTC).timestamp(),
+        )
+
+
+class _History:
+    rows = []
+
+    def __init__(self, token, *, base_url):
+        assert token == "secret" and base_url == "https://jobs.example"
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return None
+
+    def all_runs(self):
+        return self.rows
+
+
+def _request() -> dict:
+    return {
+        "name": "chris-q38-m96-sig-test-a1",
+        "title": "Miles96 signal test",
+        "run_dir": "/mnt/sfs/jobs/chris-q38-m96-sig-test-a1",
+        "image": "registry/image@sha256:" + "a" * 64,
+        "priority_class": "c1",
+        "requeueIfPreempted": False,
+    }
+
+
+def test_uncertain_post_reconciles_one_exact_authenticated_history_row(
+    tmp_path, monkeypatch
+) -> None:
+    request = _request()
+    job_id = str(uuid.UUID("33333333-3333-4333-8333-333333333333"))
+    _History.rows = [
+        {
+            **request,
+            "name": request["name"] + "-1234abcd",
+            "job_id": job_id,
+            "status": "QUEUED",
+        }
+    ]
+    monkeypatch.setenv("FLEET_API_KEY", "secret")
+    monkeypatch.setattr(launch, "Jobs", _History)
+    journal = tmp_path / "SUBMISSION.jsonl"
+    journal.write_text(
+        json.dumps(
+            {
+                "state": "POST_INTENT_DO_NOT_RETRY",
+                "request_sha256": launch.digest(request),
+            }
+        )
+        + "\n"
+    )
+    result = launch._reconcile_post_response(
+        {"execution": {"jobs_api_base_url": "https://jobs.example"}},
+        request,
+        journal,
+    )
+    assert result["state"] == "POST_RESPONSE_RECONCILED"
+    assert result["job_id"] == job_id
+    assert len(journal.read_text().splitlines()) == 2
+
+
+def test_uncertain_post_reconciliation_polls_until_history_is_consistent(
+    tmp_path, monkeypatch
+) -> None:
+    request = _request()
+    job_id = str(uuid.UUID("33333333-3333-4333-8333-333333333333"))
+
+    class DelayedHistory(_History):
+        calls = 0
+
+        def all_runs(self):
+            self.__class__.calls += 1
+            if self.calls == 1:
+                return []
+            return [
+                {
+                    **request,
+                    "name": request["name"] + "-1234abcd",
+                    "job_id": job_id,
+                    "status": "QUEUED",
+                }
+            ]
+
+    monkeypatch.setenv("FLEET_API_KEY", "secret")
+    monkeypatch.setattr(launch, "Jobs", DelayedHistory)
+    journal = tmp_path / "SUBMISSION.jsonl"
+    journal.write_text(
+        json.dumps(
+            {
+                "state": "POST_INTENT_DO_NOT_RETRY",
+                "request_sha256": launch.digest(request),
+            }
+        )
+        + "\n"
+    )
+    result = launch._reconcile_post_response(
+        {"execution": {"jobs_api_base_url": "https://jobs.example"}},
+        request,
+        journal,
+        deadline=launch.time.monotonic() + 1,
+        sleep=lambda _seconds: None,
+    )
+    assert result["job_id"] == job_id
+    assert DelayedHistory.calls == 2
+
+
+@pytest.mark.parametrize("count", [0, 2])
+def test_uncertain_post_reconciliation_fails_closed_unless_unique(
+    tmp_path, monkeypatch, count
+) -> None:
+    request = _request()
+    _History.rows = [
+        {
+            **request,
+            "name": request["name"] + f"-{index + 1:08x}",
+            "job_id": str(uuid.UUID(int=index + 1)),
+            "status": "QUEUED",
+        }
+        for index in range(count)
+    ]
+    monkeypatch.setenv("FLEET_API_KEY", "secret")
+    monkeypatch.setattr(launch, "Jobs", _History)
+    journal = tmp_path / "SUBMISSION.jsonl"
+    journal.write_text(
+        json.dumps(
+            {
+                "state": "POST_INTENT_DO_NOT_RETRY",
+                "request_sha256": launch.digest(request),
+            }
+        )
+        + "\n"
+    )
+    with pytest.raises(cleanup.ObserverError, match="exactly one|multiple"):
+        launch._reconcile_post_response(
+            {"execution": {"jobs_api_base_url": "https://jobs.example"}},
+            request,
+            journal,
+        )
+    assert len(journal.read_text().splitlines()) == 1

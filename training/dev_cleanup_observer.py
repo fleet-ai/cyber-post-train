@@ -40,10 +40,16 @@ JOBS_API_PREFIX_GUARD_SCHEMA = "cyber_jobs_api_prefix_guard_armed_v1"
 JOBS_API_EXACT_BINDING_SCHEMA = "cyber_jobs_api_exact_rayjob_binding_v1"
 JOBS_API_RELEASE_CONTRACT_SCHEMA = "cyber_jobs_api_exact_uid_release_contract_v1"
 JOBS_API_EXACT_OBSERVER_SCHEMA = "cyber_jobs_api_exact_uid_observer_result_v1"
-TERMINAL_RAY_STATUSES = {"SUCCEEDED": "Succeeded", "FAILED": "Failed"}
+TERMINAL_RAY_STATUSES = {
+    "SUCCEEDED": "Succeeded",
+    "FAILED": "Failed",
+    "STOPPED": "Stopped",
+}
 KUBECTL_ATTEMPTS = 3
 KUBECTL_TIMEOUT_SECONDS = 20
 MAX_CONSECUTIVE_OBSERVATION_FAILURES = 5
+DELETE_RELEASE_GRACE_SECONDS = 300
+TRANSIENT_OBSERVATION_CODES = {"kubectl_timeout", "kubectl_failed"}
 DELETE_REQUEST_MARGIN_SECONDS = 60
 TERMINAL_RECEIPT_GRACE_SECONDS = 30
 _RUN_NAME_PREFIX = re.compile(r"[a-z0-9](?:[-a-z0-9]{0,29}[a-z0-9])?")
@@ -539,6 +545,9 @@ class JobsApiExactUidObserver:
         self.inventory_seen = False
         self.raycluster_identity_observed = False
         self.cleanup_requested = False
+        self.cleanup_requested_at: datetime | None = None
+        self.root_absent_at: datetime | None = None
+        self.consecutive_observation_failures = 0
         self.cleanup_status = (
             "authorized_not_requested" if self.release_contract is not None else "not_authorized"
         )
@@ -899,6 +908,10 @@ class JobsApiExactUidObserver:
             raise ObserverError("Jobs API exact observer RayCluster owner binding changed")
         self._record_known("raycluster", name=name, uid=uid)
         pods = self._list_owned("pod", f"ray.io/cluster={name}")
+        current_gpus = sum(self._pod_gpus(pod) for pod in pods)
+        self.peak_gpus = max(self.peak_gpus, current_gpus)
+        if current_gpus > self.binding["expected_gpus"]:
+            raise ObserverError("Jobs API exact observer GPU contract exceeded")
         for pod in pods:
             pod_name, pod_uid, pod_created = self._metadata(pod, expected_kind="Pod")
             if not self._owned_by(pod, kind="RayCluster", name=name, uid=uid):
@@ -906,9 +919,6 @@ class JobsApiExactUidObserver:
             self._record_known("pod", name=pod_name, uid=pod_uid)
             pod_gpus = self._pod_gpus(pod)
             self._observe_runtime_image(pod, name=pod_name, uid=pod_uid, gpus=pod_gpus)
-            self.peak_gpus = max(self.peak_gpus, pod_gpus)
-            if self.peak_gpus > self.binding["expected_gpus"]:
-                raise ObserverError("Jobs API exact observer GPU contract exceeded")
             if pod_gpus > 0:
                 pod_allocated_at = _parse_stamp(pod_created)
                 if self.allocated_at is None or pod_allocated_at < self.allocated_at:
@@ -983,17 +993,46 @@ class JobsApiExactUidObserver:
             sort_keys=True,
             separators=(",", ":"),
         )
-        self._kubectl(
+        command = [
+            "kubectl",
+            "--context",
+            self.context,
+            "--namespace",
+            self.namespace,
             "delete",
             "--raw",
             f"/apis/ray.io/v1/namespaces/{quote(self.namespace, safe='')}/"
             f"rayjobs/{quote(self.root_name, safe='')}",
             "-f",
             "-",
-            input_text=body,
-        )
+        ]
+        # A timed-out destructive mutation is uncertain.  Never replay it;
+        # the UID precondition prevents deleting a replacement, and continued
+        # reads below determine whether the original actually disappeared.
+        try:
+            result = self._run(
+                command,
+                input=body,
+                capture_output=True,
+                text=True,
+                timeout=KUBECTL_TIMEOUT_SECONDS,
+            )
+            accepted = result.returncode == 0
+        except subprocess.TimeoutExpired:
+            accepted = False
         self.cleanup_requested = True
-        self.cleanup_status = "requested_exact_uid_precondition"
+        self.cleanup_requested_at = _now()
+        self.cleanup_status = (
+            "requested_exact_uid_precondition"
+            if accepted
+            else "exact_uid_delete_outcome_uncertain_not_retried"
+        )
+
+    def _release_grace_elapsed(self) -> bool:
+        started = self.cleanup_requested_at or self.root_absent_at
+        return started is not None and _now() >= started + timedelta(
+            seconds=DELETE_RELEASE_GRACE_SECONDS
+        )
 
     def _result(self, *, status: str, reason: str, release_confirmed: bool) -> dict:
         value = _seal(
@@ -1063,8 +1102,10 @@ class JobsApiExactUidObserver:
                             reason="bound_root_absent_before_observation",
                             release_confirmed=False,
                         )
+                    if self.root_absent_at is None:
+                        self.root_absent_at = _now()
                     if (
-                        not self.terminal_status
+                        not (self.terminal_status or self.cleanup_requested)
                         or not self.inventory_seen
                         or not self.raycluster_identity_observed
                     ):
@@ -1073,7 +1114,9 @@ class JobsApiExactUidObserver:
                             reason="bound_root_absent_without_terminal_inventory",
                             release_confirmed=False,
                         )
-                    if self._known_children_absent():
+                    children_absent = self._known_children_absent()
+                    self.consecutive_observation_failures = 0
+                    if children_absent:
                         if not self._runtime_image_identity_complete():
                             return self._result(
                                 status="release_uncertain",
@@ -1081,22 +1124,28 @@ class JobsApiExactUidObserver:
                                 release_confirmed=False,
                             )
                         return self._result(
-                            status="released_after_terminal",
+                            status=(
+                                "released_after_terminal"
+                                if self.terminal_status
+                                else "released_after_deadline_cleanup"
+                            ),
                             reason="exact_root_and_observed_children_absent",
                             release_confirmed=True,
                         )
-                    if self.deadline_at is not None and _now() >= self.deadline_at:
+                    if self._release_grace_elapsed():
                         return self._result(
                             status="release_uncertain",
-                            reason="owned_child_still_present_at_deadline",
+                            reason="owned_child_still_present_after_delete_grace",
                             release_confirmed=False,
                         )
                     time.sleep(self.poll_seconds)
                     continue
 
                 self.root_seen = True
+                self.root_absent_at = None
                 cluster_name = self._validate_root(root)
                 self._observe_owned_children(cluster_name)
+                self.consecutive_observation_failures = 0
                 deadline_reached = self.deadline_at is not None and _now() >= self.deadline_at
                 if (
                     self.terminal_status
@@ -1105,14 +1154,30 @@ class JobsApiExactUidObserver:
                 ):
                     self._request_exact_uid_cleanup()
                     continue
+                if self.cleanup_requested:
+                    if self._release_grace_elapsed():
+                        return self._result(
+                            status="release_uncertain",
+                            reason="exact_uid_delete_grace_elapsed",
+                            release_confirmed=False,
+                        )
+                    time.sleep(self.poll_seconds)
+                    continue
                 if deadline_reached:
                     if not self.cleanup_requested:
                         self._request_exact_uid_cleanup()
                         if self.cleanup_requested:
                             continue
+                    elif not self._release_grace_elapsed():
+                        time.sleep(self.poll_seconds)
+                        continue
                     return self._result(
                         status="release_uncertain",
-                        reason="allocation_bound_deadline_elapsed",
+                        reason=(
+                            "exact_uid_delete_grace_elapsed"
+                            if self.cleanup_requested
+                            else "allocation_bound_deadline_elapsed"
+                        ),
                         release_confirmed=False,
                     )
                 if self.deadline_at is None:
@@ -1125,6 +1190,14 @@ class JobsApiExactUidObserver:
                         )
                     )
             except ObserverError as exc:
+                if exc.code in TRANSIENT_OBSERVATION_CODES:
+                    self.consecutive_observation_failures += 1
+                    if (
+                        self.consecutive_observation_failures
+                        <= MAX_CONSECUTIVE_OBSERVATION_FAILURES
+                    ):
+                        time.sleep(self.poll_seconds)
+                        continue
                 return self._result(
                     status="release_uncertain",
                     reason=exc.code,
