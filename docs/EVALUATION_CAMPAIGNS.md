@@ -149,12 +149,12 @@ outcome-blind retention fallbacks: batch-16 step 200, 64K step 225, and
 learning-rate-1e-6 step 500. The exact six arms are base, step 1000, those
 three fallbacks, and 96K step 300. It also binds the original prospective
 matrix digest
-`d72f52ce7035c5b2f48eb75de9513141a98f87d5fd7e4caf552ed625e967593a`
+`fbd883b80adbc6438c3b0729e61af54080f92b2f7abe0ad470d0d86858a847bb`
 and the exposure audit at
 `docs/evidence/qwen38-fleet-final8-exposure-audit-20260923.json` (file SHA-256
-`17fc69469673018c84d9d11d92f33989eb229730ba9da1d77fc7fffff2953504`,
+`41fe6614eadec151919902ed27641ebd1ea19b890c72192f263ec3d9361aedd2`,
 receipt SHA-256
-`b61dd5bcba1320b11a40abb1836b6b32cf434fe1cc641da07622cc9d0a34dd5f`).
+`0c4d85028026a3eac4ab0a9dee4689854a55ad74122bdc048407e759585bbb35`).
 That audit records that all eight exact versions have prior quality-certification
 execution and two have accepted pre-split model-comparison execution. No
 historical cell is reused, and this comparison must never be described as

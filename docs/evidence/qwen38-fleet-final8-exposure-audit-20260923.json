@@ -1,7 +1,7 @@
 {
   "schema": "qwen38_fleet_final8_exposure_audit_v1",
-  "observed_at": "2026-09-24T06:14:35Z",
-  "repository_commit": "db6a3599104185c5dfd8f40956b081c16090085d",
+  "observed_at": "2026-09-24T06:19:00Z",
+  "repository_commit": "555ec7b4663ffc59d4a1f0191818f2bd59a3dc68",
   "scope": "Identity and execution-state audit of the eight task versions assigned to final_test in the current 75-task Fleet blackbox split. The conclusions do not use score or reward values; the integrity disclosure records why a strict no-score-display attestation is unavailable.",
   "split": {
     "path": "configs/data/fleet-blackbox-current-study-split-20260914-v2.json",
@@ -181,5 +181,5 @@
   },
   "disposition": "historically_exposed_locked_confirmation_set",
   "conclusion": "The eight versions remain disjoint from the current train50 and dev17 partitions. The exact current-final selection digest appears in the split, two checkpoint ledgers, and the prospective campaign adapter that pins the roster without containing results; it does not appear in a terminal-result or checkpoint-selection receipt. The set is nevertheless not pristine or globally untouched: all eight have prior exact-execution certification, and two have accepted cells in a historical model comparison. Future use may support a prospectively frozen locked confirmation only; an untouched-final claim requires a new globally exposure-censused holdout.",
-  "sha256": "sha256:b61dd5bcba1320b11a40abb1836b6b32cf434fe1cc641da07622cc9d0a34dd5f"
+  "sha256": "sha256:0c4d85028026a3eac4ab0a9dee4689854a55ad74122bdc048407e759585bbb35"
 }

@@ -84,8 +84,8 @@ FINAL8_IMAGES = {
 }
 FINAL8_EXPOSURE_AUDIT = {
     "path": "docs/evidence/qwen38-fleet-final8-exposure-audit-20260923.json",
-    "file_sha256": "sha256:17fc69469673018c84d9d11d92f33989eb229730ba9da1d77fc7fffff2953504",
-    "sha256": "sha256:b61dd5bcba1320b11a40abb1836b6b32cf434fe1cc641da07622cc9d0a34dd5f",
+    "file_sha256": "sha256:41fe6614eadec151919902ed27641ebd1ea19b890c72192f263ec3d9361aedd2",
+    "sha256": "sha256:0c4d85028026a3eac4ab0a9dee4689854a55ad74122bdc048407e759585bbb35",
 }
 FINAL8_TASK_VERSIONS = frozenset(
     {

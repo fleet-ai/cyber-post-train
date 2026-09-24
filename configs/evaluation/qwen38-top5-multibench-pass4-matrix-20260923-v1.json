@@ -23,8 +23,8 @@
   },
   "fleet_confirmation_exposure_audit": {
     "path": "docs/evidence/qwen38-fleet-final8-exposure-audit-20260923.json",
-    "file_sha256": "sha256:17fc69469673018c84d9d11d92f33989eb229730ba9da1d77fc7fffff2953504",
-    "receipt_sha256": "sha256:b61dd5bcba1320b11a40abb1836b6b32cf434fe1cc641da07622cc9d0a34dd5f",
+    "file_sha256": "sha256:41fe6614eadec151919902ed27641ebd1ea19b890c72192f263ec3d9361aedd2",
+    "receipt_sha256": "sha256:0c4d85028026a3eac4ab0a9dee4689854a55ad74122bdc048407e759585bbb35",
     "disposition": "historically_exposed_locked_confirmation_set",
     "all_eight_exact_versions_have_prior_quality_certification_metadata": true,
     "pre_split_model_comparison_exact_versions_with_accepted_execution": 2,
@@ -395,8 +395,8 @@
       "selection_role": "historically_exposed_locked_confirmation_set",
       "outcomes_state": "outcomes_not_used_for_checkpoint_selection",
       "exposure_audit_path": "docs/evidence/qwen38-fleet-final8-exposure-audit-20260923.json",
-      "exposure_audit_file_sha256": "sha256:17fc69469673018c84d9d11d92f33989eb229730ba9da1d77fc7fffff2953504",
-      "exposure_audit_receipt_sha256": "sha256:b61dd5bcba1320b11a40abb1836b6b32cf434fe1cc641da07622cc9d0a34dd5f",
+      "exposure_audit_file_sha256": "sha256:41fe6614eadec151919902ed27641ebd1ea19b890c72192f263ec3d9361aedd2",
+      "exposure_audit_receipt_sha256": "sha256:0c4d85028026a3eac4ab0a9dee4689854a55ad74122bdc048407e759585bbb35",
       "historical_execution_boundary": {
         "exact_versions_with_prior_quality_certification_metadata": 8,
         "exact_versions_with_accepted_pre_split_model_comparison_execution": 2,
@@ -504,5 +504,5 @@
     "evaluation_cells_created": 0,
     "fleet_confirmation_campaigns_created": 0
   },
-  "sha256": "d72f52ce7035c5b2f48eb75de9513141a98f87d5fd7e4caf552ed625e967593a"
+  "sha256": "fbd883b80adbc6438c3b0729e61af54080f92b2f7abe0ad470d0d86858a847bb"
 }
