@@ -1,0 +1,54 @@
+{
+  "classification": "infrastructure-invalid",
+  "cleanup": {
+    "config_map_absent": false,
+    "diagnostic_objects_cleanup_authorized": true,
+    "job_absent": false,
+    "original_reward_objects_retained_pending_release_proof": true,
+    "pod_absent": false,
+    "workload_absent": false
+  },
+  "config_map": {
+    "name": "chris-q38-m96-signal-a2-leak-a3-code",
+    "uid": "fd18cd6c-66cc-44ff-a6f6-7130b7b678d5"
+  },
+  "execution": {
+    "api_delete_count_before_failure": 0,
+    "api_get_count_before_failure": 0,
+    "exit_code": 1,
+    "failure_class": "score_blind_worker_terminal_contract_differs",
+    "failure_occurred_before_first_network_request": true,
+    "finished_at": "2026-09-24T06:05:22Z",
+    "restart_count": 0
+  },
+  "job": {
+    "created_at": "2026-09-24T06:05:21Z",
+    "failure_reason": "BackoffLimitExceeded",
+    "name": "chris-q38-m96-signal-a2-leak-a3",
+    "status": "Failed",
+    "uid": "188cbdc5-3edc-4b2c-9740-f0d28b728795"
+  },
+  "packet": {
+    "bundle_sha256": "sha256:89a0fbf44153a018e0b34ebcaa4aa06e1101f981d2ec08330c41e343820597a2",
+    "file_sha256": "sha256:754b1384fe5c4551bbeafb44aa61dcf9b4e7ced84fa6398caa092370a8a610a6",
+    "internal_sha256": "sha256:4b76fd1ab8cbc4ebc4f2c6ea91faba301c4a4a93e6c512732cc058ee83175301",
+    "server_preview_sha256": "sha256:ff20a7b6a504f0311b806626005cb44af0c195617b06867d3d6754b34581abb6"
+  },
+  "pod": {
+    "image_id": "ghcr.io/astral-sh/uv@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7",
+    "name": "chris-q38-m96-signal-a2-leak-a3-4lnt2",
+    "uid": "5b28ffd1-ee52-4d8d-a509-89f70155fa7a"
+  },
+  "private_instance_ids_prompts_traces_rewards_scores_or_credentials_included": false,
+  "resources": {
+    "failure_alerts": "off",
+    "gpus": 0,
+    "priority": "c1/q1"
+  },
+  "schema": "cyber_qwen38_miles96_signal_leak_reconcile_terminal_v1",
+  "sha256": "sha256:b11264483d141e5ef001c99e7949ca50e7397dc45d7bd1594c5629f18ef9b2f9",
+  "workload": {
+    "name": "job-chris-q38-m96-signal-a2-leak-a3-94a73",
+    "uid": "66b58df4-8cc5-4fd9-a77c-8d80229fc370"
+  }
+}
