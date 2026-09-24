@@ -330,7 +330,7 @@ def job_request(plan: dict) -> dict:
         and recipe.get("gpus_per_node") == 8
         and recipe.get("max_length") == 262_144
     )
-    if held_four_node_262k_full:
+    if held_four_node_262k_full and plan.get("runtime_variant") != "qwen38_sft_262k_4node_v1":
         if (
             recipe.get("checkpoint_interval", 0) >= recipe.get("max_steps", 0)
             or recipe.get("keep_checkpoints", 0) < 2
@@ -352,9 +352,15 @@ def job_request(plan: dict) -> dict:
     # Submission re-renders a prepared request through this function. Recheck
     # the full plan so a hand-written or stale prepared directory cannot bypass
     # the Qwen LoRA source/image/c1/evidence gates.
-    validate_plan(plan, check_files=False)
+    validator = validate_plan
+    runtime_path = Path(__file__).with_name("sft_runtime.py")
+    if plan.get("runtime_variant") == "qwen38_sft_262k_4node_v1":
+        from .sft_262k_runtime import validate_plan as validator
+
+        runtime_path = Path(__file__).with_name("sft_262k_runtime.py")
+    validator(plan, check_files=False)
     qwen38_lora = plan.get("model", {}).get("repo") == "Qwen/Qwen3.8-27B" and "lora" in plan
-    runtime = Path(__file__).with_name("sft_runtime.py").read_bytes()
+    runtime = runtime_path.read_bytes()
     if hashlib.sha256(runtime).hexdigest() != plan["runtime_sha256"]:
         raise ValueError("local runtime changed since this plan was compiled")
     plan_bytes = json.dumps(plan, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
@@ -374,6 +380,19 @@ def job_request(plan: dict) -> dict:
                 .with_name("qwen38_lora_artifacts.py")
                 .read_text(),
                 "training/sft_runtime.py": runtime.decode(),
+            }
+        )
+    if plan.get("runtime_variant") == "qwen38_sft_262k_4node_v1":
+        base_runtime = Path(__file__).with_name("sft_runtime.py")
+        expected_base = plan["long_context_qualification"]["base_runtime_sha256"]
+        if hashlib.sha256(base_runtime.read_bytes()).hexdigest() != expected_base:
+            raise ValueError("Qwen3.8 262K base runtime changed since this plan was compiled")
+        extras = contents.setdefault("extra_files", {})
+        extras.update(
+            {
+                "training/__init__.py": "",
+                "training/sft_runtime.py": base_runtime.read_text(),
+                "training/sft_262k_runtime.py": runtime.decode(),
             }
         )
     if plan.get("model", {}).get("repo") == "zai-org/GLM-5.3" and "lora" in plan:

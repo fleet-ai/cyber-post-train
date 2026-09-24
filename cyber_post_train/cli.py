@@ -144,10 +144,15 @@ def _external_action_gate(plan: dict, action: str) -> None:
     gate = qualification.get("submission_gate")
     field = {
         "preview": "preview_authorized",
+        "preflight": "preflight_authorized",
         "submit": "submission_authorized",
     }.get(action)
     if field is None:
         raise ValueError("unknown external action")
+    if action == "preflight" and isinstance(gate, dict) and "preflight_authorized" not in gate:
+        # Older exact qualification packets authorized their zero-GPU setup
+        # under the submission bit. New packets separate it explicitly.
+        field = "submission_authorized"
     if not isinstance(gate, dict) or type(gate.get(field)) is not bool:
         raise ValueError(f"{action} blocked by an incomplete qualification gate")
     if gate[field] is True:
@@ -1085,7 +1090,7 @@ def sfs_output_receipt(
     try:
         plan, request = _prepared(directory)
         _submission_gate(directory, plan, request)
-        _external_action_gate(plan, "submit")
+        _external_action_gate(plan, "preflight")
         _require_preflight(directory, plan, request)
         if plan.get("schema") not in {"cyber_sft_runtime_v2", "cyber_sft_runtime_dense_v1"}:
             raise ValueError("SFS output-absence receipts are restricted to SFT")
@@ -1108,7 +1113,7 @@ def sfs_output_job_create(
     try:
         plan, request = _prepared(directory)
         _submission_gate(directory, plan, request)
-        _external_action_gate(plan, "submit")
+        _external_action_gate(plan, "preflight")
         _require_preflight(directory, plan, request)
         result = create_sfs_output_check_once(
             plan=plan,
@@ -1135,7 +1140,7 @@ def sfs_output_job_collect(
     try:
         plan, request = _prepared(directory)
         _submission_gate(directory, plan, request)
-        _external_action_gate(plan, "submit")
+        _external_action_gate(plan, "preflight")
         _require_preflight(directory, plan, request)
         receipt = collect_sfs_output_check(
             plan=plan,
@@ -1162,7 +1167,7 @@ def sft_cpu_preflight_job_create(
     try:
         plan, request = _prepared(directory)
         _submission_gate(directory, plan, request)
-        _external_action_gate(plan, "submit")
+        _external_action_gate(plan, "preflight")
         if is_qwen38_lora_plan(plan):
             raise ValueError("Qwen3.8 LoRA requires qwen38-lora-sft-cpu-preflight-job-create")
         if (directory / "PREFLIGHT.json").exists():
@@ -1174,6 +1179,33 @@ def sft_cpu_preflight_job_create(
             attempt=attempt,
             kubectl=Kubectl(context),
             journal=directory / f"SFT_CPU_PREFLIGHT_A{attempt:02d}.jsonl",
+        )
+        _print(result)
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("sft-cpu-preflight-job-preview")
+def sft_cpu_preflight_job_preview(
+    directory: Path,
+    context: Annotated[str, typer.Option("--context")],
+    attempt: Annotated[int, typer.Option("--attempt", min=1, max=MAX_ATTEMPT)] = 1,
+) -> None:
+    """Server-render one generic-SFT zero-GPU preflight without creating it."""
+    from .direct_submit import Kubectl, preview_sft_cpu_preflight
+    from .qwen38_lora_sft_preflight import is_qwen38_lora_plan
+
+    try:
+        plan, request = _prepared(directory)
+        _submission_gate(directory, plan, request)
+        _external_action_gate(plan, "preflight")
+        if is_qwen38_lora_plan(plan):
+            raise ValueError("Qwen3.8 LoRA requires its named CPU preflight rail")
+        result = preview_sft_cpu_preflight(
+            directory=directory,
+            source_commit=_clean_source_commit(),
+            attempt=attempt,
+            kubectl=Kubectl(context),
         )
         _print(result)
     except Exception as exc:
@@ -1193,7 +1225,7 @@ def sft_cpu_preflight_job_collect(
     try:
         plan, request = _prepared(directory)
         _submission_gate(directory, plan, request)
-        _external_action_gate(plan, "submit")
+        _external_action_gate(plan, "preflight")
         if is_qwen38_lora_plan(plan):
             raise ValueError("Qwen3.8 LoRA requires qwen38-lora-sft-cpu-preflight-job-collect")
         if (directory / "PREFLIGHT.json").exists():
@@ -1311,11 +1343,10 @@ def submit(directory: Path) -> None:
         plan, request = _prepared(directory)
         _submission_gate(directory, plan, request)
         _external_action_gate(plan, "submit")
-        if (
-            plan_api_target(plan)[0] == "dev"
-            and plan.get("schema")
-            in {"cyber_sft_runtime_v2", "cyber_sft_runtime_dense_v1"}
-        ):
+        if plan_api_target(plan)[0] == "dev" and plan.get("schema") in {
+            "cyber_sft_runtime_v2",
+            "cyber_sft_runtime_dense_v1",
+        }:
             raise ValueError(
                 "development SFT requires direct-submit-sft so the cluster enforces "
                 "the immutable 30-minute RayJob deadline"
@@ -1382,6 +1413,42 @@ def direct_submit_sft(
                 jobs=client,
                 kubectl=Kubectl(context),
                 journal=directory / DIRECT_JOURNAL,
+                output_absence_receipt=output_receipt,
+            )
+        _print(result)
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("direct-preview-sft")
+def direct_preview_sft(
+    directory: Path,
+    context: Annotated[str, typer.Option("--context")],
+    output_absence_receipt: Annotated[
+        Path | None,
+        typer.Option(
+            "--output-absence-receipt",
+            help=(
+                "Fresh receipt from `sfs-output-receipt`; required only when this host "
+                "cannot see /mnt/sfs/jobs."
+            ),
+        ),
+    ] = None,
+) -> None:
+    """Prove the exact live SFT render and server dry-run without creating it."""
+    from .direct_submit import Kubectl, direct_preview_sft_once
+
+    try:
+        plan, request = _prepared(directory)
+        _submission_gate(directory, plan, request)
+        _external_action_gate(plan, "preview")
+        output_receipt = _read(output_absence_receipt) if output_absence_receipt else None
+        with _client_for_plan(plan) as client:
+            result = direct_preview_sft_once(
+                plan=plan,
+                request=request,
+                jobs=client,
+                kubectl=Kubectl(context),
                 output_absence_receipt=output_receipt,
             )
         _print(result)

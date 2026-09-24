@@ -119,9 +119,7 @@ def test_compile_uses_exact_model_manifest_and_complete_epochs(config, tmp_path)
     assert hashlib.sha256(content["runtime"].encode()).hexdigest() == plan["runtime_sha256"]
 
 
-def test_four_node_262k_full_sft_fails_closed_without_runtime_qualification(
-    config, tmp_path
-):
+def test_four_node_262k_full_sft_fails_closed_without_runtime_qualification(config, tmp_path):
     source, manifest, save = config
     manifest["validation_mode"] = "task_outcomes_only"
     manifest["files"] = {"train": manifest["files"]["train"]}
@@ -186,10 +184,7 @@ def test_four_node_262k_held_shape_cannot_bypass_compile_gate(config, tmp_path):
 
 def test_four_node_262k_qualification_packet_is_bounded_and_not_launchable():
     packet = json.loads(
-        (
-            ROOT
-            / "configs/qualification/qwen38-teacher3k-262k-4node-canary-v1.json"
-        ).read_text()
+        (ROOT / "configs/qualification/qwen38-teacher3k-262k-4node-canary-v1.json").read_text()
     )
     assert packet["status"] == "held_nonlaunchable_hypothesis"
     assert packet["submission_authorized"] is False
@@ -204,8 +199,7 @@ def test_four_node_262k_qualification_packet_is_bounded_and_not_launchable():
         "sha256:b6b81c9876ddf8379a0837a0aaf5f0426acf8ccc4388d79bd93bad94c59e38d3"
     )
     evidence_path = (
-        "docs/evidence/qwen38-study/"
-        "2026-09-24-qwen38-teacher3k-262k-v12-recovered-parent.md"
+        "docs/evidence/qwen38-study/2026-09-24-qwen38-teacher3k-262k-v12-recovered-parent.md"
     )
     assert parent["historical_evidence_document"] == evidence_path
     evidence = (ROOT / evidence_path).read_text()
@@ -246,7 +240,8 @@ def test_four_node_262k_qualification_packet_is_bounded_and_not_launchable():
         "requeue_if_preempted": False,
         "required_new_root_annotations": {"fleet.ai/failure-alerts": "off"},
     }
-    assert packet["blockers_before_any_preview_or_post"]
+    assert packet["remaining_blockers_before_any_post"]
+    assert packet["current_port"]["status"] == ("implemented_and_locally_tested_not_live_qualified")
     assert packet["resource_accounting"] == {
         "candidate_nodes": 4,
         "planned_concurrent_nodes": 9,

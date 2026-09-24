@@ -182,16 +182,35 @@ create-once; an uncertain create must be reconciled from the durable journal.
 
 The proposed four-node, 262,144-token, full-parameter Qwen3.8 canary is recorded in
 `configs/qualification/qwen38-teacher3k-262k-4node-canary-v1.json`. It is
-deliberately not launchable from current `main`: the historical parent plan and
+deliberately not launchable: the historical parent plan and
 mechanics receipts are now digest-bound in the packet, but they prove only one
 optimizer step and a simple checkpoint path—not a sealed reload or scientific
-acceptance. Current `main` does not contain that parent's exact chunked
-long-context runtime, though the packet now preserves the exact full immutable
-image reference recovered from durable history. The generic compiler and launch-time renderer
-therefore fail closed for that exact shape. Port and test only the recovered
-runtime hooks without changing that image binding, and change the qualification
-packet in a reviewed successor; never turn this held packet into a request by
-hand.
+acceptance. This source tree ports the seven recovered long-context hooks into
+the isolated `training/sft_262k_runtime.py` variant while leaving the shared SFT
+runtime byte-for-byte unchanged. The exact compiler derives one 4×8, batch-32,
+four-step, pause-after-step-1 candidate from the retained v12 plan and stages
+both runtimes under digest checks. Its packet authorizes read-only preview and
+zero-GPU preflight only; GPU submission remains false. Never turn the held
+packet into a request by hand.
+
+After preparing the candidate, these two commands exercise only non-creating
+server rendering:
+
+```sh
+uv run cyber-post-train sft-cpu-preflight-job-preview /shared/prepared-run \
+  --context nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6
+
+uv run cyber-post-train direct-preview-sft /shared/prepared-run \
+  --context nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6 \
+  --output-absence-receipt /shared/fresh-output-absence.json
+```
+
+The second command is production-only because the final development RayJob
+owner reference cannot exist before its cleanup guardian has a real UID. Both
+commands verify the bound cluster context; neither writes a create journal or
+calls Kubernetes create. A host without SFS may use the existing bounded,
+zero-GPU SFS observer under the preflight authorization, but that is still an
+external Job and must be operated and collected explicitly.
 
 When the submitter does not already run inside the pinned image with the shared
 SFS mount, dense SFT has one tracked zero-GPU preflight Job. Start from a clean

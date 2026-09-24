@@ -35,6 +35,7 @@ from cyber_post_train.direct_submit import (
     Kubectl,
     collect_sfs_output_check,
     create_sfs_output_check_once,
+    direct_preview_sft_once,
     direct_submit_lr30_qualification_once,
     direct_submit_sft_once,
     render_cpu_checkpoint_seal_pod,
@@ -553,10 +554,7 @@ def test_dev_render_adds_cluster_enforced_deadline_without_production_selector()
         run_id=RUN_ID,
     )
     assert rendered["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
-    assert (
-        rendered["spec"]["activeDeadlineSeconds"]
-        == SFT_DEVELOPMENT_DEADLINE_SECONDS
-    )
+    assert rendered["spec"]["activeDeadlineSeconds"] == SFT_DEVELOPMENT_DEADLINE_SECONDS
     assert rendered["spec"]["ttlSecondsAfterFinished"] == 0
     assert proof["active_deadline_seconds"] == SFT_DEVELOPMENT_DEADLINE_SECONDS
     assert proof["kubernetes_context"] == SFT_DEVELOPMENT_CONTEXT
@@ -568,8 +566,7 @@ def test_dev_render_adds_cluster_enforced_deadline_without_production_selector()
         *rendered["spec"]["rayClusterSpec"]["workerGroupSpecs"],
     ]
     assert all(
-        group["template"]["spec"]["nodeSelector"]
-        == {"workload": "fleetai-training-ng-gpu"}
+        group["template"]["spec"]["nodeSelector"] == {"workload": "fleetai-training-ng-gpu"}
         for group in groups
     )
 
@@ -589,8 +586,7 @@ def test_dev_cleanup_guardian_is_zero_gpu_alert_off_and_creation_bounded():
         f"import time;time.sleep({SFT_DEVELOPMENT_GUARDIAN_SLEEP_SECONDS})",
     ]
     assert all(
-        "nvidia.com/gpu" not in container["resources"][field]
-        for field in ("requests", "limits")
+        "nvidia.com/gpu" not in container["resources"][field] for field in ("requests", "limits")
     )
 
 
@@ -780,9 +776,7 @@ def test_direct_fallback_is_sft_only_and_proves_no_fleet_secret(plan_value, requ
         )
 
 
-def test_sft_cluster_binding_rejects_context_that_differs_from_plan(
-    tmp_path, sfs_jobs_root
-):
+def test_sft_cluster_binding_rejects_context_that_differs_from_plan(tmp_path, sfs_jobs_root):
     jobs, kube = FakeJobs(), FakeKubectl()
     kube.context = SFT_DEVELOPMENT_CONTEXT
     journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
@@ -914,9 +908,48 @@ def test_direct_submit_checks_twice_journals_then_creates_exactly_once(tmp_path,
     assert journal.stat().st_mode & 0o777 == 0o600
 
 
-def test_dev_direct_submit_server_dry_runs_and_creates_exact_deadline(
-    tmp_path, sfs_jobs_root
-):
+def test_direct_preview_checks_live_servers_without_creating(sfs_jobs_root):
+    jobs, kube = FakeJobs(), FakeKubectl()
+    result = direct_preview_sft_once(
+        plan=plan(),
+        request=request(),
+        jobs=jobs,
+        kubectl=kube,
+        run_id=RUN_ID,
+        jobs_root=sfs_jobs_root,
+    )
+    assert result["schema"] == "cyber_sft_direct_server_preview_v1"
+    assert result["submitted"] is False
+    assert result["root_failure_alerts"] == "off"
+    assert result["priority_class"] == "c1"
+    assert result["effective_priority"] == 10_000
+    assert result["queue_priority"] == "q1"
+    assert result["queue_name"] == "training-lq"
+    assert (result["nodes"], result["gpus"]) == (2, 16)
+    assert jobs.calls == ["history", ("preview", request()), "history"]
+    assert [call[0] for call in kube.calls].count("list") == 4
+    assert [call[0] for call in kube.calls].count("dry-run") == 1
+    assert [call[0] for call in kube.calls].count("capacity") == 1
+    assert [call[0] for call in kube.calls].count("create") == 0
+    assert not list(sfs_jobs_root.iterdir())
+
+
+def test_direct_preview_rejects_dev_before_any_cluster_call(sfs_jobs_root):
+    jobs, kube = FakeJobs(), FakeKubectl()
+    kube.context = SFT_DEVELOPMENT_CONTEXT
+    with pytest.raises(JobsError, match="production-only"):
+        direct_preview_sft_once(
+            plan=dev_plan(),
+            request=request(),
+            jobs=jobs,
+            kubectl=kube,
+            run_id=RUN_ID,
+            jobs_root=sfs_jobs_root,
+        )
+    assert jobs.calls == [] and kube.calls == []
+
+
+def test_dev_direct_submit_server_dry_runs_and_creates_exact_deadline(tmp_path, sfs_jobs_root):
     jobs, kube = FakeJobs(), FakeKubectl()
     kube.context = SFT_DEVELOPMENT_CONTEXT
     journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
@@ -949,9 +982,7 @@ def test_dev_direct_submit_server_dry_runs_and_creates_exact_deadline(
         *kube.created["spec"]["rayClusterSpec"]["workerGroupSpecs"],
     ]
     assert all(
-        TRAINING_GPU_CLUSTER_SELECTOR.keys().isdisjoint(
-            group["template"]["spec"]["nodeSelector"]
-        )
+        TRAINING_GPU_CLUSTER_SELECTOR.keys().isdisjoint(group["template"]["spec"]["nodeSelector"])
         for group in groups
     )
     assert [call[0] for call in kube.calls].count("dry-run") == 2
@@ -966,9 +997,7 @@ def test_dev_direct_submit_server_dry_runs_and_creates_exact_deadline(
     ]
 
 
-def test_dev_guardian_is_released_when_capacity_fails_before_rayjob_intent(
-    tmp_path, sfs_jobs_root
-):
+def test_dev_guardian_is_released_when_capacity_fails_before_rayjob_intent(tmp_path, sfs_jobs_root):
     class RejectedCapacity(FakeKubectl):
         context = SFT_DEVELOPMENT_CONTEXT
 

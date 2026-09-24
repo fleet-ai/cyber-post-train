@@ -1150,8 +1150,7 @@ def render_sft_rayjob(
         raise JobsError("SFT Kubernetes context differs from the immutable cluster target")
     development = target == "dev"
     if development and (
-        plan.get("execution", {}).get("cleanup_maximum_seconds")
-        != SFT_DEVELOPMENT_DEADLINE_SECONDS
+        plan.get("execution", {}).get("cleanup_maximum_seconds") != SFT_DEVELOPMENT_DEADLINE_SECONDS
     ):
         raise JobsError("development SFT requires the exact 30-minute deadline")
     manifest, proof = _render_rayjob(
@@ -1308,8 +1307,7 @@ def validate_sft_dev_cleanup_guardian(
             "limits": {"cpu": "100m", "memory": "128Mi"},
         }
         or any(
-            "nvidia.com/gpu" in resources.get(boundary, {})
-            for boundary in ("requests", "limits")
+            "nvidia.com/gpu" in resources.get(boundary, {}) for boundary in ("requests", "limits")
         )
     ):
         raise JobsError("development cleanup guardian behavior changed")
@@ -2292,6 +2290,63 @@ def create_sft_cpu_preflight_once(
     return result
 
 
+def preview_sft_cpu_preflight(
+    *,
+    directory: Path,
+    source_commit: str,
+    attempt: int,
+    kubectl: Kubectl,
+) -> dict:
+    """Prove one exact zero-GPU SFT preflight without creating anything."""
+    try:
+        package = build_sft_cpu_preflight_job(
+            directory,
+            source_commit=source_commit,
+            attempt=attempt,
+        )
+        proof = validate_sft_cpu_preflight_job_package(package)
+        target, _ = plan_api_target(package.plan)
+        expected_context = {
+            "prod": SFT_PRODUCTION_CONTEXT,
+            "dev": SFT_DEVELOPMENT_CONTEXT,
+        }[target]
+        if kubectl.context != expected_context:
+            raise JobsError("SFT CPU-preflight context differs from the immutable cluster target")
+        node_fit = validate_sft_cpu_preflight_job_node_fit(package, kubectl._cpu_node_inventory())
+    except (OSError, ValueError) as exc:
+        raise JobsError(str(exc)) from None
+    inventory = kubectl.list("jobs.batch")
+    _assert_output_check_job_absent(inventory, proof["name"])
+    server_object = kubectl.dry_run(package.job)
+    try:
+        validate_sft_cpu_preflight_job_response(server_object, package, require_uid=False)
+    except ValueError as exc:
+        raise JobsError(str(exc)) from None
+    _assert_output_check_job_absent(kubectl.list("jobs.batch"), proof["name"])
+    return {
+        "schema": "cyber_sft_cpu_preflight_server_preview_v1",
+        "status": "passed",
+        "submitted": False,
+        "gpus": 0,
+        "name": proof["name"],
+        "attempt": attempt,
+        "namespace": NAMESPACE,
+        "kubernetes_context": kubectl.context,
+        "root_failure_alerts": server_object["metadata"]["annotations"][FAILURE_ALERT_ANNOTATION],
+        "queue_priority": server_object["metadata"]["labels"]["kueue.x-k8s.io/priority-class"],
+        "queue_name": server_object["metadata"]["labels"]["kueue.x-k8s.io/queue-name"],
+        "priority_class": server_object["spec"]["template"]["spec"]["priorityClassName"],
+        "effective_priority": server_object["spec"]["template"]["spec"]["priority"],
+        "fitting_cpu_nodes": node_fit["fitting_nodes"],
+        "plan_sha256": proof["plan_sha256"],
+        "request_sha256": proof["request_sha256"],
+        "manifest_sha256": proof["manifest_sha256"],
+        "server_manifest_sha256": digest(server_object),
+        "bundle_sha256": proof["bundle_sha256"],
+        "source_commit": source_commit,
+    }
+
+
 def collect_sft_cpu_preflight(
     *,
     directory: Path,
@@ -2467,9 +2522,7 @@ def _direct_submit_dev_sft_once(
     _assert_kubernetes_unique(inventories, request, proof)
     guardian = render_sft_dev_cleanup_guardian(proof["name"])
     _assert_output_check_job_absent(inventories[1], guardian["metadata"]["name"])
-    validate_sft_dev_cleanup_guardian(
-        kubectl.dry_run(guardian), proof["name"], require_uid=False
-    )
+    validate_sft_dev_cleanup_guardian(kubectl.dry_run(guardian), proof["name"], require_uid=False)
 
     _assert_api_unique(jobs.all_runs(), request)
     inventories = [kubectl.list("rayjobs.ray.io"), kubectl.list("jobs.batch")]
@@ -2506,9 +2559,7 @@ def _direct_submit_dev_sft_once(
 
     rayjob_intent = False
     try:
-        live_guardian = kubectl.get_operator_object(
-            "job", guardian["metadata"]["name"]
-        )
+        live_guardian = kubectl.get_operator_object("job", guardian["metadata"]["name"])
         if live_guardian is None:
             raise JobsError("development cleanup guardian disappeared before RayJob create")
         validate_sft_dev_cleanup_guardian(live_guardian, proof["name"], require_uid=True)
@@ -2676,6 +2727,109 @@ def direct_submit_sft_once(
         capacity_gate=lambda: kubectl.sft_capacity_census(plan),
         require_readback=True,
     )
+
+
+def direct_preview_sft_once(
+    *,
+    plan: dict,
+    request: dict,
+    jobs: Any,
+    kubectl: Kubectl,
+    run_id: str | None = None,
+    jobs_root: Path = SFS_JOBS_ROOT,
+    output_absence_receipt: dict | None = None,
+) -> dict:
+    """Prove the exact live SFT render and server defaults without creating it."""
+    _assert_sft_contract(plan, request)
+    target, _ = plan_api_target(plan)
+    expected_context = {
+        "prod": SFT_PRODUCTION_CONTEXT,
+        "dev": SFT_DEVELOPMENT_CONTEXT,
+    }[target]
+    if kubectl.context != expected_context:
+        raise JobsError("direct SFT context differs from the immutable cluster target")
+    if target != "prod":
+        raise JobsError(
+            "exact read-only SFT preview is production-only; development ownership "
+            "requires the create-returned cleanup guardian UID"
+        )
+    from training.sft_dispatch import compiler_for_plan
+
+    if compiler_for_plan(plan).job_request(plan) != request:
+        raise JobsError("saved SFT request differs from the current source-bound renderer")
+    try:
+        output_absence = prove_output_absent(
+            plan,
+            request,
+            jobs_root=jobs_root,
+            receipt=output_absence_receipt,
+        )
+    except ValueError as exc:
+        raise JobsError(str(exc)) from None
+
+    _assert_api_unique(jobs.all_runs(), request)
+    preview = jobs.raw_preview(request)
+    manifest, proof = render_sft_rayjob(
+        plan,
+        request,
+        preview,
+        kubernetes_context=kubectl.context,
+        run_id=run_id,
+    )
+    inventories = [kubectl.list("rayjobs.ray.io"), kubectl.list("jobs.batch")]
+    _assert_kubernetes_unique(inventories, request, proof)
+    server_object = kubectl.dry_run(manifest)
+    _assert_created_identity(
+        server_object,
+        proof,
+        request,
+        manifest,
+        require_uid=False,
+    )
+    _assert_api_unique(jobs.all_runs(), request)
+    inventories = [kubectl.list("rayjobs.ray.io"), kubectl.list("jobs.batch")]
+    _assert_kubernetes_unique(inventories, request, proof)
+    capacity = kubectl.sft_capacity_census(plan)
+    try:
+        output_absence = prove_output_absent(
+            plan,
+            request,
+            jobs_root=jobs_root,
+            receipt=output_absence_receipt,
+        )
+    except ValueError as exc:
+        raise JobsError(str(exc)) from None
+    result = {
+        "schema": "cyber_sft_direct_server_preview_v1",
+        "status": "passed",
+        "submitted": False,
+        "name": proof["name"],
+        "run_id": proof["run_id"],
+        "namespace": NAMESPACE,
+        "cluster_target": target,
+        "kubernetes_context": kubectl.context,
+        "root_failure_alerts": server_object["metadata"]["annotations"][FAILURE_ALERT_ANNOTATION],
+        "priority_class": server_object["spec"]["rayClusterSpec"]["headGroupSpec"]["template"][
+            "spec"
+        ]["priorityClassName"],
+        "effective_priority": server_object["spec"]["rayClusterSpec"]["headGroupSpec"]["template"][
+            "spec"
+        ]["priority"],
+        "queue_priority": server_object["metadata"]["labels"]["kueue.x-k8s.io/priority-class"],
+        "queue_name": server_object["metadata"]["labels"]["kueue.x-k8s.io/queue-name"],
+        "nodes": request["workers"],
+        "gpus": request["workers"] * request["gpus_per_worker"],
+        "image": request["image"],
+        "output_root": request["run_dir"],
+        "plan_sha256": digest(plan),
+        "request_sha256": digest(request),
+        "preview_manifest_sha256": proof["preview_manifest_sha256"],
+        "manifest_sha256": proof["manifest_sha256"],
+        "server_manifest_sha256": digest(server_object),
+        "output_absence_receipt_sha256": output_absence["sha256"],
+        "capacity_census_sha256": capacity["sha256"],
+    }
+    return result
 
 
 def direct_submit_lr30_qualification_once(

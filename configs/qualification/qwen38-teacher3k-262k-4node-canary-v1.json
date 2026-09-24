@@ -113,11 +113,26 @@
       }
     }
   },
-  "blockers_before_any_preview_or_post": [
-    "Current main does not contain the exact parent long-context runtime hooks.",
+  "current_port": {
+    "status": "implemented_and_locally_tested_not_live_qualified",
+    "runtime_variant": "qwen38_sft_262k_4node_v1",
+    "base_runtime_sha256": "sha256:8cb671f377d089e1303248e237f386c256b212b15e41dadc07ac49cf2695ee17",
+    "candidate_runtime_sha256": "sha256:efbd3ddc543c353eb0aea2c4c72dc08ef423a6c01b477e3743337fdb5cf1e2e0",
+    "historical_hook_evidence": "configs/qualification/qwen38-teacher3k-262k-v12-hook-asts.json",
+    "candidate_config": "configs/runs/qwen38-teacher3k-262k-4node-canary-v1.json",
+    "isolated_runtime": "training/sft_262k_runtime.py",
+    "compiler": "training/sft_262k_4node_v1.py",
+    "offline_prepare": {
+      "submitted": false,
+      "plan_sha256": "sha256:3de81b79372b89e2a556e661b978f9743d063970984caf49dc88672e69da0571",
+      "request_sha256": "sha256:492976c4f2b6e89154b3c41a209c7f5fb909fe3687bf42ed310427d5dd8664a7"
+    }
+  },
+  "remaining_blockers_before_any_post": [
     "The four-node hypothesis has no accepted execution or checkpoint-reload receipt.",
     "A fresh zero-GPU preflight must prove the exact model, data, runtime, recipe, output absence and checkpoint policy.",
-    "A live server preview must prove the exact root alert annotation and 4x8 c1 resources before creation."
+    "A live server preview must prove the exact root alert annotation and 4x8 c1 resources before creation.",
+    "Root review must explicitly open the otherwise false GPU submission gate."
   ],
   "server_render_gates": {
     "live_preview_required": true,
@@ -139,5 +154,5 @@
     "planned_concurrent_nodes": 9,
     "authorized_concurrent_node_limit": 10
   },
-  "next_gate": "Port and test only the recovered parent long-context hooks on current main without changing its pinned image or scientific inputs, produce a fresh CPU preflight and live server preview, then obtain root review before any POST."
+  "next_gate": "From the committed isolated runtime port, prepare the exact candidate, execute and collect its zero-GPU preflight, obtain a fresh destination-absence receipt, run the non-creating live Jobs API and Kubernetes server preview, then obtain root review before any GPU POST."
 }

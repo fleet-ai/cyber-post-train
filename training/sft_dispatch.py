@@ -36,6 +36,10 @@ def compiler_for_config(config: dict):
         from . import sft_32k_domain_anchor_v1
 
         return sft_32k_domain_anchor_v1
+    if variant == "qwen38_sft_262k_4node_v1":
+        from . import sft_262k_4node_v1
+
+        return sft_262k_4node_v1
     raise ValueError("SFT runtime variant is not supported by this launch rail")
 
 
