@@ -253,6 +253,7 @@ def _render(
             "completions": 1,
             "parallelism": 1,
             "suspend": True,
+            "ttlSecondsAfterFinished": 0,
             "template": {
                 "metadata": {
                     "annotations": deepcopy(annotations),

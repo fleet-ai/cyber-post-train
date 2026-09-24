@@ -12,6 +12,7 @@ import pytest
 
 from cyber_post_train import cli
 from cyber_post_train.jobs import digest, validate_preview
+from cyber_post_train.sft_cpu_preflight_job import build_sft_cpu_preflight_job
 from tests.test_direct_submit import manifest, preview
 from training import sft_262k_4node_v1 as compiler
 from training import sft_262k_runtime as hooks
@@ -137,6 +138,21 @@ def test_candidate_allows_preview_and_zero_gpu_preflight_but_blocks_gpu_submit()
     cli._external_action_gate(plan, "preflight")
     with pytest.raises(ValueError, match="submit blocked by qualification gate"):
         cli._external_action_gate(plan, "submit")
+
+
+def test_candidate_zero_gpu_preflight_job_has_immediate_terminal_ttl(tmp_path):
+    plan = candidate()
+    request = compiler.job_request(plan)
+    prepared = tmp_path / "prepared"
+    cli._prepare(prepared, plan, request)
+    package = build_sft_cpu_preflight_job(
+        prepared,
+        source_commit="a" * 40,
+        attempt=1,
+    )
+    assert package.job["spec"]["ttlSecondsAfterFinished"] == 0
+    assert "nvidia.com/gpu" not in json.dumps(package.job)
+    assert plan["qualification"]["submission_gate"]["submission_authorized"] is False
 
 
 def test_candidate_standard_jobs_rail_matches_runtime_watchdog():
