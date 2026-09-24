@@ -196,13 +196,19 @@ packet into a request by hand.
 Production submission is also blocked until an independent supervisor is
 already running. It must reconcile an uncertain create by exact rendered name
 and run ID, bind the created RayJob and every RayCluster, Kueue Workload and Pod
-UID, and observe them through terminal release. The candidate's internal bounds
-are 30 minutes for startup, 20 minutes of confirmed no progress, an eight-hour
-absolute runtime ceiling, and five minutes for a checkpoint already being
-written. After terminal state the supervisor must allow at most five minutes
-for release, then prove the bound objects are absent and all 32 GPUs are free.
-No such supervisor is assigned yet, so this packet remains nonlaunchable even
-if its zero-GPU preflight later passes.
+UID, and observe them through terminal release. From the first allocated GPU it
+allows 30 minutes to reach the runtime's authenticated start marker. The
+runtime's own watchdog starts later, when `_wait_for_training` constructs it;
+from that point it uses a 30-minute startup allowance, a 20-minute confirmed
+no-progress check, an eight-hour hard ceiling, and five more minutes only while
+a checkpoint is advancing. Independently, the external supervisor must force a
+terminal action no later than 29,100 seconds after the authenticated start
+marker, or 30,900 seconds after GPU allocation. It then allows at most five
+minutes for normal release and five minutes after an authorized UID-bound
+delete to prove the objects are absent and all 32 GPUs are free. Thus the
+complete allocation-to-release-confirmation outer bound is 31,500 seconds. No
+such supervisor is assigned yet, so this packet remains nonlaunchable even if
+its zero-GPU preflight later passes.
 
 After preparing the candidate, these two commands exercise only non-creating
 server rendering:

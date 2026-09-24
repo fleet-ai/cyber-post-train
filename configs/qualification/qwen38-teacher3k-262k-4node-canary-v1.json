@@ -117,15 +117,15 @@
     "status": "implemented_and_locally_tested_not_live_qualified",
     "runtime_variant": "qwen38_sft_262k_4node_v1",
     "base_runtime_sha256": "sha256:8cb671f377d089e1303248e237f386c256b212b15e41dadc07ac49cf2695ee17",
-    "candidate_runtime_sha256": "sha256:9084ff5d01bb4f072365a6d4a46d1e527a606e92abbede6964a2db884bc5e71a",
+    "candidate_runtime_sha256": "sha256:0e9d494917b758729601102e9eec176a2d7247d7165fe95476c6a58672851a63",
     "historical_hook_evidence": "configs/qualification/qwen38-teacher3k-262k-v12-hook-asts.json",
     "candidate_config": "configs/runs/qwen38-teacher3k-262k-4node-canary-v1.json",
     "isolated_runtime": "training/sft_262k_runtime.py",
     "compiler": "training/sft_262k_4node_v1.py",
     "offline_prepare": {
       "submitted": false,
-      "plan_sha256": "sha256:b93d010cc76e98f4f15eebcbc3b6afaffa3ff73939d7f6607ce24433d410e5e4",
-      "request_sha256": "sha256:ae657f0018ebffd12c8df0d0fe1d803703e1072eb3538b89464230f2d945bf84"
+      "plan_sha256": "sha256:f80238bbd287e2f622b8ffd353a2dba795bf9d4414bc770ca06912b79487e3e6",
+      "request_sha256": "sha256:759ae2002aae5373dcbae5012e82ebe564815373dc8fc67158b01741d4d30c1e"
     }
   },
   "remaining_blockers_before_any_post": [
@@ -147,11 +147,21 @@
   "production_release_supervision": {
     "status": "absent_blocks_submission",
     "poll_seconds": 60,
-    "startup_seconds": 1800,
-    "idle_seconds": 1200,
-    "hard_seconds": 28800,
-    "checkpoint_drain_seconds": 300,
+    "external_deadlines": {
+      "gpu_allocation_to_authenticated_started_seconds": 1800,
+      "authenticated_started_to_forced_terminal_action_seconds": 29100,
+      "gpu_allocation_to_forced_terminal_action_seconds": 30900,
+      "gpu_allocation_to_release_confirmation_outer_bound_seconds": 31500
+    },
+    "runtime_watchdog_bounds": {
+      "anchor": "ProgressWatchdog construction in _wait_for_training",
+      "startup_seconds": 1800,
+      "idle_seconds": 1200,
+      "hard_seconds": 28800,
+      "checkpoint_drain_seconds": 300
+    },
     "terminal_release_grace_seconds": 300,
+    "post_delete_confirmation_seconds": 300,
     "required_uid_bindings": [
       "RayJob",
       "RayCluster",

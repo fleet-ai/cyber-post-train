@@ -44,7 +44,14 @@ RELEASE_SUPERVISION = {
     "schema": "qwen38_262k_4node_release_supervision_v1",
     "status": "absent_blocks_submission",
     "poll_seconds": 60,
-    "runtime_bounds": {
+    "external_deadlines": {
+        "gpu_allocation_to_authenticated_started_seconds": 1800,
+        "authenticated_started_to_forced_terminal_action_seconds": 29100,
+        "gpu_allocation_to_forced_terminal_action_seconds": 30900,
+        "gpu_allocation_to_release_confirmation_outer_bound_seconds": 31500,
+    },
+    "runtime_watchdog_bounds": {
+        "anchor": "ProgressWatchdog construction in _wait_for_training",
         "startup_seconds": 1800,
         "idle_seconds": 1200,
         "hard_seconds": 28800,
@@ -57,6 +64,7 @@ RELEASE_SUPERVISION = {
         "all Pods",
     ],
     "terminal_release_grace_seconds": 300,
+    "post_delete_confirmation_seconds": 300,
     "terminal_proof": [
         "all bound Kubernetes objects absent",
         "all 32 requested GPUs released",

@@ -145,13 +145,21 @@ def test_candidate_release_supervision_bounds_match_runtime_watchdog():
     plan = candidate()
     supervision = plan["qualification"]["submission_gate"]["required_release_supervision"]
     assert supervision["status"] == "absent_blocks_submission"
-    assert supervision["runtime_bounds"] == {
+    assert supervision["external_deadlines"] == {
+        "gpu_allocation_to_authenticated_started_seconds": 1800,
+        "authenticated_started_to_forced_terminal_action_seconds": 29100,
+        "gpu_allocation_to_forced_terminal_action_seconds": 30900,
+        "gpu_allocation_to_release_confirmation_outer_bound_seconds": 31500,
+    }
+    assert supervision["runtime_watchdog_bounds"] == {
+        "anchor": "ProgressWatchdog construction in _wait_for_training",
         "startup_seconds": base_runtime.WATCHDOG_STARTUP_SECONDS,
         "idle_seconds": base_runtime.WATCHDOG_IDLE_SECONDS,
         "hard_seconds": base_runtime.sft_watchdog_hard_seconds(plan),
         "checkpoint_drain_seconds": base_runtime.WATCHDOG_DRAIN_SECONDS,
     }
     assert supervision["terminal_release_grace_seconds"] == 300
+    assert supervision["post_delete_confirmation_seconds"] == 300
     assert supervision["required_uid_bindings"] == [
         "RayJob",
         "RayCluster",
