@@ -34,6 +34,7 @@ class FakeClient:
             "key": row["task"]["key"],
             "eval_task_version_id": row["task"]["version_id"],
             "task_lifecycle_status": "production",
+            "environment_version_id": row["environment"]["version_id"],
             "metadata": {
                 "cyber_contract": {
                     "evidence_schema": "1.0.0",
@@ -82,6 +83,54 @@ def _wrap(body, label):
 def _static_evidence():
     wave = miles_signal_wave.load()
     lanes = transition._lane_receipts()
+    adapter_commit = "1" * 40
+    operator_commit = "2" * 40
+    adapter_tests = transition._sealed(
+        {
+            "schema": transition.TEST_RECEIPT_SCHEMA,
+            "subject": "adapter",
+            "commit": adapter_commit,
+            "status": "passed",
+            "commands": ["pytest focused-adapter", "ruff check", "ruff format --check"],
+            "passed": 213,
+            "failed": 0,
+            "ruff_check": True,
+            "ruff_format_check": True,
+            "git_diff_check": True,
+            "observed_at": transition._stamp(NOW),
+        }
+    )
+    image = transition._sealed(
+        {
+            "schema": transition.IMAGE_PREFLIGHT_SCHEMA,
+            "status": "passed",
+            "runtime_image": mechanics.IMAGE,
+            "image_digest": "sha256:" + mechanics.IMAGE.rsplit("@sha256:", 1)[1],
+            "source_closure_sha256": "sha256:" + digest(signal.runtime_source_manifest()),
+            "checks": {
+                "image_digest_exact": True,
+                "pinned_fti_imports": True,
+                "pinned_miles_sources": True,
+                "zero_update_entrypoint": True,
+            },
+            "observed_at": transition._stamp(NOW),
+        }
+    )
+    operator_tests = transition._sealed(
+        {
+            "schema": transition.TEST_RECEIPT_SCHEMA,
+            "subject": "operator",
+            "commit": operator_commit,
+            "status": "passed",
+            "commands": ["pytest focused-operator", "ruff check", "ruff format --check"],
+            "passed": 50,
+            "failed": 0,
+            "ruff_check": True,
+            "ruff_format_check": True,
+            "git_diff_check": True,
+            "observed_at": transition._stamp(NOW),
+        }
+    )
     excluded = {
         "optimizer_steps",
         "checkpoint",
@@ -92,13 +141,14 @@ def _static_evidence():
     adapter = {
         "schema": transition.ADAPTER_FREEZE_SCHEMA,
         "branch": "codex/test",
-        "commit": "1" * 40,
+        "commit": adapter_commit,
         "clean": True,
         "authority_sha256": wave["sha256"],
         "runtime_image": mechanics.IMAGE,
         "source_file_count": len(signal.runtime_source_manifest()),
         "source_closure_sha256": "sha256:" + digest(signal.runtime_source_manifest()),
-        "tests_receipt_sha256": "sha256:" + digest("adapter-tests"),
+        "tests_receipt_sha256": adapter_tests["sha256"],
+        "exact_image_preflight_receipt_sha256": image["sha256"],
         "tests": {
             "passed": 213,
             "failed": 0,
@@ -113,24 +163,33 @@ def _static_evidence():
     manifest = transition._operator_source_manifest()
     operator = {
         "schema": transition.OPERATOR_FREEZE_SCHEMA,
-        "commit": "2" * 40,
+        "commit": operator_commit,
         "clean": True,
         "source_manifest": manifest,
         "source_closure_sha256": "sha256:" + digest(manifest),
-        "tests_receipt_sha256": "sha256:" + digest("operator-tests"),
+        "tests_receipt_sha256": operator_tests["sha256"],
         "tests": {"passed": 50, "failed": 0},
     }
     adapter_wrapper = _wrap(adapter, "adapter-file")
     operator_wrapper = _wrap(operator, "operator-file")
+    adapter_tests_wrapper = _wrap(adapter_tests, "adapter-tests-file")
+    image_wrapper = _wrap(image, "image-file")
+    operator_tests_wrapper = _wrap(operator_tests, "operator-tests-file")
     return {
         "pins": {
             "adapter_commit": adapter["commit"],
             "adapter_freeze_file_sha256": adapter_wrapper["file_sha256"],
+            "adapter_test_receipt_file_sha256": adapter_tests_wrapper["file_sha256"],
+            "exact_image_preflight_receipt_file_sha256": image_wrapper["file_sha256"],
             "operator_commit": operator["commit"],
             "operator_freeze_file_sha256": operator_wrapper["file_sha256"],
+            "operator_test_receipt_file_sha256": operator_tests_wrapper["file_sha256"],
         },
         "adapter_freeze": adapter_wrapper,
+        "adapter_test_receipt": adapter_tests_wrapper,
+        "exact_image_preflight_receipt": image_wrapper,
         "operator_freeze": operator_wrapper,
+        "operator_test_receipt": operator_tests_wrapper,
     }
 
 
@@ -245,6 +304,23 @@ def test_live_receipt_is_sanitized_and_exact(live_receipt):
     encoded = json.dumps(live_receipt)
     for forbidden in ('"prompt"', '"code"', '"env_variables"', '"credentials"'):
         assert forbidden not in encoded
+
+
+def test_live_receipt_rejects_environment_version_response_drift(monkeypatch):
+    wave = miles_signal_wave.load()
+    _safe_bind(monkeypatch, wave)
+    client = FakeClient(wave)
+    original = client._get
+
+    def drift(path, params=None):
+        value = original(path, params)
+        if path != "/v1/account":
+            value["environment_version_id"] = "00000000-0000-4000-8000-000000000000"
+        return value
+
+    client._get = drift
+    with pytest.raises(ValueError, match="environment-version"):
+        transition.collect_live_task_receipt(client, observed_at=NOW)
 
 
 def test_static_candidate_rebuilds_all_four_lanes_and_stays_unlaunchable(live_receipt):

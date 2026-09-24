@@ -31,11 +31,15 @@ FRESH_PREVIEW_SECONDS = 300
 ADAPTER_FREEZE_SCHEMA = "cyber_qwen38_miles96_adapter_freeze_v1"
 OPERATOR_FREEZE_SCHEMA = "cyber_qwen38_miles96_operator_freeze_v1"
 POST_BUNDLE_SCHEMA = "cyber_qwen38_miles_signal_post_receipt_bundle_v1"
+TEST_RECEIPT_SCHEMA = "cyber_qwen38_miles96_focused_tests_v1"
+IMAGE_PREFLIGHT_SCHEMA = "cyber_qwen38_miles96_exact_image_preflight_v1"
 OPERATOR_SOURCE_PATHS = (
     "cyber_post_train/gpu_capacity.py",
     "cyber_post_train/jobs.py",
     "cyber_post_train/sfs_output.py",
+    "evals/fleet/opencode_self_hosted.py",
     "training/dev_cleanup_observer.py",
+    "training/fleet.py",
     "training/miles96_mechanics_launch.py",
     "training/miles_signal_transition.py",
     "training/miles_signal_wave.py",
@@ -206,6 +210,10 @@ def collect_live_task_receipt(
             f"/v1/tasks/{candidate['task']['key']}",
             {"version_id": candidate["task"]["version_id"]},
         )
+        if response.get("environment_version_id") != candidate["environment"]["version_id"]:
+            raise ValueError(
+                f"live environment-version binding drifted: {candidate['identity']['name']}"
+            )
         selected = {
             "task_key": candidate["task"]["key"],
             "task_version_id": candidate["task"]["version_id"],
@@ -296,6 +304,63 @@ def _commit(value: Any) -> bool:
     return isinstance(value, str) and COMMIT.fullmatch(value) is not None
 
 
+def _validate_test_receipt(
+    wrapper: dict[str, Any],
+    *,
+    expected_file_sha256: str,
+    expected_commit: str,
+    expected_subject: str,
+) -> dict[str, Any]:
+    body = _verify_loaded_receipt(wrapper, expected_file_sha256)
+    _verify_seal(body, TEST_RECEIPT_SCHEMA)
+    if (
+        body.get("subject") != expected_subject
+        or body.get("commit") != expected_commit
+        or body.get("status") != "passed"
+        or not isinstance(body.get("commands"), list)
+        or not body["commands"]
+        or not all(isinstance(command, str) and command for command in body["commands"])
+        or type(body.get("passed")) is not int
+        or body["passed"] < 1
+        or body.get("failed") != 0
+        or body.get("ruff_check") is not True
+        or body.get("ruff_format_check") is not True
+        or body.get("git_diff_check") is not True
+    ):
+        raise ValueError("focused test receipt is incomplete")
+    _time(body["observed_at"])
+    return body
+
+
+def _validate_image_preflight(
+    wrapper: dict[str, Any],
+    *,
+    expected_file_sha256: str,
+    expected_runtime_image: str,
+    expected_source_closure_sha256: str,
+) -> dict[str, Any]:
+    body = _verify_loaded_receipt(wrapper, expected_file_sha256)
+    _verify_seal(body, IMAGE_PREFLIGHT_SCHEMA)
+    image_digest = "sha256:" + expected_runtime_image.rsplit("@sha256:", 1)[1]
+    checks = body.get("checks") or {}
+    if (
+        body.get("status") != "passed"
+        or body.get("runtime_image") != expected_runtime_image
+        or body.get("image_digest") != image_digest
+        or body.get("source_closure_sha256") != expected_source_closure_sha256
+        or checks
+        != {
+            "image_digest_exact": True,
+            "pinned_fti_imports": True,
+            "pinned_miles_sources": True,
+            "zero_update_entrypoint": True,
+        }
+    ):
+        raise ValueError("exact-image preflight receipt is incomplete")
+    _time(body["observed_at"])
+    return body
+
+
 def _validate_adapter_freeze(
     wrapper: dict[str, Any], *, expected_file_sha256: str, expected_commit: str
 ) -> dict[str, Any]:
@@ -327,6 +392,7 @@ def _validate_adapter_freeze(
             "source_file_count",
             "source_closure_sha256",
             "tests_receipt_sha256",
+            "exact_image_preflight_receipt_sha256",
             "tests",
             "lanes",
         }
@@ -338,6 +404,7 @@ def _validate_adapter_freeze(
         or body.get("source_file_count") != len(signal.runtime_source_manifest())
         or body.get("source_closure_sha256") != "sha256:" + digest(signal.runtime_source_manifest())
         or not _sha(body.get("tests_receipt_sha256"))
+        or not _sha(body.get("exact_image_preflight_receipt_sha256"))
         or type(tests.get("passed")) is not int
         or tests["passed"] < 1
         or tests.get("failed") != 0
@@ -387,17 +454,42 @@ def _candidate_gate_status(
     pins = evidence.get("pins") or {}
     adapter_ok = operator_ok = plans_ok = False
     try:
-        _validate_adapter_freeze(
+        adapter = _validate_adapter_freeze(
             evidence["adapter_freeze"],
             expected_file_sha256=pins["adapter_freeze_file_sha256"],
             expected_commit=pins["adapter_commit"],
         )
+        adapter_tests = _validate_test_receipt(
+            evidence["adapter_test_receipt"],
+            expected_file_sha256=pins["adapter_test_receipt_file_sha256"],
+            expected_commit=pins["adapter_commit"],
+            expected_subject="adapter",
+        )
+        image = _validate_image_preflight(
+            evidence["exact_image_preflight_receipt"],
+            expected_file_sha256=pins["exact_image_preflight_receipt_file_sha256"],
+            expected_runtime_image=adapter["runtime_image"],
+            expected_source_closure_sha256=adapter["source_closure_sha256"],
+        )
+        if (
+            adapter["tests_receipt_sha256"] != adapter_tests["sha256"]
+            or adapter["exact_image_preflight_receipt_sha256"] != image["sha256"]
+        ):
+            raise ValueError("adapter freeze references different supporting receipts")
         adapter_ok = True
-        _validate_operator_freeze(
+        operator = _validate_operator_freeze(
             evidence["operator_freeze"],
             expected_file_sha256=pins["operator_freeze_file_sha256"],
             expected_commit=pins["operator_commit"],
         )
+        operator_tests = _validate_test_receipt(
+            evidence["operator_test_receipt"],
+            expected_file_sha256=pins["operator_test_receipt_file_sha256"],
+            expected_commit=pins["operator_commit"],
+            expected_subject="operator",
+        )
+        if operator["tests_receipt_sha256"] != operator_tests["sha256"]:
+            raise ValueError("operator freeze references a different test receipt")
         operator_ok = True
         rebuilt = _lane_receipts()
         plans_ok = (
