@@ -147,9 +147,9 @@ For a foreground fire-and-forget run, use the same explicit execution gate:
 python -m evals.campaign run /restricted/eval-campaign --execute
 ```
 
-`run` repeats score-blind steps, polling only when a round makes no immediate
-progress. Per-cell infrastructure failures remain terminal evidence and do not
-stop siblings. It exits when every cell is terminal, or when the remaining
+`run` repeats score-blind steps, polling when a round makes no immediate
+progress or any driver reports an error. Per-cell infrastructure failures remain
+terminal evidence and do not stop siblings. It exits when every cell is terminal, or when the remaining
 cells are explicitly held by an uncertain launch or a failed serial canary; it
 never replays an uncertain create.
 
