@@ -1,0 +1,439 @@
+{
+  "schema": "cyber_qwen38_sft_checkpoint_inventory_v1",
+  "status": "sanitized_read_only_inventory_no_launch",
+  "observed_at_utc": "2026-09-24T12:22:00Z",
+  "prepared_against_main_commit": "a7a5b38dbd3d66ed88555e1253a0f039c9ce57b7",
+  "scope": {
+    "included": [
+      "prospectively selected full-weight Qwen3.8 cyber SFT arms",
+      "the active Teacher3K 96K native-checkpoint progression",
+      "accepted cyber SFT routes with a defined scientific comparison"
+    ],
+    "excluded": [
+      "LoRA and RL checkpoints",
+      "routes without an exact binding to this cyber SFT program",
+      "duplicate serving aliases for one identical staged artifact"
+    ],
+    "private_task_identities_included": false,
+    "benchmark_content_or_results_read": false,
+    "capability_claimed": false
+  },
+  "authorities": {
+    "teacher3k_lineage_map": {
+      "path": "configs/data/qwen38-teacher3k-training-lineage-map-20260924-v1.json",
+      "file_sha256": "sha256:49be490fed7726e49b92197853f3b2a5504f08dee1617ac6e2cdbfa69d02e5ea",
+      "logical_sha256": "sha256:6e067606fc04162c8765b288982651773aa28c6f72390fe83428a20b9b39e75f"
+    },
+    "teacher3k_heldout_protocol": {
+      "path": "configs/evaluation/qwen38-teacher3k-fleet-heldout20-pass4-protocol-v2.json",
+      "file_sha256": "sha256:a2a0389494fa1bca26911081c1d5f55d235cc52c74c15dcd0d98355b7a4dd106",
+      "logical_sha256": "sha256:2ac58c3ded7ba5c9bacd27dc3a379c726912a3f0cafc3ee542672de730e1fe0e"
+    },
+    "step1000_acceptance": {
+      "path": "docs/evidence/qwen38-teacher3k32-step1000-eval-artifact-accepted-20260923.json",
+      "file_sha256": "sha256:9269501c27a91f5ea4095a2c2a1451709e29bbf9f6ad7eec10a8816dd6609d38",
+      "logical_sha256": "sha256:b120de36f8927874281ed1743fb07c482eedc249c638274cb56f8db6f74b9c71"
+    },
+    "step400_successor": {
+      "path": "configs/evaluation/qwen38-teacher3k96-step400-heldout20-pass4-successor-v1.json",
+      "file_sha256": "sha256:253b206ff493ad479a9d740e0dcc747b21f95434ba807e42a980947c84f2b990",
+      "logical_sha256": "sha256:3dca6ae5a320e67a10b9a66b96af2a4faa7597ce8a423951bc5d06a9aff91046"
+    },
+    "top5_operational_matrix": {
+      "path": "configs/evaluation/qwen38-top5-multibench-pass4-operational-matrix-20260924-v2.json",
+      "file_sha256": "sha256:153bbf9ffe2256de30df58262f96c9d8b6ca880972fdedd1d2496bd319b3f7f9",
+      "logical_sha256": "sha256:389a496130f9a4ce0379d9dd901ee6f5003b7cb1d9fae3bbf02100de202962e4"
+    },
+    "fresh_base_step1000_live_parity": {
+      "observed_at_utc": "2026-09-24T10:36:42.153464Z",
+      "file_sha256": "sha256:4860a6f1b7a6b300d4f3c124192677adaa351dfddefabc4f5ca79793b3002789",
+      "receipt_sha256": "sha256:a5c4548b2df46ddc8a9f81c03f10ae1d06f961d4f7800369493732b48825e0e9"
+    },
+    "paused_registration_batch": {
+      "observed_at_utc": "2026-09-24T08:32:59.159099Z",
+      "file_sha256": "sha256:17be25ee92aaa921ae9367b66216b440599a6886059dcc48e59a2cc3999221d5",
+      "receipt_sha256": "sha256:736c58e991ed35a14d63df1a41f0d93aa33390bdd2ef3dd95f2d87527ccaccf6"
+    },
+    "heldout20_wave_authorization_candidate": {
+      "file_sha256": "sha256:6332cba6edc117613af6265ffd82cdac41210dc41bde8fd5583b0bc98f6cdb7b",
+      "logical_sha256": "sha256:0e80562ab1b9c4383227d7428c286320d97e7700ff1aa2d640d5c8e9783e6b17",
+      "status": "pending_independent_audit_and_root_authorization",
+      "launch_authorized": false
+    }
+  },
+  "heldout_lineage": {
+    "source_selection_file_sha256": "sha256:441f489c11e2f775bca81d98b7f578e0993a459375bf07f9e1828532ae3d91b6",
+    "training_task_keys": 496,
+    "training_task_versions": 1176,
+    "source_sessions": 2886,
+    "valid_corpus_manifests": {
+      "32768": "sha256:a8d08609991d7960cdcdab826bd07c3216bfcd3aa8f6fb33ab7a5fd29648d6f5",
+      "65536": "sha256:377720bd39a7dcb2f5c0dfd152fc9f955d4726f3f13c358dd57cac18bc84a2ae",
+      "98304": "sha256:8297f035f4c5b0446578cfa46897733273286f76e55d486c9598452e5585a479"
+    },
+    "original_candidate_families": 25,
+    "clean_families": 20,
+    "clean_strata": {
+      "development": 13,
+      "final_test": 7
+    },
+    "excluded_families": 5,
+    "excluded_training_aliases": 6,
+    "exact_task_key_overlap": 0,
+    "exact_task_version_overlap": 0,
+    "shared_atom_alias_lineage_requires_family_exclusion": true,
+    "interpretation": "training-lineage heldout for the exact Teacher3K manifests, not globally untouched",
+    "qa33_expansion": {
+      "candidate_versions": 33,
+      "stable_atom_components": 26,
+      "exact_version_exposed_versions": 12,
+      "shared_atom_exposed_versions": 17,
+      "exposed_components": 10,
+      "lineage_unexposed_versions": 16,
+      "unexposed_singleton_components": 16,
+      "runtime_qualified_versions": 0,
+      "add_now": 0
+    }
+  },
+  "actionable_order": [
+    {
+      "rank": 1,
+      "id": "current_base_step1000_matched_pair",
+      "purpose": "finish the already frozen matched diagnostic before another checkpoint comparison",
+      "operational_state": "exact routes live and fresh matched parity accepted",
+      "scientific_state": "no accepted capability result yet",
+      "remaining_gates": [
+        "independent audit of the exact whole-wave packet",
+        "fresh duplicate, preview, readiness, and reservation receipts",
+        "root launch authorization",
+        "outcome-valid matched base and candidate terminal cells"
+      ]
+    },
+    {
+      "rank": 2,
+      "id": "teacher3k96_step400",
+      "purpose": "evaluate the prospectively selected later 96K checkpoint after the predecessor pair is accepted",
+      "operational_state": "future inert successor; checkpoint absent at observation time",
+      "scientific_state": "selected in advance and unobserved",
+      "remaining_gates": [
+        "complete step400 receipt",
+        "immutable seal",
+        "BF16 export and CPU exact-layout validation",
+        "zero-update finite GPU reload",
+        "immutable stage and paused registration",
+        "fresh matched live parity",
+        "accepted predecessor baseline receipt set and fresh prelaunch gates"
+      ]
+    },
+    {
+      "rank": 3,
+      "id": "frozen_top5_remaining_candidates",
+      "artifacts": [
+        "q38-d32-b16-lr5e6-step200",
+        "q38-t3k64-b8-step225",
+        "q38-t3k32-lr1-step500",
+        "q38-t3k96-b8-step300"
+      ],
+      "operational_state": "accepted BF16 export, reload, stage, and paused zero-allocation registration",
+      "scientific_state": "not live-parity-qualified at the current observation",
+      "remaining_gates": [
+        "JIT resume one exact candidate at a time",
+        "fresh exact base-versus-candidate live parity",
+        "benchmark-specific exact roster and runtime qualification",
+        "fresh capacity, duplicate, reservation, and server-preview gates"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "artifact_id": "qwen38-27b-base-control",
+      "source": {
+        "path": "/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "weights_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
+      },
+      "dtype": "BF16",
+      "route": {
+        "id": "chris-q38-base-pass4-v1",
+        "uid": "da760862-0903-46b8-b54b-2b21cc8052a0",
+        "ready_replicas": 1,
+        "pod_restarts": 0
+      },
+      "heldout20": "matched control on the same clean20 roster"
+    },
+    {
+      "artifact_id": "q38-teacher3k-32k-step1000",
+      "source": {
+        "api_name": "chris-q38-t3k32-b8-v3-34148b91",
+        "api_run_id": "34148b91-efe7-45e3-861f-1edd1798935b",
+        "rayjob_uid": "e4d1376c-5d3f-49e5-9f0c-6469cd32c753",
+        "optimizer_step": 1000,
+        "supervised_tokens": 31035607,
+        "corpus_manifest_sha256": "sha256:a8d08609991d7960cdcdab826bd07c3216bfcd3aa8f6fb33ab7a5fd29648d6f5"
+      },
+      "dtype": "BF16",
+      "checkpoint_seal_sha256": "sha256:685af3a1a85bee98d4fa26994f968ec7315107157ea0a4b99a500b7b2e030359",
+      "export": {
+        "path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/hf-export-step1000-v1",
+        "receipt_sha256": "sha256:8a1d9e093fa1f856c35d357cf34861862317491ee83a9268613f1cf86160eef0",
+        "payload_manifest_sha256": "sha256:023c5f8b0559ba050f0d672a6bc27aabecec7d5837595f8ea5bc914446d26db5"
+      },
+      "stage_path": "/models/chris-q38-t3k32-s1000-v1",
+      "route": {
+        "id": "chris-q38-t3k32-s1000-v1",
+        "uid": "f2b93050-9d30-482c-80ad-14648d3afc0c",
+        "ready_replicas": 1,
+        "pod_restarts": 0
+      },
+      "heldout20": "eligible for clean20 only; five exposed families remain excluded"
+    },
+    {
+      "artifact_id": "q38-d32-b16-lr5e6-step200",
+      "source": {
+        "api_name": "chris-q38-d32-b16-lr5e6-v1-c9bbf581",
+        "api_run_id": "c9bbf581-11c1-4472-895f-cad993e26ae0",
+        "rayjob_uid": "b0f395bf-c4b8-44e0-95f1-bce84f1b8f88",
+        "plan_sha256": "sha256:c02e5ac82620dd9d547f3867e4173c134bdab0f4c5da49c3ba7dea5f49efe0a4",
+        "optimizer_step": 200,
+        "selection": "availability fallback for evicted frozen step300",
+        "corpus_manifest_sha256": "sha256:a8d08609991d7960cdcdab826bd07c3216bfcd3aa8f6fb33ab7a5fd29648d6f5"
+      },
+      "dtype": "BF16",
+      "export_receipt_sha256": "sha256:88edcde39542f3e32fc895acf93999230c421e93e794f242958d6f675400a72e",
+      "payload_manifest_sha256": "sha256:2e519ef7f079b73071c83c631351db24764a7efda7c6d67a9e7c0748bfa39982",
+      "route": {
+        "id": "chris-q38-d32-b16-s200-v1",
+        "uid": "c21cfa84-b475-4e54-91f1-ac7a34b4dd61",
+        "phase": "paused",
+        "active_pods": 0
+      },
+      "heldout20": "eligible for clean20 only"
+    },
+    {
+      "artifact_id": "q38-t3k64-b8-step225",
+      "source": {
+        "api_name": "chris-q38-t3k64-b8-v5-f690d588",
+        "api_run_id": "f690d588-c025-4043-9d9a-caaa88e4ce17",
+        "rayjob_uid": "a219cfb9-71a8-45f8-ba00-97a259425d61",
+        "plan_sha256": "sha256:9b2e930486e199a16b9b4f6f47960f5655e803f07d2c01a89b9ed474c073fdc0",
+        "optimizer_step": 225,
+        "selection": "availability fallback for evicted frozen step285",
+        "corpus_manifest_sha256": "sha256:377720bd39a7dcb2f5c0dfd152fc9f955d4726f3f13c358dd57cac18bc84a2ae"
+      },
+      "dtype": "BF16",
+      "export_receipt_sha256": "sha256:4e09a634106991b0f4b50b1a10f2c65a36c2eb3cf167514ea53c6d6cbae1a0b7",
+      "payload_manifest_sha256": "sha256:bfadb6b6cada4f728e560892088945ecdec1b21f70f231e0423f2f0f6e1980e0",
+      "route": {
+        "id": "chris-q38-t3k64-s225-v1",
+        "uid": "35655b70-dbf8-4181-9781-28b7e1138f66",
+        "phase": "paused",
+        "active_pods": 0
+      },
+      "heldout20": "eligible for clean20 only"
+    },
+    {
+      "artifact_id": "q38-t3k32-lr1-step500",
+      "source": {
+        "api_name": "chris-q38-t3k32-lr1-v3-6b3765ec",
+        "api_run_id": "6b3765ec-fee6-462b-bb6d-57d4a4680f2a",
+        "rayjob_uid": "33f7424c-6480-41e4-aa92-3e73fc1cca69",
+        "plan_sha256": "sha256:ebc385578874a3acd5142020fa800eef4cf3fd66a4724c9846e984e3182858e5",
+        "optimizer_step": 500,
+        "selection": "availability fallback for evicted frozen step700",
+        "corpus_manifest_sha256": "sha256:a8d08609991d7960cdcdab826bd07c3216bfcd3aa8f6fb33ab7a5fd29648d6f5"
+      },
+      "dtype": "BF16",
+      "export_receipt_sha256": "sha256:fc568b2b58c744788b7ad361d3bbe57b72e5974ddd7082d52f5ffe99db4fc65e",
+      "payload_manifest_sha256": "sha256:65286cb32507c18a7c76c9e7f7614530774c9549c431c1ca38a55ed14fe6c900",
+      "route": {
+        "id": "chris-q38-t3k32-lr1-s500-v1",
+        "uid": "fe01d964-c9ea-4c02-b86a-d388fd1eb30b",
+        "phase": "paused",
+        "active_pods": 0
+      },
+      "heldout20": "eligible for clean20 only"
+    },
+    {
+      "artifact_id": "q38-t3k96-b8-step300",
+      "source": {
+        "api_name": "chris-q38-t3k96-b8-v3-e7d5c0f8",
+        "api_run_id": "e7d5c0f8-289a-483f-b851-2d6eafdcf1fe",
+        "rayjob_uid": "5d1ccf28-df5a-4161-b876-61507bd5029b",
+        "plan_sha256": "sha256:6741fb125ce20856df85fa065ccfc8723bb99f327a809aa10725a57fc0558792",
+        "optimizer_step": 300,
+        "selection": "frozen top-five checkpoint",
+        "corpus_manifest_sha256": "sha256:8297f035f4c5b0446578cfa46897733273286f76e55d486c9598452e5585a479"
+      },
+      "dtype": "BF16",
+      "export_receipt_sha256": "sha256:d37111f24b01da37fee922d76671a778a364c7622f42fec29ffa5f19c9a11270",
+      "payload_manifest_sha256": "sha256:7e610d8005c66939945053341fd2a02b710cd2b1ea49f4a3326aabb766a8c51d",
+      "route": {
+        "id": "chris-q38-t3k96-s300-v1",
+        "uid": "10f37a96-d3d2-4830-8362-baa8209b9490",
+        "phase": "paused",
+        "active_pods": 0
+      },
+      "heldout20": "eligible for clean20 only"
+    },
+    {
+      "artifact_id": "q38-t3k96-b8-step350",
+      "source": {
+        "api_name": "chris-q38-t3k96-b8-v3-e7d5c0f8",
+        "api_run_id": "e7d5c0f8-289a-483f-b851-2d6eafdcf1fe",
+        "rayjob_uid": "5d1ccf28-df5a-4161-b876-61507bd5029b",
+        "plan_sha256": "sha256:6741fb125ce20856df85fa065ccfc8723bb99f327a809aa10725a57fc0558792",
+        "optimizer_step": 350,
+        "supervised_tokens": 23603248,
+        "corpus_manifest_sha256": "sha256:8297f035f4c5b0446578cfa46897733273286f76e55d486c9598452e5585a479"
+      },
+      "native_checkpoint": {
+        "path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/checkpoints/global_step_350",
+        "receipt_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/checkpoint_receipts/step-000350.json",
+        "receipt_sha256": "sha256:12c92a50587ab9828f17a8515df1b7978f6be0def34a4eac4886bbd3ebf20e3e",
+        "saved_at_utc": "2026-09-24T08:24:57.786118Z",
+        "file_count": 33,
+        "total_bytes": 324627486795
+      },
+      "dtype": "intended BF16; tensors not independently reread by this inventory",
+      "promotion_state": "native checkpoint receipt only",
+      "seal_present": false,
+      "export_present": false,
+      "gpu_reload_present": false,
+      "stage_present": false,
+      "route_present": false,
+      "selection_state": "inventory only; step400 successor remains the prospectively selected next comparison",
+      "heldout20": "eligible for clean20 only if evaluated without additional training data"
+    }
+  ],
+  "context96_progression": {
+    "run_state": "RUNNING and productive",
+    "signed_optimizer_step": 372,
+    "newest_complete_checkpoint_step": 350,
+    "step400_checkpoint_present": false,
+    "native_retention": 2,
+    "retained_native_steps": [
+      300,
+      350
+    ],
+    "persistent_checkpoint_receipt_steps": [
+      50,
+      100,
+      150,
+      200,
+      250,
+      300,
+      350
+    ],
+    "sealed_steps": [
+      50,
+      100,
+      300
+    ],
+    "exported_steps": [
+      50,
+      100,
+      300
+    ],
+    "zero_update_gpu_reload_steps": [
+      50,
+      300
+    ],
+    "staged_and_registered_steps": [
+      300
+    ],
+    "fallbacks": {
+      "step50": "BF16 export and finite zero-update reload accepted; not staged or registered",
+      "step100": "BF16 export and CPU validation accepted; GPU reload, stage, and route absent",
+      "steps150_200_250": "receipts retained; native directories evicted and no export observed"
+    }
+  },
+  "other_accepted_routes": {
+    "teacher3k_superseded_learning_curve_points": [
+      {
+        "route": "chris-q38-t3k32-s600-v1",
+        "revision": "sha256:adf5d8c6609ea441744eab13ed0649c22eb4ad5f95baeebdcd60880c206702a6"
+      },
+      {
+        "route": "chris-q38-t3k32-s700-v1",
+        "revision": "sha256:41310cfdc8ea0d096d784c2f86c2d01fba9ad12263426d1e0fcd812bedcde013"
+      },
+      {
+        "route": "chris-q38-t3k32-s800-v1",
+        "revision": "sha256:bd1b01c25d96a5e4f637399282ade26275c2a8b9d0f2a38302b173aff07e3d5b"
+      },
+      {
+        "route": "chris-q38-t3k32-s900-v1",
+        "revision": "sha256:d7f3e596b3b54736ece2f7d1c67c220ea19c27ba47defedd923e61c48ca2df73"
+      },
+      {
+        "route": "chris-q38-t3k64-s195-v1",
+        "revision": "sha256:b6c26938ad762caddb5b0b4931a8a62b17f54e0b19efabe8f3811d6ca2a8ea3f"
+      }
+    ],
+    "historical_cyber_sft_comparators": [
+      {
+        "artifact": "q38-fresh75-step230",
+        "canonical_route": "chris-q38-fresh75-step230-web-v2",
+        "revision": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029"
+      },
+      {
+        "artifact": "q38-teacher-dense-v5-step186",
+        "canonical_route": "chris-q38-teacher-v5-step186-web-v1",
+        "revision": "sha256:e6d59f5a58ce54b913d775cd71b81c64bd54637b53795df82baec0f71efefaf9"
+      },
+      {
+        "artifact": "q38-self-sft-step44",
+        "canonical_route": "chris-q38-self-sft-step44-v1",
+        "revision": "sha256:a0e55bebe9d78ac76c012446ae0147a421cd333e2a6bf2bb6f4fb3450fa776fe"
+      },
+      {
+        "artifact": "q38-available-a-lr30-step76",
+        "canonical_route": "chris-q38-lr30-step76-web-v1",
+        "revision": "sha256:3bef11697759b11db150b705e1882fb2d31a3efbdadbebd948aa917dcacc03a8"
+      }
+    ],
+    "historical_route_disposition": "all are paused and require fresh live parity; clean20 eligibility is unproven until each distinct training lineage is audited",
+    "teacher3k262_step10": {
+      "route": "chris-q38-t3k262-s10-web-v1",
+      "revision": "sha256:d6301dba2cc0e6bc05ea48d2793584d4ca725cba8863dc4ac6ef75bdbbfa668b",
+      "phase": "paused",
+      "disposition": "stale early diagnostic; 262K corpus is outside the valid heldout20 manifest set"
+    }
+  },
+  "live_resource_observation": {
+    "training": {
+      "rayjob": "chris-q38-t3k96-b8-v3-e7d5c0f8",
+      "rayjob_uid": "5d1ccf28-df5a-4161-b876-61507bd5029b",
+      "status": "RUNNING",
+      "ready_pods": 1,
+      "pod_restarts": 0,
+      "allocated_gpus": 8,
+      "gpu_utilization_15m_percent": 93.975
+    },
+    "serving": {
+      "ready_routes": [
+        "chris-q38-base-pass4-v1",
+        "chris-q38-t3k32-s1000-v1"
+      ],
+      "allocated_gpus": 16,
+      "gpu_utilization_15m_percent": 0.0,
+      "direct_samples_percent": [
+        0,
+        0,
+        0
+      ],
+      "openai_http_route_rules_overlap_observed": true,
+      "explicit_model_header_routes_bound": true,
+      "disposition": "live parity is accepted, but every campaign still needs exact served-model readback; apply the dedicated-capacity lifecycle if no authorized consumer is imminent"
+    }
+  },
+  "effects": {
+    "cluster_mutations": 0,
+    "serving_mutations": 0,
+    "checkpoint_promotions": 0,
+    "eval_launches": 0,
+    "model_calls": 0,
+    "scoring_calls": 0
+  },
+  "sha256": "sha256:9bcf1e145bba5ccb492e19a6bb9c99d76c987626224f9da45bd54cd25241c184"
+}
