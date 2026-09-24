@@ -635,9 +635,16 @@ def _prepare_arm(
     if run_script is None:
         raise ValueError(f"{arm_id} run script is not staged")
     run_text = run_script.read_text(encoding="utf-8")
-    for dependency in ("model_artifact_v2.py", "model_artifact_v3.py"):
-        if f"/bootstrap/{dependency}" in run_text and dependency not in actual_source_files:
-            raise ValueError(f"{arm_id} runtime dependency {dependency} is not staged")
+    generated = {
+        "config.json",
+        "task-set.json",
+        "model-artifact.json",
+        "model-artifact-acceptance.json",
+    }
+    required_runtime = heldout_launch._bootstrap_dependencies(run_text) - generated  # noqa: SLF001
+    missing_runtime = required_runtime - set(actual_source_files)
+    if missing_runtime:
+        raise ValueError(f"{arm_id} runtime dependencies are not staged: {sorted(missing_runtime)}")
     if artifact_binding is not None:
         artifact = _read_json(checkpoint_path, f"{arm_id} model artifact packet")
         schema = artifact.get("schema")

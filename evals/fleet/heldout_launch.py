@@ -49,6 +49,7 @@ DATABASE_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,62}")
 KUBERNETES_UID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 ENV_PREFIX = re.compile(r"(?:[A-Za-z_][A-Za-z0-9_]*)?")
+CANONICAL_RUN_SCRIPT = Path(__file__).parent / "scripts/run_qwen38_dev17_single_arm_v3.sh"
 SUPPORTED_SPLIT_SCHEMAS = {
     "cyber_representative_study_split_v2",
     "cyber_parameterized_task_family_split_v1",
@@ -408,6 +409,14 @@ def _container_environment(container: dict[str, Any]) -> dict[str, str]:
         else:
             result[name] = "<valueFrom>"
     return result
+
+
+def _bootstrap_dependencies(script: str) -> set[str]:
+    dependencies = set(re.findall(r"/bootstrap/([A-Za-z0-9][A-Za-z0-9_.-]*)", script))
+    if '"/bootstrap/$name"' in script:
+        for block in re.findall(r"for\s+name\s+in\s+(.*?);\s*do", script, flags=re.DOTALL):
+            dependencies.update(re.findall(r"\b[A-Za-z0-9_.-]+\.py\b", block))
+    return dependencies
 
 
 def _metadata(value: dict[str, Any], label: str) -> dict[str, Any]:
@@ -809,14 +818,22 @@ def build_package(packet_path: Path) -> Package:
         raise HeldoutLaunchError("held-out evaluator config must be training-data ineligible")
     task_set = config.get("task_set")
     run_script = data.get("run.sh")
+    optional_artifacts = {"model-artifact.json", "model-artifact-acceptance.json"}
+    dependencies = _bootstrap_dependencies(run_script) if isinstance(run_script, str) else set()
+    required_dependencies = dependencies - optional_artifacts
+    artifact_dependencies = optional_artifacts & set(data)
     if (
         not isinstance(task_set, str)
         or not task_set
         or Path(task_set).name != task_set
         or environment.get("EVAL_TASK_SET_NAME") != task_set
-        or data.get("task-set.json") != packet.files["task_set"].read_text(encoding="utf-8")
+        or not isinstance(data.get("task-set.json"), str)
+        or data["task-set.json"].encode("utf-8") != packet.files["task_set"].read_bytes()
         or not isinstance(run_script, str)
+        or run_script != CANONICAL_RUN_SCRIPT.read_text(encoding="utf-8")
         or '"$root/configs/evaluation/$EVAL_TASK_SET_NAME"' not in run_script
+        or not required_dependencies.issubset(data)
+        or artifact_dependencies not in (set(), optional_artifacts)
     ):
         raise HeldoutLaunchError("evaluation config task set is invalid")
     configured_task_set = (packet.files["evaluation_config"].parent / task_set).resolve()
