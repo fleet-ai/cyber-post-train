@@ -1,0 +1,553 @@
+{
+  "schema": "qwen38_teacher3k_step1000_corpus_audit_v1",
+  "observed_at": "2026-09-24T11:35:24Z",
+  "repository_base_commit": "0ae3e0923c1e74e65bea3a91f102c1ac7a12917d",
+  "status": "confirmed_defects_replacement_corpus_blocked",
+  "scope": {
+    "checkpoint_stage": "global_step_1000",
+    "audit_mode": "local_read_only_aggregate_metadata",
+    "raw_prompts_or_traces_read": false,
+    "raw_scores_read": false,
+    "private_reasoning_read": false,
+    "external_benchmark_content_read": false
+  },
+  "artifact_bindings": {
+    "private_source_selection": {
+      "file_sha256": "sha256:441f489c11e2f775bca81d98b7f578e0993a459375bf07f9e1828532ae3d91b6",
+      "committed": false,
+      "content_in_public_receipt": "aggregates_only"
+    },
+    "source_manifest": {
+      "file_sha256": "sha256:8e3d5f1afff1a10b2a04b424ebab16699506a4a0f5dd3f0c9ef909182b54ca95",
+      "logical_sha256": "sha256:d0641cc7baf082c0b1d9bd494112ad8562b9c332cb5be5a7696249d9101a96a8",
+      "train_parquet_sha256": "sha256:86452a28af5c77b48c1e53e13a6d8fd9d483eec350d22214cd7717127502a7b1"
+    },
+    "derived_32k_manifest": {
+      "path": "configs/data/qwen38-teacher3k-32k-v1.manifest.json",
+      "file_sha256": "sha256:ebcf6677e51adb22f73602c210281a3f4a847c257155da6ed48cd1c6cba9f3c8",
+      "logical_sha256": "sha256:a8d08609991d7960cdcdab826bd07c3216bfcd3aa8f6fb33ab7a5fd29648d6f5",
+      "train_parquet_sha256": "sha256:bf245db073fcd5a39ff6f90f6fc322710a3694408845bc27bfb6d9eaa6c41e0c"
+    },
+    "materialization_receipt": {
+      "path": "docs/evidence/qwen38-teacher3k-32k-materialization-receipt-20260920.json",
+      "file_sha256": "sha256:da62acb6a92d5560eab8048a6c4e0a95205b1c0c880df042020b2d9970789f23",
+      "logical_sha256": "sha256:af6a686bee1af1520d3ab148b944eb8bf87be4bcedc4f4688d362f9c3bae4686"
+    },
+    "target_length_audit": {
+      "path": "docs/evidence/qwen38-teacher3k-32k-target-audit-20260920.json",
+      "file_sha256": "sha256:a8d0b4ba8bae3413b3a410d1f218c11e8c0ac34cb3e000aa8cd10039b17d8735"
+    },
+    "safe_lineage_metadata": {
+      "file_sha256": "sha256:a5f78c46a0e67b9f7da942fcf0aa0a27731d30d147c8b3f0f7e8a1ccbf51c837",
+      "logical_sha256": "sha256:a3a28f4ffd265df8d9610580381198df05fbe1742369beff558dc7067b001aef",
+      "committed": false,
+      "content_in_public_receipt": "aggregates_only"
+    },
+    "training_lineage_map": {
+      "path": "configs/data/qwen38-teacher3k-training-lineage-map-20260924-v1.json",
+      "file_sha256": "sha256:49be490fed7726e49b92197853f3b2a5504f08dee1617ac6e2cdbfa69d02e5ea",
+      "logical_sha256": "sha256:6e067606fc04162c8765b288982651773aa28c6f72390fe83428a20b9b39e75f"
+    },
+    "corrected_heldout_protocol": {
+      "path": "configs/evaluation/qwen38-teacher3k-fleet-heldout20-pass4-protocol-v2.json",
+      "file_sha256": "sha256:a2a0389494fa1bca26911081c1d5f55d235cc52c74c15dcd0d98355b7a4dd106",
+      "logical_sha256": "sha256:2ac58c3ded7ba5c9bacd27dc3a379c726912a3f0cafc3ee542672de730e1fe0e"
+    },
+    "lineage_reconciliation_report": {
+      "path": "docs/QWEN38_TEACHER3K_FLEET_HELDOUT_LINEAGE_RECONCILIATION_2026-09-24.md",
+      "file_sha256": "sha256:93c4ceb4d36abd5f49a110ba7901e2a61c741c2878c5e1907fc29729f4bba4b3"
+    },
+    "separate_accepted_metadata_projection": {
+      "file_sha256": "sha256:29809b6aabd377b087fb8bcda42468a84734d8b86fcebe5c4ccb6d528e8556c0",
+      "rows": 419,
+      "committed": false,
+      "relationship": "separate_collection_no_digest_or_session_overlap"
+    },
+    "replacement_corpus_plan": {
+      "source_ref": "codex/step1000-corpus-repair-20260924@34f41b8f172e30e4e12c22b71bafa365bcf9a31f",
+      "file_sha256": "sha256:efececc6c0b7f7805c9f8962fe54cddb5d0726836b8abb71b86ecb1564c25c07",
+      "logical_sha256": "sha256:3c485c229d97daff25ed62cfe9852edfa7a1fc8557728a4dfe93c9216e629cd7"
+    }
+  },
+  "corpus": {
+    "source_sessions": 2886,
+    "task_keys": 496,
+    "task_versions": 1176,
+    "source_windows": 3679,
+    "derived_rows": 14693,
+    "assistant_targets": 176654,
+    "supervised_tokens": 57384881,
+    "maximum_single_target_tokens": 4700,
+    "targets_over_16384_tokens": 0,
+    "step1000_exposure": {
+      "distinct_rows": 8000,
+      "supervised_tokens": 31035607,
+      "planned_epoch_token_pct": 54.083247,
+      "exact_task_session_teacher_composition_available_in_permitted_metadata": false
+    }
+  },
+  "concentration": {
+    "teacher_models": {
+      "unit_count": 10,
+      "effective_units_by_token_hhi": 3.486,
+      "top1_token_pct": 49.141954,
+      "top5_token_pct": 90.097026,
+      "entries": [
+        {
+          "model": "grok-4.6",
+          "sessions": 1283,
+          "source_windows": 1404,
+          "supervised_tokens": 28200052,
+          "token_pct": 49.141954
+        },
+        {
+          "model": "gpt-5.6-sol",
+          "sessions": 645,
+          "source_windows": 1091,
+          "supervised_tokens": 7090664,
+          "token_pct": 12.356328
+        },
+        {
+          "model": "claude-opus-4.8",
+          "sessions": 142,
+          "source_windows": 176,
+          "supervised_tokens": 6417344,
+          "token_pct": 11.182987
+        },
+        {
+          "model": "claude-opus-5",
+          "sessions": 216,
+          "source_windows": 231,
+          "supervised_tokens": 5519819,
+          "token_pct": 9.618943
+        },
+        {
+          "model": "grok-4.5",
+          "sessions": 273,
+          "source_windows": 281,
+          "supervised_tokens": 4474192,
+          "token_pct": 7.796813
+        },
+        {
+          "model": "gpt-5.6-terra",
+          "sessions": 45,
+          "source_windows": 141,
+          "supervised_tokens": 1608793,
+          "token_pct": 2.803514
+        },
+        {
+          "model": "kimi-k3",
+          "sessions": 35,
+          "source_windows": 48,
+          "supervised_tokens": 1608576,
+          "token_pct": 2.803136
+        },
+        {
+          "model": "claude-sonnet-5",
+          "sessions": 30,
+          "source_windows": 59,
+          "supervised_tokens": 1098984,
+          "token_pct": 1.915111
+        },
+        {
+          "model": "gemini-3.1-pro-preview",
+          "sessions": 172,
+          "source_windows": 203,
+          "supervised_tokens": 808811,
+          "token_pct": 1.40945
+        },
+        {
+          "model": "claude-opus-4-8",
+          "sessions": 45,
+          "source_windows": 45,
+          "supervised_tokens": 557646,
+          "token_pct": 0.971765
+        }
+      ]
+    },
+    "exact_task_keys": {
+      "unit_count": 496,
+      "effective_units_by_token_hhi": 61.344,
+      "top1_tokens": 4039557,
+      "top1_token_pct": 7.03941,
+      "top5_tokens": 13324951,
+      "top5_token_pct": 23.220317,
+      "top10_tokens": 18435818,
+      "top10_token_pct": 32.126612,
+      "top10pct_units_tokens": 32175374,
+      "top10pct_units_token_pct": 56.069427
+    },
+    "exact_task_versions": {
+      "unit_count": 1176,
+      "effective_units_by_token_hhi": 162.037,
+      "top1_tokens": 2113467,
+      "top1_token_pct": 3.682968,
+      "top5_tokens": 6631091,
+      "top5_token_pct": 11.555467,
+      "top10_tokens": 10418555,
+      "top10_token_pct": 18.155575,
+      "top10pct_units_tokens": 33144863,
+      "top10pct_units_token_pct": 57.758877
+    },
+    "source_sessions": {
+      "unit_count": 2886,
+      "effective_units_by_token_hhi": 1085.797,
+      "top1_tokens": 376781,
+      "top1_token_pct": 0.656586,
+      "top5_tokens": 1615294,
+      "top5_token_pct": 2.814842,
+      "top10_tokens": 2771652,
+      "top10_token_pct": 4.829934,
+      "top10pct_units_tokens": 20536426,
+      "top10pct_units_token_pct": 35.787172,
+      "supervised_token_distribution": {
+        "minimum": 46,
+        "p50": 13623,
+        "p90": 39975,
+        "p95": 52027,
+        "p99": 133936,
+        "maximum": 376781
+      }
+    },
+    "reviewed_atom_lineage_components": {
+      "unique_atom_lineages": 389,
+      "task_atom_memberships": 525,
+      "transitive_component_count": 370,
+      "effective_components_by_token_hhi": 30.349,
+      "components_with_multiple_task_keys": 59,
+      "maximum_task_keys_in_component": 6,
+      "maximum_atom_lineages_in_component": 7,
+      "top1_tokens": 7615880,
+      "top1_token_pct": 13.271579,
+      "top5_tokens": 18460799,
+      "top5_token_pct": 32.170144,
+      "top10_tokens": 23014929,
+      "top10_token_pct": 40.106259
+    },
+    "applications": {
+      "allocation_rule": "equal_fraction_per_distinct_reviewed_atom_application_per_task_key",
+      "task_keys_spanning_multiple_applications": 9,
+      "entries": [
+        {
+          "application": "fira",
+          "fractional_task_keys": {"numerator": 655, "denominator": 6},
+          "fractional_source_sessions": {"numerator": 3478, "denominator": 3},
+          "fractional_supervised_tokens": {"numerator": 304406029, "denominator": 12},
+          "token_pct": 44.205318
+        },
+        {
+          "application": "fubspot",
+          "fractional_task_keys": {"numerator": 511, "denominator": 6},
+          "fractional_source_sessions": {"numerator": 1057, "denominator": 3},
+          "fractional_supervised_tokens": {"numerator": 107183653, "denominator": 12},
+          "token_pct": 15.565025
+        },
+        {
+          "application": "fakelook",
+          "fractional_task_keys": {"numerator": 551, "denominator": 6},
+          "fractional_source_sessions": {"numerator": 973, "denominator": 2},
+          "fractional_supervised_tokens": {"numerator": 99115753, "denominator": 12},
+          "token_pct": 14.393419
+        },
+        {
+          "application": "current",
+          "fractional_task_keys": {"numerator": 503, "denominator": 6},
+          "fractional_source_sessions": {"numerator": 2381, "denominator": 6},
+          "fractional_supervised_tokens": {"numerator": 24484927, "denominator": 4},
+          "token_pct": 10.666976
+        },
+        {
+          "application": "fentry",
+          "fractional_task_keys": {"numerator": 141, "denominator": 2},
+          "fractional_source_sessions": {"numerator": 731, "denominator": 2},
+          "fractional_supervised_tokens": {"numerator": 11326205, "denominator": 2},
+          "token_pct": 9.868632
+        },
+        {
+          "application": "oracle_epm",
+          "fractional_task_keys": {"numerator": 35, "denominator": 1},
+          "fractional_source_sessions": {"numerator": 100, "denominator": 1},
+          "fractional_supervised_tokens": {"numerator": 2703085, "denominator": 1},
+          "token_pct": 4.710448
+        },
+        {
+          "application": "stratum",
+          "fractional_task_keys": {"numerator": 41, "denominator": 2},
+          "fractional_source_sessions": {"numerator": 51, "denominator": 2},
+          "fractional_supervised_tokens": {"numerator": 677351, "denominator": 2},
+          "token_pct": 0.590182
+        }
+      ]
+    }
+  },
+  "target_composition": {
+    "response_counts": {
+      "non_submit_tool": 166434,
+      "visible_decision_or_reasoning": 2908,
+      "final_submit": 2691,
+      "other": 4621
+    },
+    "response_pct": {
+      "non_submit_tool": 94.21468,
+      "visible_decision_or_reasoning": 1.646156,
+      "final_submit": 1.523317,
+      "other": 2.615848
+    },
+    "final_submit_tokens": 1320887,
+    "final_submit_token_pct": 2.301803,
+    "remaining_non_submit_or_other_tokens": 56063994,
+    "sessions_with_retained_submit": 2566,
+    "sessions_without_retained_submit": 320,
+    "private_reasoning_included": false,
+    "exact_visible_reasoning_vs_tool_token_split_available": false
+  },
+  "success_provenance": {
+    "selection_gate": [
+      "recognized_normalized_record_schema",
+      "teacher_model_allowlist",
+      "sft_eligible",
+      "infrastructure_valid",
+      "authoritative_success",
+      "finite_positive_outcome",
+      "exact_completed_verifier_proof"
+    ],
+    "unique_digest_counts": {
+      "session_ids": 2886,
+      "acceptance_sha256": 2886,
+      "trace_sha256": 2886,
+      "normalized_record_sha256": 2886
+    },
+    "lifecycle_prefix_salvage": {
+      "sessions": 149,
+      "session_pct": 5.162855,
+      "dropped_messages": 13295,
+      "dropped_assistant_responses": 5878,
+      "retained_assistant_responses": 4337,
+      "retained_supervised_tokens": 1650605,
+      "retained_token_pct": 2.876376,
+      "sessions_with_retained_submit": 1,
+      "sessions_without_retained_submit": 148,
+      "retained_submit_tokens": 331,
+      "reason_counts": {
+        "invalid_or_duplicate_tool_call": 5,
+        "invalid_tool_arguments": 17,
+        "invalid_use_tool_wrapper": 19,
+        "missing_tool_result_before_next_message": 17,
+        "orphan_or_duplicate_tool_result": 91
+      }
+    },
+    "harness_identity": {
+      "harness_modes": 1,
+      "tool_use_sessions": 2886,
+      "unique_harness_sha256": 2886,
+      "shared_harness_identity_proven_by_this_field": false
+    },
+    "separate_accepted_metadata_projection": {
+      "rows": 419,
+      "all_acceptance_self_digest_checks_passed": 419,
+      "all_trace_digest_checks_passed": 419,
+      "all_verifier_match_checks_passed": 419,
+      "all_cleanup_checks_passed": 419,
+      "all_ingest_checks_passed": 419,
+      "full_fidelity_traces": 415,
+      "partial_valid_json_traces": 4,
+      "malformed_raw_lines": 26,
+      "session_id_overlap": 0,
+      "acceptance_digest_overlap": 0,
+      "trace_digest_overlap": 0,
+      "corroborates_teacher3k_source_sessions": false
+    }
+  },
+  "duplicate_window_audit": {
+    "exact_source_window_payload_duplicates_removed": 3,
+    "selected_metadata_duplicates": {
+      "session_ids": 0,
+      "acceptance_sha256": 0,
+      "trace_sha256": 0,
+      "normalized_record_sha256": 0
+    },
+    "multi_window_source_sessions": 449,
+    "single_window_source_sessions": 2437,
+    "maximum_source_windows_per_session": 17,
+    "source_windows_beyond_first_per_session": 793,
+    "derived_row_digest_inventory_available": false,
+    "independent_zero_duplicate_claim_for_derived_rows": false,
+    "receipt_claim": "supervised_target_occurrences_preserved"
+  },
+  "lineage_and_holdout": {
+    "version_resolution": {
+      "fleet_api_exact_atom_metadata": 1153,
+      "exact_task_key_sibling_version": 1,
+      "reviewed_legacy_wiz_alias": 22,
+      "unresolved": 0
+    },
+    "training_task_keys_reviewed": 496,
+    "task_keys_with_one_atom_lineage": 480,
+    "task_keys_with_multiple_atom_lineages": 16,
+    "maximum_atom_lineages_per_task_key": 5,
+    "atom_lineages_used_by_multiple_task_keys": 64,
+    "missing_subject_slug": {
+      "task_keys": 119,
+      "source_sessions": 1324,
+      "supervised_tokens": 28379437,
+      "supervised_token_pct": 49.454554
+    },
+    "heldout25_reconciliation": {
+      "original_families": 25,
+      "exact_task_key_overlap": 0,
+      "exact_task_version_overlap": 0,
+      "lineage_exposed_families": 5,
+      "exposing_training_aliases": 6,
+      "exposed_dev_families": 4,
+      "exposed_final_test_families": 1,
+      "lineage_clean_families": 20,
+      "lineage_clean_dev_families": 13,
+      "lineage_clean_final_test_families": 7,
+      "interpretation_boundary": "clean_for_bound_teacher3k_corpus_not_globally_untouched"
+    }
+  },
+  "confirmed_defects": [
+    {
+      "id": "anchorless_raw_token_rechunking",
+      "evidence": {
+        "derived_rows": 14693,
+        "rows_with_first_target_at_clip_offset": 11794,
+        "row_pct": 80.269516,
+        "sampled_clipped_rows": 256,
+        "sampled_clipped_rows_without_chat_delimiter": 254,
+        "sampled_unclipped_control_rows": 256,
+        "sampled_unclipped_control_rows_with_chat_delimiter": 256,
+        "step1000_rows": 8000,
+        "step1000_clipped_rows": 6451,
+        "step1000_clipped_row_pct": 80.6375
+      },
+      "consequence": "most_training_rows_did_not_begin_with_complete_system_task_tool_or_message_anchor"
+    },
+    {
+      "id": "training_evaluation_tool_contract_mismatch",
+      "evidence": {
+        "training_model_facing_tools": ["bash", "submit_report"],
+        "evaluation_model_facing_tools": ["fleet_bash", "fleet_submit_report"],
+        "retained_evaluation_traces_verified": 136,
+        "candidate_invalid_bare_bash_events": 32,
+        "candidate_attempts_with_invalid_bare_bash": 24,
+        "candidate_attempts": 68,
+        "candidate_valid_fleet_bash_completed": 4929,
+        "candidate_valid_fleet_bash_errors": 94,
+        "candidate_valid_fleet_submit_report_completed": 0,
+        "base_valid_fleet_bash_completed": 9929,
+        "base_valid_fleet_bash_errors": 677,
+        "base_valid_fleet_submit_report_completed": 20
+      },
+      "consequence": "the_model_was_trained_to_emit_names_rejected_by_the_evaluation_harness"
+    },
+    {
+      "id": "salvaged_prefix_inherited_whole_session_success",
+      "evidence": {
+        "salvaged_sessions": 149,
+        "salvaged_sessions_without_retained_submit": 148,
+        "retained_supervised_tokens": 1650605
+      },
+      "consequence": "successful_source_session_did_not_imply_success_was_present_in_the_retained_training_fragment"
+    },
+    {
+      "id": "task_key_only_holdout_exclusion",
+      "evidence": {
+        "exact_task_key_overlap": 0,
+        "exact_task_version_overlap": 0,
+        "lineage_exposed_families": 5,
+        "exposing_aliases": 6
+      },
+      "consequence": "five_claimed_heldout_families_were_training_exposed_through_reviewed_aliases"
+    },
+    {
+      "id": "unbalanced_supervised_token_weighting",
+      "evidence": {
+        "largest_exact_task_key_token_pct": 7.03941,
+        "top5_exact_task_key_token_pct": 23.220317,
+        "largest_teacher_token_pct": 49.141954,
+        "largest_transitive_lineage_component_token_pct": 13.271579
+      },
+      "consequence": "long_prolific_sources_dominated_the_token_mean_objective"
+    },
+    {
+      "id": "historical_manifest_holdout_claim_false",
+      "evidence": {
+        "claimed_families_excluded": 25,
+        "proven_lineage_clean_families": 20
+      },
+      "consequence": "the_immutable_claim_remains_provenance_but_must_not_be_used_as_leakage_evidence"
+    }
+  ],
+  "unproven_or_unavailable": [
+    {
+      "id": "shared_harness_drift",
+      "classification": "hypothesis",
+      "known_fact": "all_2886_source_rows_have_distinct_harness_sha256_values",
+      "boundary": "the_values_may_be_session_scoped_and_do_not_by_themselves_prove_2886_harness_builds"
+    },
+    {
+      "id": "step1000_prefix_concentration_matches_full_corpus",
+      "classification": "measurement_unavailable",
+      "known_fact": "8000_distinct_rows_and_31035607_supervised_tokens_were_consumed",
+      "boundary": "per_final_row_source_identity_and_sampler_order_are_not_exposed_in_permitted_aggregate_metadata"
+    },
+    {
+      "id": "zero_duplicate_derived_rows",
+      "classification": "measurement_unavailable",
+      "known_fact": "the_receipt_asserts_preserved_supervised_target_occurrences",
+      "boundary": "no_per_derived_row_digest_inventory_is_exposed"
+    },
+    {
+      "id": "aggressive_optimizer_recipe_as_causal_amplifier",
+      "classification": "hypothesis",
+      "known_fact": "the_run_used_full_weight_lr_3e_6_no_warmup_and_every_reported_preclip_gradient_norm_exceeded_1",
+      "boundary": "these_facts_do_not_displace_the_proven_context_and_tool_contract_defects"
+    },
+    {
+      "id": "global_holdout_pristineness",
+      "classification": "not_claimed",
+      "known_fact": "20_families_are_clean_for_the_bound_teacher3k_source_selection",
+      "boundary": "historical_training_lineages_without_complete_family_rosters_prevent_a_global_untouched_claim"
+    },
+    {
+      "id": "visible_reasoning_vs_tool_token_split",
+      "classification": "measurement_unavailable",
+      "known_fact": "final_submit_tokens_are_exact_and_response_type_counts_are_exact",
+      "boundary": "the_sealed_selection_does_not_publish_token_counts_for_visible_decision_and_non_submit_tool_categories"
+    }
+  ],
+  "replacement_state": {
+    "status": "blocked_pending_exact_source_evidence",
+    "launch_authorized": false,
+    "private_data_materialized": false,
+    "gpu_jobs_submitted": 0,
+    "blocking_evidence_count": 4,
+    "remaining_required_evidence": [
+      "exact_family_role_roster_bound_to_every_selected_version",
+      "successful_report_call_binding_retained_in_normalized_messages",
+      "captured_provider_request_proving_exact_model_facing_tool_contract",
+      "private_source_digest_readback_before_create_once_materialization"
+    ],
+    "lineage_progress_note": "the_completed_1176_version_lineage_map_may_satisfy_part_of_the_family_roster_requirement_but_the_replacement_plan_has_not_been_resealed"
+  },
+  "privacy": {
+    "contains_task_or_session_ids": false,
+    "contains_prompts_or_trace_text": false,
+    "contains_private_reasoning": false,
+    "contains_raw_scores": false,
+    "contains_credentials": false,
+    "contains_external_benchmark_content": false,
+    "private_inputs_committed": false
+  },
+  "effects": {
+    "api_mutations": 0,
+    "cluster_mutations": 0,
+    "workload_creates": 0,
+    "evaluation_launches": 0,
+    "model_calls": 0,
+    "scoring_calls": 0,
+    "private_data_materializations": 0
+  },
+  "sha256": "sha256:215674acfc083a60213fe070a774bd642e5313069c7f292042a28e5084371f39"
+}
