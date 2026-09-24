@@ -45,6 +45,7 @@ CLEANUP_AGGREGATE_SCHEMA = "cyber_task_quality_cleanup_aggregate_v1"
 INVENTORY_SCHEMA = "fleet_current_production_blackbox_inventory_v1"
 COVERAGE_SCHEMA = "fleet_current_blackbox_training_coverage_v1"
 SPLIT_SCHEMA = "cyber_representative_study_split_v2"
+HELDOUT_PROTOCOL_SCHEMA = "cyber_fleet_existing_checkpoint_holdout_protocol_v2"
 EXPECTED_TEAM_ID = "a1025f0b-ad67-49fc-a023-51800ab43e84"
 CREATE_CLAIM_ROUTE_TEMPLATE = "/v1/env/instances/create-requests/{request_id}"
 SESSION_MODEL = "fleet/task-quality-runtime-probe-v1"
@@ -431,6 +432,62 @@ def _input(path: Path, schema: str, label: str) -> dict[str, Any]:
     return value
 
 
+def _input_one_of(path: Path, schemas: set[str], label: str) -> dict[str, Any]:
+    value = _read(path, label)
+    schema = value.get("schema")
+    if schema not in schemas or value.get("sha256") != digest(
+        {key: item for key, item in value.items() if key != "sha256"}
+    ):
+        raise QualificationError(f"{label} is not an exact supported sealed input")
+    return value
+
+
+def _protected_rows(split: dict[str, Any]) -> tuple[list[dict[str, Any]], int]:
+    """Normalize the original split and the repaired clean-heldout protocol."""
+    if split.get("schema") == SPLIT_SCHEMA:
+        rows = split.get("tasks")
+        if not isinstance(rows, list):
+            raise QualificationError("protected split task roster is invalid")
+        protected = [
+            row
+            for row in rows
+            if isinstance(row, dict) and row.get("split") in {"dev", "final_test"}
+        ]
+        final_count = sum(row.get("split") == "final_test" for row in protected)
+        if len(protected) != 25 or final_count != 8:
+            raise QualificationError(
+                "protected split must contain exactly 17 dev and eight final tasks"
+            )
+        return protected, final_count
+
+    selection = split.get("selection")
+    rows = selection.get("tasks") if isinstance(selection, dict) else None
+    if not isinstance(rows, list) or not rows:
+        raise QualificationError("repaired held-out protocol task roster is invalid")
+    protected = []
+    for row in rows:
+        if not isinstance(row, dict) or row.get("source_role") not in {"dev", "final_test"}:
+            raise QualificationError("repaired held-out protocol role is invalid")
+        family = row.get("reviewed_task_family")
+        if not isinstance(family, str) or not family.startswith("cyber/atoms/"):
+            raise QualificationError("repaired held-out protocol family is invalid")
+        protected.append(
+            {
+                "task_key": row.get("task_key"),
+                "task_version_id": row.get("task_version_id"),
+                "split": row["source_role"],
+                "reviewed_task_family": family,
+            }
+        )
+    if selection.get("exact_task_version_count") != len(protected):
+        raise QualificationError("repaired held-out protocol count is invalid")
+    if len({(row["task_key"], row["task_version_id"]) for row in protected}) != len(
+        protected
+    ):
+        raise QualificationError("repaired held-out protocol contains duplicate task versions")
+    return protected, sum(row["split"] == "final_test" for row in protected)
+
+
 def build_plan(
     *,
     inventory: dict[str, Any],
@@ -471,27 +528,28 @@ def build_plan(
     }
     if len(row_by_identity) != len(inventory_rows):
         raise QualificationError("inventory contains malformed or duplicate task versions")
-    protected_rows = split.get("tasks")
-    if not isinstance(protected_rows, list):
-        raise QualificationError("protected split task roster is invalid")
+    protected_rows, final_count = _protected_rows(split)
     heldout_rows: list[dict[str, Any]] = []
-    final_count = 0
     for row in protected_rows:
-        if not isinstance(row, dict) or row.get("split") not in {"dev", "final_test"}:
-            continue
         key = (row.get("task_key"), row.get("task_version_id"))
         selected = row_by_identity.get(key)
         if selected is None:
             raise QualificationError("protected held-out task is absent from the current inventory")
         heldout_rows.append(selected)
-        final_count += int(row.get("split") == "final_test")
-    if len(heldout_rows) != 25 or final_count != 8:
-        raise QualificationError(
-            "protected split must contain exactly 17 dev and eight final tasks"
-        )
     heldout_bindings = [
         _fetch_binding(client, row, require_tool_declaration=False) for row in heldout_rows
     ]
+    reviewed_families = {
+        (row["task_key"], row["task_version_id"]): row.get("reviewed_task_family")
+        for row in protected_rows
+        if row.get("reviewed_task_family") is not None
+    }
+    for binding in heldout_bindings:
+        reviewed = reviewed_families.get((binding["task_key"], binding["task_version_id"]))
+        if reviewed is not None:
+            expected_key = reviewed.rsplit("@", 1)[0]
+            if expected_key not in binding["atom_artifact_keys"]:
+                raise QualificationError("protected held-out reviewed family differs live")
     heldout_atom_keys = {
         atom for binding in heldout_bindings for atom in binding["atom_artifact_keys"]
     }
@@ -581,8 +639,8 @@ def build_plan(
             "selected_task_versions": len(selected_bindings),
             "maximum_task_versions_per_family": 1,
             "excluded_counts": excluded_counts,
-            "protected_heldout_task_versions": 25,
-            "protected_final_task_versions": 8,
+            "protected_heldout_task_versions": len(heldout_rows),
+            "protected_final_task_versions": final_count,
             "protected_heldout_atom_key_count": len(heldout_atom_keys),
             "protected_heldout_atom_keys_sha256": digest(sorted(heldout_atom_keys)),
             "zero_protected_heldout_atom_intersection": True,
@@ -1657,7 +1715,11 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
     split_path = Path(args.protected_split)
     inventory = _input(inventory_path, INVENTORY_SCHEMA, "current inventory")
     coverage = _input(coverage_path, COVERAGE_SCHEMA, "receipt coverage")
-    split = _input(split_path, SPLIT_SCHEMA, "protected family split")
+    split = _input_one_of(
+        split_path,
+        {SPLIT_SCHEMA, HELDOUT_PROTOCOL_SCHEMA},
+        "protected family split",
+    )
     excluded = (
         _read(Path(args.exclude_catalog), "excluded catalog") if args.exclude_catalog else None
     )

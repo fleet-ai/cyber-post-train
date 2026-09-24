@@ -36,6 +36,77 @@ def test_requirements_bind_exact_source_files_and_self_digest():
         assert logical["sha256"] == reference["logical_sha256"]
 
 
+def test_sep24_expansion_requirements_bind_census_and_bounded_waves():
+    root = Path(__file__).parents[1]
+    path = (
+        root
+        / "configs/qualification/fleet-blackbox-current-task-quality-20260924-v2.requirements.json"
+    )
+    value = json.loads(path.read_text())
+    assert value["sha256"] == qualification.digest(
+        {key: item for key, item in value.items() if key != "sha256"}
+    )
+    for name in ("current_inventory", "receipt_proven", "qa_candidates", "receipt_coverage"):
+        reference = value["inputs"][name]
+        source = root / reference["path"]
+        assert qualification.file_digest(source) == reference["file_sha256"]
+        assert json.loads(source.read_text())["sha256"] == reference["logical_sha256"]
+    assert value["population"] == {
+        "current_production_blackbox": 1217,
+        "exact_receipt_proven": 75,
+        "known_broken_excluded": 74,
+        "qa_agent_failure_pending_receipts": 25,
+        "qa_clean_pending_receipts": 8,
+        "qa_cleared_pending_receipts": 33,
+        "qa_not_analyzed_already_receipt_proven": 75,
+        "qa_not_analyzed_universe": 1110,
+        "qa_not_analyzed_without_exact_receipt": 1035,
+    }
+    assert [wave["maximum_qualified_task_versions"] for wave in value["waves"]] == [33, 64]
+    assert value["execution_policy"]["if_packaged_as_kubernetes_job"] == {
+        "gpu_request": 0,
+        "priority_class_name": "c1",
+        "root_annotation": {"fleet.ai/failure-alerts": "off"},
+        "server_preview_must_prove_root_annotation_before_create": True,
+    }
+def test_sep24_coverage_sets_are_exact_and_disjoint():
+    root = Path(__file__).parents[1] / "configs/data"
+    inventory = json.loads(
+        (root / "fleet-blackbox-current-production-20260924-v1.json").read_text()
+    )
+    proven = json.loads(
+        (root / "fleet-blackbox-receipt-proven-20260924-v1.json").read_text()
+    )
+    candidates = json.loads(
+        (root / "fleet-blackbox-qa-candidates-20260924-v1.json").read_text()
+    )
+    coverage = json.loads(
+        (root / "fleet-blackbox-training-coverage-20260924-v1.json").read_text()
+    )
+    for value in (inventory, proven, candidates, coverage):
+        assert value["sha256"] == qualification.digest(
+            {key: item for key, item in value.items() if key != "sha256"}
+        )
+    identities = {
+        (row["task_key"], row["task_version_id"]) for row in inventory["tasks"]
+    }
+    proven_identities = {
+        (row["task_key"], row["task_version_id"]) for row in proven["task_versions"]
+    }
+    candidate_identities = {
+        (row["task_key"], row["task_version_id"]) for row in candidates["tasks"]
+    }
+    assert len(identities) == 1217
+    assert len(proven_identities) == 75
+    assert len(candidate_identities) == 33
+    assert proven_identities <= identities
+    assert candidate_identities <= identities
+    assert proven_identities.isdisjoint(candidate_identities)
+    assert {row["qa_status"] for row in candidates["tasks"]} == {"clean", "agent_failure"}
+    assert sum(row["qa_status"] == "not_analyzed" for row in inventory["tasks"]) == 1110
+    assert coverage["counts"]["qa_not_analyzed_without_exact_receipt"] == 1035
+
+
 def _selected(key: str = "task-a", version: str = TASK_VERSION) -> dict:
     return {
         "task_key": key,
@@ -205,6 +276,7 @@ def test_plan_excludes_protected_heldout_atom_and_duplicate_family(monkeypatch):
         "no_exact_receipt_in_this_refresh_task_keys": [row["task_key"] for row in candidates],
     }
     split = {
+        "schema": qualification.SPLIT_SCHEMA,
         "sha256": "sha256:" + "c" * 64,
         "tasks": [
             {
@@ -244,6 +316,114 @@ def test_plan_excludes_protected_heldout_atom_and_duplicate_family(monkeypatch):
     assert plan["selection"]["selected_task_versions"] == 2
     assert plan["selection"]["excluded_counts"]["protected_heldout_atom_overlap"] == 1
     assert plan["selection"]["zero_protected_heldout_atom_intersection"] is True
+
+
+def test_plan_accepts_repaired_clean_heldout_protocol_and_checks_reviewed_family(monkeypatch):
+    heldout = _selected("heldout-a", "00000000-0000-4000-8000-000000000001")
+    candidate = _selected("candidate-a")
+    inventory = {
+        "sha256": "sha256:" + "a" * 64,
+        "task_count": 2,
+        "tasks": [heldout, candidate],
+    }
+    coverage = {
+        "sha256": "sha256:" + "b" * 64,
+        "no_exact_receipt_in_this_refresh_task_keys": [candidate["task_key"]],
+    }
+    split = {
+        "schema": qualification.HELDOUT_PROTOCOL_SCHEMA,
+        "sha256": "sha256:" + "c" * 64,
+        "selection": {
+            "exact_task_version_count": 1,
+            "tasks": [
+                {
+                    "task_key": heldout["task_key"],
+                    "task_version_id": heldout["task_version_id"],
+                    "source_role": "final_test",
+                    "reviewed_task_family": "cyber/atoms/current/protected@7",
+                }
+            ],
+        },
+    }
+
+    def binding(_client, row, **_kwargs):
+        result = _binding(row["task_key"])
+        result["task_version_id"] = row["task_version_id"]
+        result["atom_artifact_keys"] = [
+            "cyber/atoms/current/protected"
+            if row["task_key"] == heldout["task_key"]
+            else "cyber/atoms/current/candidate"
+        ]
+        return result
+
+    monkeypatch.setattr(qualification, "_fetch_binding", binding)
+    plan = qualification.build_plan(
+        inventory=inventory,
+        coverage=coverage,
+        split=split,
+        inventory_sha256="sha256:" + "1" * 64,
+        coverage_sha256="sha256:" + "2" * 64,
+        split_sha256="sha256:" + "3" * 64,
+        client=object(),
+        wave_id="clean-heldout",
+        qa_statuses={"clean"},
+        limit=1,
+        concurrency=1,
+        source={"fixture": True, "merged_to_origin_main": True},
+    )
+    assert plan["selection"]["protected_heldout_task_versions"] == 1
+    assert plan["selection"]["protected_final_task_versions"] == 1
+
+
+def test_plan_rejects_repaired_heldout_family_that_differs_live(monkeypatch):
+    heldout = _selected("heldout-a", "00000000-0000-4000-8000-000000000001")
+    candidate = _selected("candidate-a")
+    inventory = {
+        "sha256": "sha256:" + "a" * 64,
+        "task_count": 2,
+        "tasks": [heldout, candidate],
+    }
+    coverage = {
+        "sha256": "sha256:" + "b" * 64,
+        "no_exact_receipt_in_this_refresh_task_keys": [candidate["task_key"]],
+    }
+    split = {
+        "schema": qualification.HELDOUT_PROTOCOL_SCHEMA,
+        "selection": {
+            "exact_task_version_count": 1,
+            "tasks": [
+                {
+                    "task_key": heldout["task_key"],
+                    "task_version_id": heldout["task_version_id"],
+                    "source_role": "dev",
+                    "reviewed_task_family": "cyber/atoms/current/expected@0",
+                }
+            ],
+        },
+    }
+
+    def binding(_client, row, **_kwargs):
+        result = _binding(row["task_key"])
+        result["task_version_id"] = row["task_version_id"]
+        result["atom_artifact_keys"] = ["cyber/atoms/current/other"]
+        return result
+
+    monkeypatch.setattr(qualification, "_fetch_binding", binding)
+    with pytest.raises(qualification.QualificationError, match="reviewed family differs"):
+        qualification.build_plan(
+            inventory=inventory,
+            coverage=coverage,
+            split=split,
+            inventory_sha256="sha256:" + "1" * 64,
+            coverage_sha256="sha256:" + "2" * 64,
+            split_sha256="sha256:" + "3" * 64,
+            client=object(),
+            wave_id="family-drift",
+            qa_statuses={"clean"},
+            limit=1,
+            concurrency=1,
+            source={"fixture": True, "merged_to_origin_main": True},
+        )
 
 
 def test_probe_tools_calls_both_without_returning_content(monkeypatch):
