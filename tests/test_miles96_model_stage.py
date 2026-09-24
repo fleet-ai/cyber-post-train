@@ -54,11 +54,31 @@ def test_packet_is_zero_gpu_create_once_alerts_off_and_source_read_only() -> Non
     assert job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
     assert job["metadata"]["labels"]["kueue.x-k8s.io/priority-class"] == "q1"
     assert job["spec"]["backoffLimit"] == 0
-    assert packet["precreate"]["create_request_count"] == 1
-    assert packet["precreate"]["automatic_create_retry"] is False
+    sequence = packet["execution_sequence"]
+    assert sequence["config_map_create_request_count"] == 1
+    assert sequence["config_map_create_retry_allowed"] is False
+    assert sequence["job_create_request_count"] == 1
+    assert sequence["job_create_retry_allowed"] is False
+    assert sequence["job_created_suspended"] is True
+    assert sequence["unsuspend"]["request_count"] == 1
+    assert sequence["unsuspend"]["retry_allowed"] is False
+    assert sequence["unsuspend"]["operations_template"] == [
+        {"op": "test", "path": "/metadata/uid", "value": "$JOB_UID"},
+        {"op": "test", "path": "/spec/suspend", "value": True},
+        {"op": "replace", "path": "/spec/suspend", "value": False},
+    ]
+    assert sequence["post_unsuspend_create_or_patch_requests_allowed"] is False
     pod = job["spec"]["template"]["spec"]
     assert pod["priorityClassName"] == "c1"
-    mounts = {item["name"]: item for item in pod["containers"][0]["volumeMounts"]}
+    assert job["spec"]["suspend"] is True
+    container = pod["containers"][0]
+    security = container["securityContext"]
+    assert security["runAsUser"] == 0
+    assert security["readOnlyRootFilesystem"] is True
+    assert security["privileged"] is False
+    assert security["capabilities"] == {"drop": ["ALL"]}
+    assert packet["expected"]["root_access_justification"] == stage.ROOT_ACCESS_JUSTIFICATION
+    mounts = {item["name"]: item for item in container["volumeMounts"]}
     assert mounts["hf"]["readOnly"] is True
     assert mounts["megatron"]["readOnly"] is True
     assert mounts["jobs"].get("readOnly") is not True

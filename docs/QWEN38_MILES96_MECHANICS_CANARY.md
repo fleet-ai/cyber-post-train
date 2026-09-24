@@ -135,6 +135,25 @@ The model root and task binding are deliberately arguments to `build_plan`.
 That prevents a future operator from accidentally reviving a stale path or a
 historical task receipt just because it exists in this repository.
 
+### Prepared-model staging boundary
+
+`training.miles96_model_stage` is the zero-GPU create-once stager used when the
+exact HF and Megatron source trees are not already paired below one readable
+root.  The source PVC mounts are read-only and the destination must not exist.
+The source directories currently reject uid 1000, so this narrow copy process
+runs as uid 0.  Root is used only to inventory and copy those two immutable
+sources.  The container is not privileged, drops every Linux capability,
+cannot gain privileges, has a read-only root filesystem and no service-account
+token, and requests no GPU.  Its public terminal receipt repeats those facts.
+
+The stager's Job begins suspended.  After two matching server previews, an
+operator creates the immutable ConfigMap once and the suspended Job once, binds
+both returned UIDs, and rechecks the rendered root alert annotation, c1
+priority, zero-GPU resources and suspended state.  It then sends exactly one
+JSON Patch which first tests the exact returned Job UID and suspended state and
+then changes `spec.suspend` to false.  None of those create or patch requests is
+retried.  Terminal monitoring and cleanup remain bound to that exact Job UID.
+
 ## Mandatory live safety gates
 
 `job_request` and `reload_request` only render generic Jobs API requests.

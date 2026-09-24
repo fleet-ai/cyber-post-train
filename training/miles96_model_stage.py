@@ -13,21 +13,25 @@ from typing import Any
 
 from training import miles96_mechanics_canary as mechanics
 
-SCHEMA = "cyber_qwen38_miles96_model_stage_packet_v1"
+SCHEMA = "cyber_qwen38_miles96_model_stage_packet_v2"
 RECEIPT_SCHEMA = "cyber_qwen38_miles96_model_stage_receipt_v1"
 LOG_PREFIX = "CYBER_MILES96_MODEL_STAGE="
 CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 NAMESPACE = "fleet-train-jobs"
-JOB_NAME = "chris-q38-m96-model-stage-a1"
+JOB_NAME = "chris-q38-m96-model-stage-a2"
 CONFIG_MAP_NAME = JOB_NAME + "-code"
 IMAGE = mechanics.IMAGE
 HF_SOURCE = Path("/source/hf")
 MEGATRON_SOURCE = Path("/source/megatron")
 DESTINATION = Path("/mnt/sfs/jobs/chris-q38-m96-prepared-v1")
-PARTIAL = Path("/mnt/sfs/jobs/.chris-q38-m96-prepared-v1.partial-a1")
+PARTIAL = Path("/mnt/sfs/jobs/.chris-q38-m96-prepared-v1.partial-a2")
 MANIFEST = "PREPARED_MODEL.json"
 COMPLETE = ".complete"
 DRIVER = "from training.miles96_model_stage import runtime_main;runtime_main()\n"
+ROOT_ACCESS_JUSTIFICATION = (
+    "the exact read-only HF and Megatron source roots reject uid 1000; uid 0 is used only "
+    "to inventory and copy those immutable sources into one fresh SFS destination"
+)
 
 
 def digest(value: Any) -> str:
@@ -137,6 +141,12 @@ def runtime_main() -> None:
             "started_at_epoch": started,
             "finished_at_epoch": int(time.time()),
             "gpus": 0,
+            "container_uid": 0,
+            "root_access_justification": ROOT_ACCESS_JUSTIFICATION,
+            "root_filesystem_read_only": True,
+            "source_mounts_read_only": True,
+            "linux_capabilities": [],
+            "privileged": False,
             "weights_prompts_traces_flags_answers_scores_or_credentials_included": False,
         }
         receipt = {**body, "sha256": "sha256:" + digest(body)}
@@ -149,6 +159,12 @@ def runtime_main() -> None:
             "started_at_epoch": started,
             "finished_at_epoch": int(time.time()),
             "gpus": 0,
+            "container_uid": 0,
+            "root_access_justification": ROOT_ACCESS_JUSTIFICATION,
+            "root_filesystem_read_only": True,
+            "source_mounts_read_only": True,
+            "linux_capabilities": [],
+            "privileged": False,
             "weights_prompts_traces_flags_answers_scores_or_credentials_included": False,
         }
         receipt = {**body, "sha256": "sha256:" + digest(body)}
@@ -327,17 +343,47 @@ def build_packet() -> dict[str, Any]:
             "failure_alerts": "off",
             "backoff_limit": 0,
             "source_mounts_read_only": True,
+            "container_uid": 0,
+            "root_access_justification": ROOT_ACCESS_JUSTIFICATION,
+            "root_filesystem_read_only": True,
+            "linux_capabilities": [],
+            "privileged": False,
             "destination_must_be_absent": True,
             "partial_must_be_absent": True,
         },
-        "precreate": {
+        "execution_sequence": {
             "exact_name_duplicate_census_required": True,
             "destination_absence_required": True,
             "partial_absence_required": True,
             "server_dry_run_count": 2,
             "stable_preview_digests_must_match": True,
-            "create_request_count": 1,
-            "automatic_create_retry": False,
+            "config_map_create_request_count": 1,
+            "config_map_create_retry_allowed": False,
+            "job_create_request_count": 1,
+            "job_create_retry_allowed": False,
+            "job_created_suspended": True,
+            "post_create_pre_unsuspend_checks": [
+                "exact_config_map_uid_bound",
+                "exact_job_uid_bound",
+                "rendered_root_failure_alerts_off",
+                "rendered_priority_class_c1",
+                "rendered_gpu_requests_and_limits_zero",
+                "rendered_suspend_true",
+            ],
+            "unsuspend": {
+                "request_count": 1,
+                "retry_allowed": False,
+                "content_type": "application/json-patch+json",
+                "uid_source": "exact_job_create_response.metadata.uid",
+                "operations_template": [
+                    {"op": "test", "path": "/metadata/uid", "value": "$JOB_UID"},
+                    {"op": "test", "path": "/spec/suspend", "value": True},
+                    {"op": "replace", "path": "/spec/suspend", "value": False},
+                ],
+            },
+            "post_unsuspend_create_or_patch_requests_allowed": False,
+            "exact_uid_terminal_monitor_required": True,
+            "exact_uid_cleanup_required": True,
         },
         "bundle": {"apiVersion": "v1", "kind": "List", "items": [config_map, job]},
     }
@@ -357,9 +403,32 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:
         or pod.get("priorityClassName") != "c1"
         or mounts["hf"].get("readOnly") is not True
         or mounts["megatron"].get("readOnly") is not True
+        or container.get("securityContext", {}).get("runAsUser") != 0
+        or container.get("securityContext", {}).get("readOnlyRootFilesystem") is not True
+        or container.get("securityContext", {}).get("privileged") is not False
+        or container.get("securityContext", {}).get("capabilities") != {"drop": ["ALL"]}
+        or job["spec"].get("suspend") is not True
         or "nvidia.com/gpu" in json.dumps(container.get("resources", {}))
     ):
         raise ValueError("Miles96 model-stage safety contract drifted")
+    sequence = packet["execution_sequence"]
+    if (
+        sequence.get("config_map_create_request_count") != 1
+        or sequence.get("config_map_create_retry_allowed") is not False
+        or sequence.get("job_create_request_count") != 1
+        or sequence.get("job_create_retry_allowed") is not False
+        or sequence.get("job_created_suspended") is not True
+        or sequence.get("unsuspend", {}).get("request_count") != 1
+        or sequence.get("unsuspend", {}).get("retry_allowed") is not False
+        or sequence.get("unsuspend", {}).get("operations_template")
+        != [
+            {"op": "test", "path": "/metadata/uid", "value": "$JOB_UID"},
+            {"op": "test", "path": "/spec/suspend", "value": True},
+            {"op": "replace", "path": "/spec/suspend", "value": False},
+        ]
+        or sequence.get("post_unsuspend_create_or_patch_requests_allowed") is not False
+    ):
+        raise ValueError("Miles96 model-stage create/release sequence drifted")
     return {
         "packet_sha256": packet["sha256"],
         "bundle_sha256": "sha256:" + digest(packet["bundle"]),
