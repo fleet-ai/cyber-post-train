@@ -53,6 +53,7 @@ WORKLOAD_TOPOLOGY_REQUEST = {
     "podIndexLabel": "batch.kubernetes.io/job-completion-index",
 }
 OUTPUT_CHECK_PLAN_SCHEMAS = {
+    "cyber_qwen38_miles96_phase1a_plan_v1",
     "cyber_sft_runtime_v2",
     "cyber_sft_runtime_dense_v1",
     "cyber_qwen38_miles96_mechanics_canary_v1",

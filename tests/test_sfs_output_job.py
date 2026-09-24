@@ -63,6 +63,23 @@ def test_output_check_supports_the_reviewed_miles96_plan_schema():
     assert package.job["spec"]["backoffLimit"] == 0
 
 
+def test_output_check_supports_only_the_exact_phase1a_plan_schema():
+    package = build_sfs_output_job(
+        {"schema": "cyber_qwen38_miles96_phase1a_plan_v1", "immutable": "synthetic"},
+        request(),
+        1,
+    )
+    assert package.job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+    assert package.job["spec"]["backoffLimit"] == 0
+
+    with pytest.raises(ValueError, match="plan schema is not supported"):
+        build_sfs_output_job(
+            {"schema": "cyber_qwen38_miles96_phase1a_plan_v2", "immutable": "synthetic"},
+            request(),
+            1,
+        )
+
+
 def node_inventory(*, memory="65216572Ki"):
     return {
         "kind": "List",
