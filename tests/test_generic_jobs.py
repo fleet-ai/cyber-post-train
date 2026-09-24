@@ -856,6 +856,49 @@ def test_replaced_journal_directory_after_intent_blocks_the_post(tmp_path, monke
     assert (moved / journal.name).exists()
 
 
+def test_retained_anchor_blocks_retry_after_journal_parent_is_recreated(tmp_path) -> None:
+    launch = tmp_path / "launch"
+    launch.mkdir()
+    moved = tmp_path / "launch-moved"
+    journal = launch / "SUBMISSION.jsonl"
+    retained = tmp_path / "retained"
+    retained.mkdir()
+    anchor = retained / "phase1a-SUBMISSION.jsonl"
+    posts = []
+
+    def retry_handler(req):
+        if req.method == "GET":
+            return httpx.Response(200, json={"items": [], "has_more": False})
+        if req.url.path.endswith("/preview"):
+            return httpx.Response(200, json=preview())
+        posts.append("retry")
+        return httpx.Response(202, json=creator_row())
+
+    with client(retry_handler) as retry_api:
+
+        def first_handler(req):
+            if req.method == "GET":
+                return httpx.Response(200, json={"items": [], "has_more": False})
+            if req.url.path.endswith("/preview"):
+                return httpx.Response(200, json=preview())
+            posts.append("first")
+            launch.rename(moved)
+            launch.mkdir()
+            with pytest.raises(JobsError, match="submission anchor already exists"):
+                retry_api.submit_once(config(), journal, journal_anchor=anchor)
+            return httpx.Response(202, json=creator_row())
+
+        with client(first_handler) as first_api:
+            result = first_api.submit_once(config(), journal, journal_anchor=anchor)
+
+    assert result["status"] == "QUEUED"
+    assert posts == ["first"]
+    assert anchor.exists()
+    assert not journal.exists()
+    assert (moved / journal.name).exists()
+    assert anchor.samefile(moved / journal.name)
+
+
 def test_expired_authority_stops_before_callback_intent_and_post(tmp_path, monkeypatch) -> None:
     journal = tmp_path / "intent.jsonl"
     calls = []
