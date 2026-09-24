@@ -18,6 +18,7 @@ import re
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 from typing import Any
+from urllib.parse import parse_qsl, quote, urlsplit, urlunsplit
 
 from evals.campaign import RECEIPT_SCHEMA, canonical, digest
 from evals.fleet import heldout_launch
@@ -31,11 +32,60 @@ FINAL8_SPLIT_FILE_SHA256 = "sha256:28a3dcaf31f14d724def9023d9435681772d5b8b3a864
 FINAL8_SPLIT_SHA256 = "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c"
 FINAL8_SELECTION_SHA256 = "sha256:9623149c4a021bc13ed2cf94ca26e107b30c18816cf3c02d76b5020cab5066f4"
 FINAL8_EVIDENCE_BOUNDARY = "historically_exposed_locked_confirmation_set"
-FINAL8_MATRIX_SHA256 = "sha256:f4459e4d939f99973ad04ab114b03643073da43b9e767681f375bc0e33685da6"
+FINAL8_MATRIX_SHA256 = "sha256:389a496130f9a4ce0379d9dd901ee6f5003b7cb1d9fae3bbf02100de202962e4"
+FINAL8_OPERATIONAL_ARMS = {
+    "base": "qwen38-27b-base-control",
+    "step1000": "q38-teacher3k-32k-step1000",
+    "b16_step200": "q38-d32-b16-lr5e6-step200",
+    "context64_step225": "q38-t3k64-b8-step225",
+    "lr1_step500": "q38-t3k32-lr1-step500",
+    "context96_step300": "q38-t3k96-b8-step300",
+}
+FINAL8_SELECTION_RECEIPTS = {
+    "base": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+    "step1000": "sha256:8a1d9e093fa1f856c35d357cf34861862317491ee83a9268613f1cf86160eef0",
+    "b16_step200": "sha256:88edcde39542f3e32fc895acf93999230c421e93e794f242958d6f675400a72e",
+    "context64_step225": "sha256:4e09a634106991b0f4b50b1a10f2c65a36c2eb3cf167514ea53c6d6cbae1a0b7",
+    "lr1_step500": "sha256:fc568b2b58c744788b7ad361d3bbe57b72e5974ddd7082d52f5ffe99db4fc65e",
+    "context96_step300": "sha256:e7585657109ce728a2daa9ac1a1c01e5d7c07176ebf278d0818f6992942810ac",
+}
+FINAL8_SERVING_MODEL_IDS = {
+    "base": "chris-q38-base-pass4-v1",
+    "step1000": "chris-q38-t3k32-s1000-v1",
+    "b16_step200": "chris-q38-d32-b16-s200-v1",
+    "context64_step225": "chris-q38-t3k64-s225-v1",
+    "lr1_step500": "chris-q38-t3k32-lr1-s500-v1",
+    "context96_step300": "chris-q38-t3k96-s300-v1",
+}
+FINAL8_HARNESS = {
+    "compaction_headroom_tokens": 20000,
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v2",
+    "context_window_size": 262144,
+    "harness": "opencode",
+    "harness_version": "1.18.27",
+    "max_model_requests": 600,
+    "max_output_tokens": 32768,
+    "provider_adapter": "@ai-sdk/openai-compatible",
+    "release_asset_sha256": (
+        "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702"
+    ),
+    "timeout_seconds": 28800,
+    "tool_catalog_sha256": (
+        "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+    ),
+    "tools": ["bash", "submit_report"],
+}
+FINAL8_IMAGES = {
+    "agent": "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92",
+    "proxy": (
+        "ghcr.io/astral-sh/uv:python3.12-bookworm@"
+        "sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+    ),
+}
 FINAL8_EXPOSURE_AUDIT = {
     "path": "docs/evidence/qwen38-fleet-final8-exposure-audit-20260923.json",
-    "file_sha256": "sha256:3e6b56d0e91560e55240efeaad3b1b660698287961e1eae6bc1b7e2df9d89a05",
-    "sha256": "sha256:dac348e34529ac0185d6cb9943bf6c7ad13c5b28bedf9fc8542bd7e8a2e59073",
+    "file_sha256": "sha256:17fc69469673018c84d9d11d92f33989eb229730ba9da1d77fc7fffff2953504",
+    "sha256": "sha256:b61dd5bcba1320b11a40abb1836b6b32cf434fe1cc641da07622cc9d0a34dd5f",
 }
 FINAL8_TASK_VERSIONS = frozenset(
     {
@@ -50,6 +100,8 @@ FINAL8_TASK_VERSIONS = frozenset(
     }
 )
 ATTEMPT_SEEDS = (46, 47, 48, 49)
+QUEUE_NAME_LABEL = "kueue.x-k8s.io/queue-name"
+QUEUE_PRIORITY_LABEL = "kueue.x-k8s.io/priority-class"
 
 
 class FleetCampaignError(ValueError):
@@ -112,7 +164,6 @@ def _load_bindings(path: Path) -> dict[str, Any]:
         "scoring_protocol_sha256",
         "budgets_sha256",
         "matched_treatment_receipt_sha256",
-        "fleet_comparison_protocol_sha256",
         "split_manifest_file_sha256",
         "split_manifest_sha256",
         "evidence_boundary_label",
@@ -137,7 +188,6 @@ def _load_bindings(path: Path) -> dict[str, Any]:
         "scoring_protocol_sha256",
         "budgets_sha256",
         "matched_treatment_receipt_sha256",
-        "fleet_comparison_protocol_sha256",
         "split_manifest_file_sha256",
         "split_manifest_sha256",
     ):
@@ -161,6 +211,8 @@ def _load_bindings(path: Path) -> dict[str, Any]:
         or not SHA256.fullmatch(str(harness["identity_receipt_sha256"]))
         or not isinstance(sampling, dict)
         or set(sampling) != {"temperature", "top_p", "attempt_seeds"}
+        or sampling.get("temperature") != 0.6
+        or sampling.get("top_p") != 0.95
         or not isinstance(sampling["attempt_seeds"], list)
         or tuple(sampling["attempt_seeds"]) != ATTEMPT_SEEDS
         or any(type(seed) is not int or not 0 <= seed < 2**31 for seed in sampling["attempt_seeds"])
@@ -173,7 +225,7 @@ def _load_bindings(path: Path) -> dict[str, Any]:
     cells = value["cells"]
     if (
         not isinstance(models, dict)
-        or len(models) != 6
+        or set(models) != set(FINAL8_OPERATIONAL_ARMS)
         or not isinstance(targets, dict)
         or len(targets) != 8
         or not isinstance(groups, dict)
@@ -192,6 +244,7 @@ def _load_bindings(path: Path) -> dict[str, Any]:
         ):
             raise FleetCampaignError("invalid_final8_target_binding")
     model_fields = {
+        "artifact_id",
         "checkpoint_id",
         "weights_sha256",
         "model_revision",
@@ -199,14 +252,18 @@ def _load_bindings(path: Path) -> dict[str, Any]:
         "serving_route_proof_sha256",
         "serving_route_receipt_sha256",
         "live_parity_receipt_sha256",
+        "selection_artifact_receipt_sha256",
+        "serving_model_id",
     }
     for model_id, model in models.items():
         if (
             not isinstance(model_id, str)
             or not isinstance(model, dict)
             or set(model) != model_fields
-            or not isinstance(model["checkpoint_id"], str)
-            or not model["checkpoint_id"]
+            or model.get("artifact_id") != FINAL8_OPERATIONAL_ARMS[model_id]
+            or model.get("checkpoint_id") != FINAL8_OPERATIONAL_ARMS[model_id]
+            or model.get("selection_artifact_receipt_sha256") != FINAL8_SELECTION_RECEIPTS[model_id]
+            or model.get("serving_model_id") != FINAL8_SERVING_MODEL_IDS[model_id]
             or not isinstance(model["model_revision"], str)
             or not model["model_revision"]
             or any(
@@ -221,7 +278,12 @@ def _load_bindings(path: Path) -> dict[str, Any]:
             )
         ):
             raise FleetCampaignError("invalid_model_binding")
-    group_fields = {"leader_experiment_key", "launch_packet", "launch_packet_sha256"}
+    group_fields = {
+        "comparison_protocol_sha256",
+        "leader_experiment_key",
+        "launch_packet",
+        "launch_packet_sha256",
+    }
     for group_id, group in groups.items():
         if (
             not isinstance(group_id, str)
@@ -229,6 +291,7 @@ def _load_bindings(path: Path) -> dict[str, Any]:
             or not isinstance(group, dict)
             or set(group) != group_fields
             or group["leader_experiment_key"] not in cells
+            or not SHA256.fullmatch(str(group["comparison_protocol_sha256"]))
             or not SHA256.fullmatch(str(group["launch_packet_sha256"]))
         ):
             raise FleetCampaignError("invalid_group_binding")
@@ -254,7 +317,7 @@ def _load_bindings(path: Path) -> dict[str, Any]:
             or cell["task_version_id"] not in targets
             or type(cell["attempt"]) is not int
             or not 1 <= cell["attempt"] <= 4
-            or type(cell["canary"]) is not bool
+            or cell["canary"] is not False
         ):
             raise FleetCampaignError("invalid_cell_binding")
         combination = (cell["model_id"], cell["task_version_id"], cell["attempt"])
@@ -263,6 +326,7 @@ def _load_bindings(path: Path) -> dict[str, Any]:
         combinations.add(combination)
         by_group[cell["group_id"]].append(key)
     grouped_model_attempts: set[tuple[str, int]] = set()
+    protocol_by_attempt: dict[int, str] = {}
     for group_id, members in by_group.items():
         group = groups[group_id]
         rows = [cells[key] for key in members]
@@ -271,20 +335,23 @@ def _load_bindings(path: Path) -> dict[str, Any]:
             or {row["task_version_id"] for row in rows} != set(targets)
             or len({(row["model_id"], row["attempt"]) for row in rows}) != 1
             or group["leader_experiment_key"] not in members
-            or (
-                any(row["canary"] for row in rows)
-                and not cells[group["leader_experiment_key"]]["canary"]
-            )
         ):
             raise FleetCampaignError("invalid_source_job_group")
         model_attempt = (rows[0]["model_id"], rows[0]["attempt"])
         if model_attempt in grouped_model_attempts:
             raise FleetCampaignError("duplicate_source_job_group")
         grouped_model_attempts.add(model_attempt)
+        attempt = rows[0]["attempt"]
+        protocol_sha256 = group["comparison_protocol_sha256"]
+        if attempt in protocol_by_attempt and protocol_by_attempt[attempt] != protocol_sha256:
+            raise FleetCampaignError("attempt_groups_have_different_comparison_protocols")
+        protocol_by_attempt[attempt] = protocol_sha256
     if grouped_model_attempts != {
         (model_id, attempt) for model_id in models for attempt in range(1, 5)
     }:
         raise FleetCampaignError("incomplete_source_job_groups")
+    if set(protocol_by_attempt) != {1, 2, 3, 4} or len(set(protocol_by_attempt.values())) != 4:
+        raise FleetCampaignError("comparison_protocols_are_not_distinct_per_attempt")
     return value
 
 
@@ -352,18 +419,37 @@ def _binding(
         raise FleetCampaignError("heldout_launch_packet_digest_changed")
     package = heldout_launch.build_package(launch_packet)
     selection = _load(package.packet.files["task_set"])
+    comparison_protocol = _load(package.packet.files["comparison_protocol"])
     routes = package.evaluation_config["routes"]
     if len(routes) != 1 or not isinstance(selection.get("tasks"), list):
         raise FleetCampaignError("heldout_source_job_differs_from_eight_cell_group")
     route = next(iter(routes.values()))
     sampling = package.evaluation_config["sampling"]
+    harness = package.evaluation_config.get("harness")
+    images = package.evaluation_config.get("images")
+    configured_models = package.evaluation_config.get("models")
+    configured_model = (
+        next(iter(configured_models.values()))
+        if isinstance(configured_models, dict) and len(configured_models) == 1
+        else {}
+    )
+    job_labels = package.job.get("metadata", {}).get("labels", {})
     if any(
         (
             package.packet.identity["arm_id"] != cell["model_id"],
             package.packet.identity["model_revision"] != model["model_revision"],
             package.packet.identity["comparison_protocol_sha256"]
-            != bindings["fleet_comparison_protocol_sha256"],
+            != group["comparison_protocol_sha256"],
+            comparison_protocol.get("sha256") != group["comparison_protocol_sha256"],
+            comparison_protocol.get("model_revisions")
+            != {
+                model_id: model_binding["model_revision"]
+                for model_id, model_binding in bindings["model_bindings"].items()
+            },
             package.packet.identity["harness"] != bindings["harness"]["name"],
+            package.packet.identity.get("harness_version") != "1.18.27",
+            package.packet.identity.get("context_management")
+            != FINAL8_HARNESS["context_management"],
             package.packet.identity["checkpoint_provenance_sha256"]
             != model["checkpoint_provenance_sha256"],
             package.packet.identity["serving_route_proof_sha256"]
@@ -373,6 +459,22 @@ def _binding(
             package.packet.identity["retry_limit"] != 0,
             package.evaluation_config["pass_k"] != 1,
             package.evaluation_config["max_reviewed_infrastructure_retries"] != 0,
+            package.evaluation_config.get("concurrency") != 8,
+            harness != FINAL8_HARNESS,
+            images != FINAL8_IMAGES,
+            not isinstance(configured_models, dict) or len(configured_models) != 1,
+            configured_model.get("revision") != model["model_revision"],
+            route.get("served_id") != model["serving_model_id"],
+            route.get("catalog")
+            != {"engine": "sglang", "precision": "bf16", "tensor_parallel_size": 1},
+            route.get("server_info", {}).get("context_length") != 262144,
+            route.get("server_info", {}).get("dp_size") != 8,
+            route.get("server_info", {}).get("tp_size") != 1,
+            route.get("server_info", {}).get("kv_cache_dtype") != "fp8_e4m3",
+            route.get("server_info", {}).get("quantization") is not None,
+            route.get("server_info", {}).get("reasoning_parser") != "qwen3",
+            route.get("server_info", {}).get("tool_call_parser") != "qwen3_coder",
+            route.get("server_info", {}).get("load_balance_method") != "total_tokens",
             package.packet.file_sha256["split_manifest"] != FINAL8_SPLIT_FILE_SHA256,
             package.packet.identity["split_manifest_sha256"] != FINAL8_SPLIT_SHA256,
             selection.get("sha256") != FINAL8_SELECTION_SHA256,
@@ -388,6 +490,9 @@ def _binding(
             sampling.get("temperature") != identity["sampling"]["temperature"],
             sampling.get("top_p") != identity["sampling"]["top_p"],
             set(route["task_versions"]) != set(bindings["target_identity_receipts"]),
+            not isinstance(job_labels, dict),
+            job_labels.get(QUEUE_NAME_LABEL) != "training-lq",
+            job_labels.get(QUEUE_PRIORITY_LABEL) != "q1",
         )
     ):
         raise FleetCampaignError("heldout_source_job_differs_from_eight_cell_group")
@@ -462,6 +567,14 @@ def _preview(package: heldout_launch.Package, cluster: heldout_launch.Cluster) -
                 "metadata": {
                     "name": root.get("metadata", {}).get("name"),
                     "namespace": root.get("metadata", {}).get("namespace"),
+                    "labels": {
+                        QUEUE_NAME_LABEL: root.get("metadata", {})
+                        .get("labels", {})
+                        .get(QUEUE_NAME_LABEL),
+                        QUEUE_PRIORITY_LABEL: root.get("metadata", {})
+                        .get("labels", {})
+                        .get(QUEUE_PRIORITY_LABEL),
+                    },
                     "annotations": {
                         heldout_launch.FAILURE_ALERT_ANNOTATION: root.get("metadata", {})
                         .get("annotations", {})
@@ -483,7 +596,12 @@ def _preview(package: heldout_launch.Package, cluster: heldout_launch.Cluster) -
     }
 
 
-def _terminal_file(path: Path, package: heldout_launch.Package, job_uid: str) -> dict[str, Any]:
+def _terminal_file(
+    path: Path,
+    package: heldout_launch.Package,
+    job_uid: str,
+    config_map_uid: str,
+) -> dict[str, Any]:
     value = _load(path)
     if (
         value.get("schema") != heldout_launch.TERMINAL_SCHEMA
@@ -493,7 +611,13 @@ def _terminal_file(path: Path, package: heldout_launch.Package, job_uid: str) ->
         )
         or value.get("evaluation_identity_sha256") != package.packet.identity_sha256
         or value.get("job", {}).get("uid") != job_uid
-        or value.get("privacy", {}).get("score_values_included") is not False
+        or value.get("config_map", {}).get("uid") != config_map_uid
+        or value.get("privacy")
+        != {
+            "prompts_responses_flags_rewards_or_trace_content_included": False,
+            "score_values_included": False,
+            "credentials_included": False,
+        }
     ):
         raise FleetCampaignError("invalid_fleet_terminal_receipt")
     return value
@@ -548,9 +672,97 @@ def _source_preview(path: Path, package: heldout_launch.Package) -> dict[str, An
         .get("annotations", {})
         .get(heldout_launch.FAILURE_ALERT_ANNOTATION)
         != "off"
+        or root.get("metadata", {}).get("labels", {}).get(QUEUE_NAME_LABEL) != "training-lq"
+        or root.get("metadata", {}).get("labels", {}).get(QUEUE_PRIORITY_LABEL) != "q1"
         or root.get("spec", {}).get("template", {}).get("spec", {}).get("priorityClassName") != "c1"
     ):
         raise FleetCampaignError("invalid_source_job_preview_record")
+    return value
+
+
+def _campaign_cell_status(
+    database: Any,
+    database_name: str,
+    *,
+    dsn_env: str,
+    task_version_id: str,
+    model_revision: str,
+) -> dict[str, Any]:
+    """Read one complete score-blind cell without expanding shared DB APIs."""
+    if hasattr(database, "campaign_cell_status"):
+        value = database.campaign_cell_status(
+            database_name,
+            task_version_id=task_version_id,
+            model_revision=model_revision,
+            attempt=1,
+        )
+    else:
+        original = urlsplit(os.environ.get(dsn_env, ""))
+        query_keys = {
+            key.casefold() for key, _ in parse_qsl(original.query, keep_blank_values=True)
+        }
+        if (
+            heldout_launch.DATABASE_NAME.fullmatch(database_name) is None
+            or original.scheme not in {"postgres", "postgresql"}
+            or not original.netloc
+            or original.fragment
+            or query_keys & {"database", "dbname"}
+        ):
+            raise FleetCampaignError("database_cell_status_connection_is_invalid")
+        dsn = urlunsplit(
+            (
+                original.scheme,
+                original.netloc,
+                "/" + quote(database_name, safe=""),
+                original.query,
+                "",
+            )
+        )
+        from evals.fleet import rollout_postgres  # noqa: PLC0415
+
+        with rollout_postgres._read_transaction(dsn) as connection:  # noqa: SLF001
+            rows = connection.execute(
+                """
+                SELECT cell_id, state, result_class, receipt_digest, failure_code,
+                       reconciliation_digest, retry_count, max_retries
+                FROM rollout_cells
+                WHERE task_version_id = %s AND model_revision = %s AND attempt = 1
+                LIMIT 2
+                """,
+                (task_version_id, model_revision),
+            ).fetchall()
+            if len(rows) != 1:
+                raise FleetCampaignError("database_cell_status_is_not_unique")
+            value = dict(rows[0])
+            value["local_result_present"] = bool(
+                connection.execute(
+                    "SELECT EXISTS(SELECT 1 FROM rollout_local_results WHERE cell_id = %s) "
+                    "AS present",
+                    (value["cell_id"],),
+                ).fetchone()["present"]
+            )
+    expected = {
+        "cell_id",
+        "state",
+        "result_class",
+        "receipt_digest",
+        "failure_code",
+        "reconciliation_digest",
+        "retry_count",
+        "max_retries",
+        "local_result_present",
+    }
+    if (
+        not isinstance(value, dict)
+        or set(value) != expected
+        or SHA256.fullmatch(str(value.get("cell_id"))) is None
+        or any(
+            type(value.get(field)) is not int or value[field] < 0
+            for field in ("retry_count", "max_retries")
+        )
+        or type(value.get("local_result_present")) is not bool
+    ):
+        raise FleetCampaignError("database_cell_status_is_invalid")
     return value
 
 
@@ -643,7 +855,7 @@ def run_action(
                 status="created",
                 remote_id=f"native-grade:{source['job_uid']}",
                 preview_receipt_sha256=preview["receipt_sha256"],
-                readiness_receipt_path=str((readiness_receipt or Path()).resolve()),
+                readiness_receipt_path=str(readiness_receipt or Path()),
                 readiness_receipt_sha256=readiness["receipt_sha256"],
                 collection_terminal_receipt_sha256=preview["collection_terminal_receipt_sha256"],
             )
@@ -756,8 +968,11 @@ def run_action(
                 != _bindings["groups"][cell["group_id"]]["leader_experiment_key"]
             ):
                 raise FleetCampaignError("only_group_leader_may_create_source_job")
+            group_binding = _bindings["groups"][cell["group_id"]]
             created = heldout_launch.launch_once(
                 package.packet.path,
+                validated_package=package,
+                expected_packet_sha256=group_binding["launch_packet_sha256"],
                 cluster=cluster,
                 database=database,
                 journal=group / "CREATE_INTENT.jsonl",
@@ -780,7 +995,7 @@ def run_action(
             status="created",
             remote_id=source["job_uid"],
             preview_receipt_sha256=preview["receipt_sha256"],
-            readiness_receipt_path=str((readiness_receipt or Path()).resolve()),
+            readiness_receipt_path=str(readiness_receipt or Path()),
             readiness_receipt_sha256=readiness["receipt_sha256"],
         )
     else:
@@ -813,25 +1028,39 @@ def run_action(
             )
         else:
             if group_terminal_path.exists():
-                fleet_terminal = _terminal_file(group_terminal_path, package, source["job_uid"])
+                fleet_terminal = _terminal_file(
+                    group_terminal_path,
+                    package,
+                    source["job_uid"],
+                    source["config_map_uid"],
+                )
             else:
-                fleet_terminal = heldout_launch.collect_terminal(
+                heldout_launch.collect_terminal(
                     package.packet.path,
                     cluster=cluster,
                     database=database,
                     receipt_path=group_terminal_path,
                     output_exists=output_exists,
                 )
-            cell_status = database.cell_status(
+                fleet_terminal = _terminal_file(
+                    group_terminal_path,
+                    package,
+                    source["job_uid"],
+                    source["config_map_uid"],
+                )
+            cell_status = _campaign_cell_status(
+                database,
                 package.packet.database,
+                dsn_env=dsn_env,
                 task_version_id=cell["task_version_id"],
                 model_revision=package.packet.identity["model_revision"],
-                attempt=1,
             )
             accepted = (
                 cell_status.get("state") == "accepted"
                 and cell_status.get("result_class") == "valid"
                 and cell_status.get("local_result_present") is True
+                and cell_status.get("retry_count") == 0
+                and cell_status.get("max_retries") == 0
                 and SHA256.fullmatch(str(cell_status.get("receipt_digest"))) is not None
             )
             evidence = digest(

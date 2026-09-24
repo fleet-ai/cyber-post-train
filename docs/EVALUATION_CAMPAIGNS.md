@@ -142,13 +142,19 @@ The descriptive `dev17` evidence remains descriptive. It cannot be imported as
 a final-eight result. The final eight are labelled
 `historically_exposed_locked_confirmation_set` because their historical
 exposure is part of the interpretation boundary, not something the adapter can
-erase. The adapter binds the prospective matrix digest
-`f4459e4d939f99973ad04ab114b03643073da43b9e767681f375bc0e33685da6`
+erase. The adapter binds the operational matrix receipt
+`389a496130f9a4ce0379d9dd901ee6f5003b7cb1d9fae3bbf02100de202962e4`.
+That receipt keeps the prospective selection order and applies only three
+outcome-blind retention fallbacks: batch-16 step 200, 64K step 225, and
+learning-rate-1e-6 step 500. The exact six arms are base, step 1000, those
+three fallbacks, and 96K step 300. It also binds the original prospective
+matrix digest
+`d72f52ce7035c5b2f48eb75de9513141a98f87d5fd7e4caf552ed625e967593a`
 and the exposure audit at
 `docs/evidence/qwen38-fleet-final8-exposure-audit-20260923.json` (file SHA-256
-`3e6b56d0e91560e55240efeaad3b1b660698287961e1eae6bc1b7e2df9d89a05`,
+`17fc69469673018c84d9d11d92f33989eb229730ba9da1d77fc7fffff2953504`,
 receipt SHA-256
-`dac348e34529ac0185d6cb9943bf6c7ad13c5b28bedf9fc8542bd7e8a2e59073`).
+`b61dd5bcba1320b11a40abb1836b6b32cf434fe1cc641da07622cc9d0a34dd5f`).
 That audit records that all eight exact versions have prior quality-certification
 execution and two have accepted pre-split model-comparison execution. No
 historical cell is reused, and this comparison must never be described as
@@ -164,12 +170,15 @@ execution without weakening per-task deduplication or partial-failure
 isolation.
 
 Every server preview is checked through the existing Fleet launcher and must
-show the root Job with `fleet.ai/failure-alerts: "off"` and priority `c1`
-before creation is possible. Collection starts only after that preview and the
-existing duplicate census pass. Results are read only after the exact source
-Job UID is terminal. Each task is then classified independently from its
-score-blind database row, so one broken task does not discard seven accepted
-siblings.
+show the root Job with `fleet.ai/failure-alerts: "off"`, Kueue queue
+`training-lq`, queue priority `q1`, and Pod priority `c1` before creation is
+possible. Collection starts only after that preview and the existing duplicate
+census pass. Results are read only after the exact source Job and ConfigMap UIDs
+are terminally bound. Each task is then classified independently from its
+score-blind database row, and only a zero-retry row can be accepted, so one
+broken task does not discard seven accepted siblings. Because one source Job
+atomically runs all eight tasks, these campaign cells are all non-canary, so the
+generic controller's serial-canary mode has no effect.
 
 Fleet already performs its authoritative task grading during the rollout. The
 campaign score phase is therefore local: it seals the accepted native grading

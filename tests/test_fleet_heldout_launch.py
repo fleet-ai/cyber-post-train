@@ -954,35 +954,6 @@ def test_postgres_summary_preserves_uri_scheme_when_selecting_database(monkeypat
     )
 
 
-def test_postgres_cell_status_is_score_blind_and_selects_exact_database(monkeypatch):
-    from evals.fleet import rollout_postgres
-
-    monkeypatch.setenv(
-        "TEST_ROLLOUT_DATABASE_URL",
-        "postgresql://user:password@postgres.example:5432/rollout?sslmode=disable",
-    )
-    observed: dict[str, Any] = {}
-
-    def fake_cell_status(dsn: str, **identity: Any) -> dict[str, Any]:
-        observed.update({"dsn": dsn, **identity})
-        return {"state": "accepted", "local_result_present": True}
-
-    monkeypatch.setattr(rollout_postgres, "cell_status", fake_cell_status)
-    result = launch.PostgresDatabase("TEST_ROLLOUT_DATABASE_URL").cell_status(
-        DATABASE,
-        task_version_id="11111111-2222-4333-8444-555555555555",
-        model_revision="qwen-revision",
-        attempt=1,
-    )
-    assert result == {"state": "accepted", "local_result_present": True}
-    assert observed == {
-        "dsn": "postgresql://user:password@postgres.example:5432/" + DATABASE + "?sslmode=disable",
-        "task_version_id": "11111111-2222-4333-8444-555555555555",
-        "model_revision": "qwen-revision",
-        "attempt": 1,
-    }
-
-
 def test_postgres_exists_retries_two_transient_connection_failures(monkeypatch):
     class OperationalError(Exception):
         pass

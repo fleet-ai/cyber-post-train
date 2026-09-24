@@ -132,10 +132,6 @@ class Database(Protocol):
 
     def summary(self, database: str) -> dict[str, Any]: ...
 
-    def cell_status(
-        self, database: str, *, task_version_id: str, model_revision: str, attempt: int
-    ) -> dict[str, Any]: ...
-
 
 @dataclass(frozen=True)
 class LaunchPacket:
@@ -1360,6 +1356,8 @@ def _created_name_observation(cluster: Cluster, packet: LaunchPacket) -> dict[st
 def launch_once(
     packet_path: Path,
     *,
+    validated_package: Package | None = None,
+    expected_packet_sha256: str | None = None,
     cluster: Cluster,
     database: Database,
     journal: Path,
@@ -1372,7 +1370,25 @@ def launch_once(
     """
     if journal.exists() or journal.is_symlink():
         raise HeldoutLaunchError("create journal already exists; reconcile, never retry")
-    package = build_package(packet_path)
+    if validated_package is None:
+        if expected_packet_sha256 is not None:
+            raise HeldoutLaunchError("expected packet digest requires a validated package")
+        package = build_package(packet_path)
+        packet_sha256 = _file_sha256(package.packet.path)
+    else:
+        try:
+            exact_path = packet_path.resolve(strict=True)
+        except OSError as exc:
+            raise HeldoutLaunchError("validated packet path is unreadable") from exc
+        if (
+            validated_package.packet.path != exact_path
+            or not isinstance(expected_packet_sha256, str)
+            or SHA256.fullmatch(expected_packet_sha256) is None
+            or _file_sha256(exact_path) != expected_packet_sha256
+        ):
+            raise HeldoutLaunchError("validated package differs from bound packet")
+        package = validated_package
+        packet_sha256 = expected_packet_sha256
     first_census = duplicate_census(
         package, cluster=cluster, database=database, output_exists=output_exists
     )
@@ -1390,7 +1406,7 @@ def launch_once(
     intent = {
         "schema": "cyber_fleet_heldout_create_intent_v1",
         "state": "KUBECTL_CREATE_INTENT_DO_NOT_RETRY",
-        "packet_sha256": _file_sha256(package.packet.path),
+        "packet_sha256": packet_sha256,
         "evaluation_identity_sha256": package.packet.identity_sha256,
         "comparison_protocol_sha256": package.packet.identity["comparison_protocol_sha256"],
         "protocol_id": package.packet.identity["protocol_id"],
@@ -1868,33 +1884,6 @@ class PostgresDatabase:
             raise HeldoutLaunchError("database environment is missing")
         return value
 
-    def _database_dsn(self, database: str) -> str:
-        if not isinstance(database, str) or DATABASE_NAME.fullmatch(database) is None:
-            raise HeldoutLaunchError("database name is invalid")
-        original = urlsplit(self._dsn())
-        if (
-            original.scheme not in {"postgres", "postgresql"}
-            or not original.netloc
-            or original.fragment
-        ):
-            raise HeldoutLaunchError("database environment is not a supported PostgreSQL URI")
-        query_keys = {
-            key.casefold() for key, _ in parse_qsl(original.query, keep_blank_values=True)
-        }
-        if query_keys & {"database", "dbname"}:
-            raise HeldoutLaunchError(
-                "database environment must select its database only by URI path"
-            )
-        return urlunsplit(
-            (
-                original.scheme,
-                original.netloc,
-                "/" + quote(database, safe=""),
-                original.query,
-                "",
-            )
-        )
-
     def exists(self, database: str) -> bool:
         try:
             import psycopg
@@ -1921,25 +1910,33 @@ class PostgresDatabase:
         try:
             from evals.fleet import rollout_postgres
 
-            return rollout_postgres.summary(self._database_dsn(database))
+            if not isinstance(database, str) or DATABASE_NAME.fullmatch(database) is None:
+                raise HeldoutLaunchError("database name is invalid")
+            original = urlsplit(self._dsn())
+            if (
+                original.scheme not in {"postgres", "postgresql"}
+                or not original.netloc
+                or original.fragment
+            ):
+                raise HeldoutLaunchError("database environment is not a supported PostgreSQL URI")
+            query_keys = {
+                key.casefold() for key, _ in parse_qsl(original.query, keep_blank_values=True)
+            }
+            if query_keys & {"database", "dbname"}:
+                raise HeldoutLaunchError(
+                    "database environment must select its database only by URI path"
+                )
+            dsn = urlunsplit(
+                (
+                    original.scheme,
+                    original.netloc,
+                    "/" + quote(database, safe=""),
+                    original.query,
+                    "",
+                )
+            )
+            return rollout_postgres.summary(dsn)
         except HeldoutLaunchError:
             raise
         except Exception:
             raise HeldoutLaunchError("score-blind database summary failed") from None
-
-    def cell_status(
-        self, database: str, *, task_version_id: str, model_revision: str, attempt: int
-    ) -> dict[str, Any]:
-        try:
-            from evals.fleet import rollout_postgres
-
-            return rollout_postgres.cell_status(
-                self._database_dsn(database),
-                task_version_id=task_version_id,
-                model_revision=model_revision,
-                attempt=attempt,
-            )
-        except HeldoutLaunchError:
-            raise
-        except Exception:
-            raise HeldoutLaunchError("score-blind database cell status failed") from None
