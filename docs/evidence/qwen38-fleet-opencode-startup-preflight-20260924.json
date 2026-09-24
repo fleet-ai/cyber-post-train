@@ -56,7 +56,7 @@
     "cpu_limit": 4
   },
   "repair": {
-    "status": "code_and_tests_only_not_live_qualified",
+    "status": "exact_image_cpu_offline_qualified_no_evaluation",
     "normal_probe": "Run the pinned binary once, require the exact version, require non-root execution and explicit HOME, and directly create and remove a private file in each OpenCode config, cache, state and data directory.",
     "safety_timeout_seconds": 300,
     "preserved_gates": [
@@ -76,5 +76,24 @@
       "scoring call"
     ]
   },
-  "sha256": "216d131d97fc5e580a4145646d5f400fbc926cbcf132177333e6e6ae68565414"
+  "exact_image_qualification": {
+    "job": "chris-q38-opencode-startup-v3",
+    "manifest_sha256": "sha256:f518d6ab36d2c6d808fb378754c5ef9a24c80ff50ce254fe7dfe09262a4ded1b",
+    "job_uid": "1014f2dd-7e80-4ca6-a4dd-82930e1aae9d",
+    "pod_uid": "f98a3b6a-7b1d-4299-a8f9-fc71e17f63bd",
+    "exit_code": 0,
+    "restart_count": 0,
+    "semantic_startup_passed_trials": 5,
+    "root_failure_alert_annotation": "off",
+    "priority_class": "c1",
+    "gpu_requested": 0,
+    "model_or_scoring_call_made": false,
+    "result": "Five consecutive semantic startup trials passed against the exact pinned image without creating a database or launching an evaluation.",
+    "cleanup_observed_at": "2026-09-24T08:28:27Z",
+    "cleanup": {
+      "job": "not_found",
+      "matching_pods": 0
+    }
+  },
+  "sha256": "1dd30e4b1790decf360d457291272920713fd85a4b48fed27b5c5404bff7a227"
 }
