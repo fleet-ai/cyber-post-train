@@ -1,0 +1,181 @@
+{
+  "schema": "qwen38_fleet_final8_exposure_audit_v1",
+  "observed_at": "2026-09-24T04:48:41Z",
+  "repository_commit": "0f0bcdb7c6e18fb8a337e287df43bb2188f2899a",
+  "scope": "Identity and execution-state audit of the eight task versions assigned to final_test in the current 75-task Fleet blackbox split. The conclusions do not use score or reward values; the integrity disclosure records why a strict no-score-display attestation is unavailable.",
+  "split": {
+    "path": "configs/data/fleet-blackbox-current-study-split-20260914-v2.json",
+    "file_sha256": "sha256:28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb",
+    "logical_sha256": "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
+    "dev_selection_sha256": "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
+    "final_test_selection_sha256": "sha256:9623149c4a021bc13ed2cf94ca26e107b30c18816cf3c02d76b5020cab5066f4",
+    "counts": {
+      "train": 50,
+      "dev": 17,
+      "final_test": 8
+    },
+    "exact_identity_overlap": 0,
+    "reviewed_family_overlap": 0,
+    "generalization_scope": "task_family_held_out_not_application_held_out",
+    "inventory_path": "configs/data/fleet-blackbox-current-high-quality-20260914-v1.json",
+    "inventory_file_sha256": "sha256:6c211259a29376de195411e5cc182bb6f26c5b8027ab86fec855b44f064b0fd0",
+    "inventory_logical_sha256": "sha256:23cfc25af183ff474e914443682e4707162110ddc2aa16103a13d984fe05b83c",
+    "introduced_by_commit": "a03dec60b46efef794e1d7f7865967fa95cd92b0",
+    "introduced_at": "2026-09-15T00:47:51Z"
+  },
+  "final_test_task_versions": [
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-58a4ac6886feda0738f2feb8__blackbox_ctf_v1",
+      "task_version_id": "e33aaed0-491b-46e8-8891-55d99c80ef56",
+      "group_id": "sha256:ed8f3c2e712c88b5749c15dad8132e4d54824ae54ca8a9193cfb6d0526c8ddc5",
+      "prior_exact_execution_certification_sha256": "sha256:9e2a8bf46b6831eacf37baa1cd4caad997da7fbbff6113b58a966e254f7717e5"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-bc363f8239aeeaa3f648046a__blackbox_ctf_v1",
+      "task_version_id": "ba912601-1184-4dcd-9e9d-2fce22543e4b",
+      "group_id": "sha256:5dc1a473f426215404c5a60e3e23ebdb6a4917c5a10eba0e410158a06bc0ebf4",
+      "prior_exact_execution_certification_sha256": "sha256:6ebfcb9f13396959c8ebe2c05dcfa3c0044d0cf940a9e70d38cfb0a72c1c31f1"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-ab56dfb6116356c402290fa8__blackbox_ctf_v1",
+      "task_version_id": "9375a9b9-04e5-4f6f-ad47-286121278992",
+      "group_id": "sha256:c30109d7ac4598597a11d1d637fbb07dc752cf90503736a51b3aee2f1bedf26c",
+      "prior_exact_execution_certification_sha256": "sha256:1b83dd63e9763ff7df899f47af5d0e227f99274a17dba0a3c0ab8f285757169d"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-d59f9f2960c2fdb1e2cdd8e1__blackbox_ctf_v1",
+      "task_version_id": "5287e180-64ea-487b-982a-d08a38c05fa2",
+      "group_id": "sha256:b8e3ed61bbbf7ae03cbddb0b95d3e08b4047afe33b026f8470df1b7619aefe8a",
+      "prior_exact_execution_certification_sha256": "sha256:197a851ccbedba8bd07a9ce601dce9dfe5dd190b611f6155484f13af31ac3528"
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-229f415d73156f279e7b6825__blackbox_ctf_v1",
+      "task_version_id": "8c0b249c-8946-4ec3-8609-d74631af547e",
+      "group_id": "sha256:e0a583bb4b6a383b696bc3178048764f6b860dc2f948854b972206802559311b",
+      "prior_exact_execution_certification_sha256": "sha256:0481d9df941cd3c35588c7e768809bf40454711cb2bd2f00b42f1989eb9620e5"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-2637dbd94a61305dbd406c3c__blackbox_ctf_v1",
+      "task_version_id": "f8533754-39ad-4683-b9c1-d26bc24dfd14",
+      "group_id": "sha256:2743b58e7caf2f405686d56f6ce772594f0c2cd391ae09676db214dff8448066",
+      "prior_exact_execution_certification_sha256": "sha256:be0427fd3ca4dad56535deb5d092dc4f96e023a2b42b1785c10f3f82f507da64"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-322896ad3182769453b9944a__blackbox_ctf_v1",
+      "task_version_id": "8e5c7c45-7259-420d-ba12-0381465d864e",
+      "group_id": "sha256:42fe35331c0215fd7a5ae269f72c5723621cf15a7ac4bd556991771fd5c66378",
+      "prior_exact_execution_certification_sha256": "sha256:3e60c476398e89bdb74a2512fab5c8eedcf127913178ff65676ada96edbde26a"
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-6c0962e92122d89a62d04a45__blackbox_ctf_v1",
+      "task_version_id": "ee77cfbf-ceed-487f-a19d-3922aaaf4bad",
+      "group_id": "sha256:e14404e00ca98b948e1cac382fa2208c37a27577d5991c1e1b8df6d60ec1c9e9",
+      "prior_exact_execution_certification_sha256": "sha256:82a770bbf7250f7b06cb2be74b1151b6700b1afd0b2633a1863c6389df3a532f"
+    }
+  ],
+  "historical_execution_evidence": {
+    "all_eight_task_certification": {
+      "accepted_prior_exact_execution_certifications": 8,
+      "evidence_source": "The current high-quality inventory binds one accepted prior exact-execution certification receipt digest to each exact task version; those digests are recorded in the roster above.",
+      "boundary": "This proves prior exact task execution for quality certification. It does not prove that every version was evaluated by a Qwen base or candidate model or used for checkpoint selection."
+    },
+    "historical_model_comparison": {
+      "campaign_id": "chris-cyber-q38-glm53-exact-easiest100-pass4-v1",
+      "source_api_job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
+      "selection_path": "evals/fleet/configs/opencode-easiest-train100-selection-v2.json",
+      "selection_file_sha256": "sha256:9f5e83123cfe7d8a3f4cc0b791ac1dc9032a3d5faf5eba2a431c7246069255df",
+      "selection_sha256": "sha256:38bd544c74f4e45cb67b271849d657f49e356ccf41f97acca9fb6cd7eb7f56b8",
+      "campaign_path": "evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json",
+      "campaign_file_sha256": "sha256:5361c5bd5ea0765b88be4db01132c189c107d8eecfc35e25a2546adc22665b8f",
+      "ledger_receipt_path": "docs/evidence/qwen38-study/2026-09-06-exact-pass4-ledger-v50.json",
+      "ledger_receipt_file_sha256": "sha256:8859dc4c40dbe216815bbe4dd743e511342fbf66fb40190f4fabec7bfe402f1e",
+      "ledger_receipt_sha256": "sha256:5042eed872f1d87f9e4733806253d1317d03ee7f6c4980b78f6c776f362d66a7",
+      "files_first_committed_by": "2d97f79b195117060ce1df398463ca1d988af730",
+      "files_first_committed_at": "2026-09-06T21:46:05-07:00",
+      "planned_exact_task_versions": 8,
+      "planned_cells": 64,
+      "qwen_cells": 32,
+      "glm_cells": 32,
+      "state_counts": {
+        "accepted": 5,
+        "blocked_nonrepeatable": 1,
+        "unstarted": 58
+      },
+      "exact_task_versions_with_accepted_cells": 2,
+      "accepted_version_ids_sha256": "sha256:a33a59c90ed94047137d85eb271519b2fe833023ea33e039aba0ce3d839b7ede",
+      "accepted_version_ids_digest_rule": "SHA-256 of the two sorted UTF-8 task-version IDs joined by newline, including a trailing newline.",
+      "exact_task_versions_with_only_unstarted_cells": 6,
+      "boundary": "The ledger proves accepted model-comparison execution for two exact versions. A planned cell is not treated as an execution; the other six versions have only unstarted cells in this ledger. No score or reward value is needed for this classification."
+    }
+  },
+  "post_split_lock_audit": {
+    "checkpoint_ledger_path": "configs/evaluation/qwen38-checkpoint-eval-ledger-v2.json",
+    "checkpoint_ledger_file_sha256": "sha256:312602dd20397ba66028073e3b45cb695db6c3931df0be6d954553a39b3b304a",
+    "checkpoint_ledger_observed_at": "2026-09-21T16:30:00Z",
+    "checkpoint_ledger_rule": "Submit the exact task_version_id values in the frozen split. Use dev for experiment iteration and keep final_test sealed until a checkpoint-selection rule is frozen.",
+    "repository_search": {
+      "needle": "sha256:9623149c4a021bc13ed2cf94ca26e107b30c18816cf3c02d76b5020cab5066f4",
+      "roots": [
+        "configs",
+        "docs",
+        "evals"
+      ],
+      "excluded_path": "docs/evidence/qwen38-fleet-final8-exposure-audit-20260923.json",
+      "matches": [
+        "configs/data/fleet-blackbox-current-study-split-20260914-v2.json",
+        "configs/evaluation/qwen38-checkpoint-eval-ledger-v1.json",
+        "configs/evaluation/qwen38-checkpoint-eval-ledger-v2.json"
+      ]
+    },
+    "current_final_selection_terminal_result_found_in_repository": false,
+    "current_final_results_used_for_checkpoint_selection_found_in_repository": false,
+    "search_boundary": "The repository search binds only files containing the exact current-final selection digest under configs, docs, and evals. It found the split and two checkpoint ledgers, but no terminal-result or selection receipt. Absence outside the audited repository is not claimed."
+  },
+  "scoped_presplit_claim": {
+    "path": "configs/data/qwen-blackbox-study-presplit-v1.json",
+    "file_sha256": "sha256:a126eedfddac5f523c5270eaf14796540af823dcb01050eab0166cb66180babf",
+    "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a",
+    "frozen_at": "2026-09-11T21:15:00Z",
+    "status": "unexposed",
+    "scope": "this exact campaign and exact base initialization before any study split, corpus materialization or training submission",
+    "historical_global_exposure_claimed": false,
+    "interpretation": "There is no contradiction: this receipt explicitly does not claim historical global non-exposure."
+  },
+  "integrity_disclosure": {
+    "current_final8_task_level_scores_or_rewards_read": false,
+    "current_final8_task_level_scores_or_rewards_recorded": false,
+    "prompts_read": false,
+    "traces_read": false,
+    "outputs_read": false,
+    "flags_or_answers_read": false,
+    "session_content_read": false,
+    "session_ids_recorded": false,
+    "capability_values_used_in_finding": false,
+    "conclusions_are_score_independent": true,
+    "strict_no_score_display_attestation": false,
+    "reason": "An exploratory repository search accidentally displayed unrelated historical aggregate score-related fields from existing files. Those values were not copied, used, or recorded in this receipt."
+  },
+  "effects": {
+    "api_mutations": 0,
+    "cluster_mutations": 0,
+    "model_calls": 0,
+    "scoring_calls": 0,
+    "sessions_created": 0,
+    "results_unsealed": 0
+  },
+  "recommended_prospective_confirmation": {
+    "preferred_action": "Mint a new final holdout whose exact versions and reviewed task families have been checked for any prior exposure.",
+    "fallback_use_of_this_set": "Freeze one base checkpoint and five candidate checkpoints before using this set. Select the candidates using dev17 and WebExploitBench only.",
+    "matched_design": {
+      "arms": 6,
+      "tasks": 8,
+      "attempts_per_task_per_arm": 4,
+      "planned_outcomes": 192,
+      "requirements": "Use the same task versions, OpenCode harness, runtime, token and time limits, sampling settings, retry policy, and infrastructure-only reconciliation for every arm. Do not substitute historical cells. Reveal results only after every arm is terminal."
+    },
+    "interpretation": "This can confirm a prospectively frozen comparison, but it cannot support a claim about performance on a pristine or globally untouched final test."
+  },
+  "disposition": "historically_exposed_locked_confirmation_set",
+  "conclusion": "The eight versions remain disjoint from the current train50 and dev17 partitions. The exact current-final selection digest appears only in the split and two checkpoint ledgers in the audited repository, not in a terminal-result or checkpoint-selection receipt. The set is nevertheless not pristine or globally untouched: all eight have prior exact-execution certification, and two have accepted cells in a historical model comparison. Future use may support a prospectively frozen locked confirmation only; an untouched-final claim requires a new globally exposure-censused holdout.",
+  "sha256": "sha256:9a2984a3f056f9a7ababc0ca0d2187f4de241887dec4d151347f539a1bef2594"
+}
