@@ -23,6 +23,11 @@ Machine-readable artifacts:
 - [current lineage-safe split](../configs/data/fleet-blackbox-lineage-safe-split-20260924-v1.json)
 - [derivation and no-launch decision](evidence/qwen38-study/2026-09-24-fleet-blackbox-lineage-safe-split-design-v1.json)
 
+The follow-up [shared-atom lineage census](FLEET_BLACKBOX_SHARED_ATOM_LINEAGE_2026-09-24.md)
+implements the previously missing composite/successor closure. It binds all 33
+pending candidates to exact live lineage, but qualifies none for admission, so
+the 50/17/8 roles remain unchanged.
+
 Reproduce all three exactly with:
 
 ```sh
@@ -36,13 +41,13 @@ plus `task_family`, not a task name. Every exact version with that same identity
 must stay in one role. All 75 current rows are single-atom families, so this is
 enough to preserve their frozen roles.
 
-It is **not yet enough for expansion**. Two future composite tasks could have
-different family strings while sharing an atom, and successor atom versions
-could encode the same underlying vulnerability under different strings. Before
-any new task is assigned, the allocator must group the transitive closure of
-shared reviewed atom identities. Until that stronger grouping exists, the
-design is deliberately no-launch and makes no general alias/composite leakage
-guarantee.
+The v1 grouping is **not enough for expansion**. Two future composite tasks
+could have different family strings while sharing an atom, and successor atom
+versions could encode the same underlying vulnerability under different
+strings. The follow-up v2 artifact now computes the required transitive closure
+of shared reviewed atom identities. It remains no-launch because none of the
+newly bound candidates has the complete runtime receipts required for
+admission.
 
 Exact qualification uses the pair `(task_key, task_version_id)`. A task key by
 itself is not enough because it can acquire later versions. Family grouping then
