@@ -196,6 +196,7 @@ def test_submit_collects_and_consumes_one_fresh_exact_live_task_receipt(
         journal,
         anchor,
         "a" * 64,
+        1500,
         Fleet(),
         jobs,
         now=lambda: 1000,
@@ -210,7 +211,7 @@ def test_submit_collects_and_consumes_one_fresh_exact_live_task_receipt(
     ]
     assert jobs.submission["request"] == request
     assert jobs.submission["anchor"] == anchor
-    assert jobs.submission["not_after"] == 1900
+    assert jobs.submission["not_after"] == 1500
     assert jobs.submission["evidence"].startswith("sha256:")
     assert live.stat().st_mode & 0o777 == 0o600
     assert b"test prompt" not in live.read_bytes()
@@ -279,11 +280,52 @@ def test_submit_rejects_live_task_drift_before_jobs_submission(tmp_path: Path, m
             tmp_path / "SUBMISSION.jsonl",
             retained / f"{plan['identity']['name']}-SUBMISSION.jsonl",
             "a" * 64,
+            1500,
             Fleet(),
             Jobs(),
             now=lambda: 1000,
         )
     assert not live.exists()
+
+
+def test_submit_rejects_expired_packet_before_jobs_submission(tmp_path: Path) -> None:
+    plan = phase1a.build_plan()
+    retained = tmp_path / "retained"
+    retained.mkdir()
+
+    class Jobs:
+        def submit_once(
+            self,
+            request,
+            journal,
+            *,
+            journal_anchor,
+            expected_preview_manifest_sha256,
+            before_intent,
+            not_after_epoch,
+        ):
+            del (
+                request,
+                journal,
+                journal_anchor,
+                expected_preview_manifest_sha256,
+                before_intent,
+                not_after_epoch,
+            )
+            raise AssertionError("expired packet must not reach Jobs submission")
+
+    with pytest.raises(ValueError, match="packet is expired"):
+        phase1a.submit_phase1a(
+            plan,
+            retained / "LIVE_TASK.json",
+            tmp_path / "SUBMISSION.jsonl",
+            retained / f"{plan['identity']['name']}-SUBMISSION.jsonl",
+            "a" * 64,
+            1029,
+            object(),
+            Jobs(),
+            now=lambda: 1000,
+        )
 
 
 @pytest.mark.parametrize(

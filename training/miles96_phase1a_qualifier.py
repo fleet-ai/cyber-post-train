@@ -933,6 +933,7 @@ def submit_phase1a(
     journal_path: Path,
     journal_anchor: Path,
     expected_preview_manifest_sha256: str,
+    packet_not_after_epoch: int,
     fleet_client: Any,
     jobs_client: Any,
     *,
@@ -954,7 +955,10 @@ def submit_phase1a(
         raise ValueError("phase1-A journal anchor is not the exact retained path")
     if "journal_anchor" not in inspect.signature(jobs_client.submit_once).parameters:
         raise ValueError("Jobs submission rail lacks the required stable journal anchor")
-    deadline = int(now()) + LIVE_TASK_MAX_AGE_S
+    started_at = int(now())
+    if type(packet_not_after_epoch) is not int or started_at + 30 > packet_not_after_epoch:
+        raise ValueError("phase1-A JIT packet is expired or lacks a safe submission margin")
+    deadline = min(started_at + LIVE_TASK_MAX_AGE_S, packet_not_after_epoch)
 
     def collect_live_receipt(_preview: dict[str, Any]) -> str:
         account = _fleet_get(fleet_client, "/v1/account")
@@ -1305,6 +1309,7 @@ def main() -> None:
     parser.add_argument("--journal")
     parser.add_argument("--journal-anchor")
     parser.add_argument("--preview-manifest-sha256")
+    parser.add_argument("--packet-not-after-epoch", type=int)
     args = parser.parse_args()
     plan = validate_plan(json.loads(Path(args.plan).read_text()))
     if digest(plan) != args.sha256:
@@ -1319,11 +1324,12 @@ def main() -> None:
             args.journal,
             args.journal_anchor,
             args.preview_manifest_sha256,
+            args.packet_not_after_epoch,
         )
         if any(value is None for value in required):
             parser.error(
                 "--submit requires --live-task-receipt, --journal, --journal-anchor and "
-                "--preview-manifest-sha256"
+                "--preview-manifest-sha256 and --packet-not-after-epoch"
             )
         token = os.environ.get("FLEET_API_KEY", "")
         if not token:
@@ -1344,6 +1350,7 @@ def main() -> None:
                 Path(args.journal),
                 Path(args.journal_anchor),
                 args.preview_manifest_sha256,
+                args.packet_not_after_epoch,
                 fleet_client,
                 jobs_client,
             )
