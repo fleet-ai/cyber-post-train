@@ -23,7 +23,7 @@ def test_reconcile_releases_only_exact_remaining_instance(tmp_path: Path, monkey
     for number in range(8):
         attempt = attempts / str(number)
         attempt.mkdir()
-        instance_id = f"00000000-0000-0000-0000-{number:012d}"
+        instance_id = f"instance-opaque-{number}"
         ids.append(instance_id)
         (attempt / "binding.json").write_text(
             json.dumps(

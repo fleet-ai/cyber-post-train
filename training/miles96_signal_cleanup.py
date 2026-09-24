@@ -6,10 +6,10 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.request
-import uuid
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +21,7 @@ TASK_VERSION_ID = "0920e798-c7e7-4da6-9d5e-ebeba45ec05a"
 VERIFIER_VERSION_ID = "9356b7ca-43b4-4926-a871-d9a95b41f6e5"
 MODEL_REVISION = "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
 SERVED_MODEL = "qwen/chris-q38-base-pass4-v1"
-JOB_NAME = "chris-q38-m96-signal-a2-leak-a1"
+JOB_NAME = "chris-q38-m96-signal-a2-leak-a2"
 CM_NAME = JOB_NAME + "-code"
 NAMESPACE = "fleet-train-jobs"
 IMAGE = (
@@ -45,6 +45,15 @@ def _read(path: Path) -> dict[str, Any]:
     value = json.loads(path.read_text())
     if not isinstance(value, dict):
         raise ValueError("private lifecycle receipt is invalid")
+    return value
+
+
+def _instance_identifier(value: Any) -> str:
+    """Apply Fleet's canonical opaque, DNS-safe environment-ID contract."""
+    if not isinstance(value, str) or not re.fullmatch(
+        r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", value
+    ):
+        raise ValueError("Fleet authoritative instance ID is not a DNS-safe identifier")
     return value
 
 
@@ -87,7 +96,7 @@ def reconcile(source: Path = SOURCE) -> dict[str, Any]:
     for attempt in attempts:
         binding = _read(attempt / "binding.json")
         runtime = _read(attempt / "runtime-binding.json")
-        instance_id = str(uuid.UUID(str(runtime.get("instance_id"))))
+        instance_id = _instance_identifier(runtime.get("instance_id"))
         if (
             binding.get("task", {}).get("version_id") != TASK_VERSION_ID
             or binding.get("verifier", {}).get("version_id") != VERIFIER_VERSION_ID
