@@ -110,3 +110,35 @@ def test_packet_has_silent_zero_gpu_root_job() -> None:
     assert job["spec"]["suspend"] is True
     assert job["spec"]["template"]["spec"]["priorityClassName"] == "c1"
     assert "nvidia.com/gpu" not in json.dumps(job)
+
+
+def test_header_probe_emits_only_identity_booleans(tmp_path: Path) -> None:
+    source, _release_sha256 = _output(tmp_path)
+    receipt = diagnosis.header_probe(source)
+    assert receipt["schema_matches"] is True
+    assert receipt["self_digest_matches"] is True
+    assert receipt["plan_matches"] is True
+    assert set(receipt) == {
+        "plan_matches",
+        "reward_or_trace_content_read",
+        "schema",
+        "schema_matches",
+        "self_digest_matches",
+        "sha256",
+        "source_job_uid",
+        "terminal_fields_included",
+        "terminal_file_sha256",
+    }
+
+
+def test_header_packet_has_silent_zero_gpu_root_job() -> None:
+    value = diagnosis.header_packet()
+    job = value["bundle"]["items"][1]
+    assert value["sha256"] == diagnosis.digest(
+        {key: item for key, item in value.items() if key != "sha256"}
+    )
+    assert job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+    assert job["spec"]["backoffLimit"] == 0
+    assert job["spec"]["suspend"] is True
+    assert job["spec"]["template"]["spec"]["priorityClassName"] == "c1"
+    assert "nvidia.com/gpu" not in json.dumps(job)

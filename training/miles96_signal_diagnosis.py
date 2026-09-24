@@ -13,6 +13,7 @@ from typing import Any
 
 SOURCE = Path("/mnt/sfs/jobs/chris-q38-m96-signal-a2")
 RECEIPT = SOURCE / "SIGNAL_DIAGNOSIS.json"
+HEADER_RECEIPT = SOURCE / "SIGNAL_HEADER_PROBE.json"
 SOURCE_JOB_UID = "d3388003-61ce-4b5d-95cf-5b85d7e6ac8b"
 PLAN_SHA256 = "a4cca0bc9af5f8cd47d572c02bf7d513759a8b7c7ee4e912aada087c439261c0"
 TASK_VERSION_ID = "0920e798-c7e7-4da6-9d5e-ebeba45ec05a"
@@ -22,6 +23,8 @@ SERVED_MODEL = "qwen/chris-q38-base-pass4-v1"
 RELEASE_SHA256 = "sha256:1c019cd9fa9906dc4453f1e80766c0b10fc984f18d3c9e94bcb8b5a9b3814583"
 JOB_NAME = "chris-q38-m96-signal-a2-diagnosis-a1"
 CM_NAME = JOB_NAME + "-code"
+HEADER_JOB_NAME = "chris-q38-m96-signal-a2-header-a1"
+HEADER_CM_NAME = HEADER_JOB_NAME + "-code"
 NAMESPACE = "fleet-train-jobs"
 IMAGE = (
     "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:"
@@ -52,6 +55,29 @@ def _write_once(path: Path, value: dict[str, Any]) -> None:
         stream.write(raw)
         stream.flush()
         os.fsync(stream.fileno())
+
+
+def header_probe(source: Path = SOURCE) -> dict[str, Any]:
+    """Report only identity booleans for the preserved campaign terminal."""
+    terminal_path = source / "EVAL_TERMINAL.json"
+    receipt_path = source / HEADER_RECEIPT.name
+    if source.is_symlink() or not source.is_dir() or receipt_path.exists():
+        raise ValueError("source output is absent, unsafe, or already probed")
+    terminal = _read(terminal_path)
+    body = {
+        "schema": "cyber_qwen38_miles96_signal_terminal_header_probe_v1",
+        "source_job_uid": SOURCE_JOB_UID,
+        "terminal_file_sha256": "sha256:" + hashlib.sha256(terminal_path.read_bytes()).hexdigest(),
+        "schema_matches": terminal.get("schema") == "fleet_eval_campaign_terminal_v1",
+        "self_digest_matches": terminal.get("sha256")
+        == digest({k: v for k, v in terminal.items() if k != "sha256"}, prefix=False),
+        "plan_matches": terminal.get("plan_sha256") == PLAN_SHA256,
+        "terminal_fields_included": False,
+        "reward_or_trace_content_read": False,
+    }
+    receipt = {**body, "sha256": digest(body)}
+    _write_once(receipt_path, receipt)
+    return receipt
 
 
 def diagnose(source: Path = SOURCE) -> dict[str, Any]:
@@ -270,11 +296,124 @@ def packet() -> dict[str, Any]:
     return {**body, "sha256": digest(body)}
 
 
+def header_packet() -> dict[str, Any]:
+    source = Path(__file__).read_text()
+    bundle = {
+        "apiVersion": "v1",
+        "kind": "List",
+        "items": [
+            {
+                "apiVersion": "v1",
+                "kind": "ConfigMap",
+                "immutable": True,
+                "metadata": {"name": HEADER_CM_NAME, "namespace": NAMESPACE},
+                "data": {"diagnosis.py": source},
+            },
+            {
+                "apiVersion": "batch/v1",
+                "kind": "Job",
+                "metadata": {
+                    "name": HEADER_JOB_NAME,
+                    "namespace": NAMESPACE,
+                    "annotations": {"fleet.ai/failure-alerts": "off"},
+                    "labels": {
+                        "cyber-post-train.fleet.ai/owner": "chris",
+                        "cyber-post-train.fleet.ai/role": "miles96-signal-header-probe",
+                        "kueue.x-k8s.io/queue-name": "training-lq",
+                        "kueue.x-k8s.io/priority-class": "q1",
+                    },
+                },
+                "spec": {
+                    "suspend": True,
+                    "backoffLimit": 0,
+                    "activeDeadlineSeconds": 300,
+                    "template": {
+                        "metadata": {"annotations": {"fleet.ai/failure-alerts": "off"}},
+                        "spec": {
+                            "restartPolicy": "Never",
+                            "priorityClassName": "c1",
+                            "nodeSelector": {
+                                "kubernetes.io/arch": "amd64",
+                                "workload": "fleetai-training-ng-cpu",
+                            },
+                            "tolerations": [
+                                {
+                                    "key": "workload",
+                                    "operator": "Equal",
+                                    "value": "fleetai-training-ng-cpu",
+                                    "effect": "NoSchedule",
+                                }
+                            ],
+                            "containers": [
+                                {
+                                    "name": "probe",
+                                    "image": IMAGE,
+                                    "command": [
+                                        "python",
+                                        "/bootstrap/diagnosis.py",
+                                        "--header-probe",
+                                    ],
+                                    "resources": {
+                                        "requests": {"cpu": "1", "memory": "1Gi"},
+                                        "limits": {"cpu": "2", "memory": "2Gi"},
+                                    },
+                                    "volumeMounts": [
+                                        {
+                                            "name": "bootstrap",
+                                            "mountPath": "/bootstrap",
+                                            "readOnly": True,
+                                        },
+                                        {"name": "sfs", "mountPath": "/mnt/sfs"},
+                                    ],
+                                }
+                            ],
+                            "volumes": [
+                                {"name": "bootstrap", "configMap": {"name": HEADER_CM_NAME}},
+                                {
+                                    "name": "sfs",
+                                    "persistentVolumeClaim": {"claimName": "sfs-shared"},
+                                },
+                            ],
+                        },
+                    },
+                },
+            },
+        ],
+    }
+    body = {
+        "schema": "cyber_qwen38_miles96_signal_header_probe_packet_v1",
+        "job_name": HEADER_JOB_NAME,
+        "config_map_name": HEADER_CM_NAME,
+        "source_job_uid": SOURCE_JOB_UID,
+        "bundle": bundle,
+        "create_counts": {"config_map": 1, "job": 1, "retry": 0, "patch": 0},
+        "expected": {
+            "gpus": 0,
+            "priority_class": "c1",
+            "queue_priority": "q1",
+            "failure_alerts": "off",
+        },
+    }
+    return {**body, "sha256": digest(body)}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--packet", action="store_true")
+    parser.add_argument("--header-packet", action="store_true")
+    parser.add_argument("--header-probe", action="store_true")
     args = parser.parse_args()
-    value = packet() if args.packet else diagnose()
+    selected = sum((args.packet, args.header_packet, args.header_probe))
+    if selected > 1:
+        parser.error("select at most one operation")
+    if args.packet:
+        value = packet()
+    elif args.header_packet:
+        value = header_packet()
+    elif args.header_probe:
+        value = header_probe()
+    else:
+        value = diagnose()
     print(json.dumps(value, sort_keys=True))
 
 
