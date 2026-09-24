@@ -101,8 +101,9 @@ that share one model and seed onto one CPU source Job. One declared leader cell
 creates that Job; the other cells reuse its immutable Job UID. This preserves
 per-task failure isolation without creating duplicate Jobs.
 
-The bindings file is immutable JSON with schema
-`cyber_fleet_campaign_bindings_v1`. It contains:
+The bindings file is immutable JSON. Existing small campaigns use
+`cyber_fleet_campaign_bindings_v1`; a scaled create wave uses
+`cyber_fleet_campaign_bindings_v2`. Both contain:
 
 - today's UTC rollout census: exact receipt digest, already-used count and the
   fixed daily cap of 500;
@@ -121,10 +122,22 @@ priority `c1`, have no retry, and have a bounded deadline.
 
 Daily capacity is reserved under the generic campaign's canonical local state
 directory while holding a file lock. The gate counts the frozen already-used
-census plus every persistent source-group reservation. Reopening the same exact
-group is idempotent; a changed reservation or a total above 500 fails closed.
-Use one authoritative census before the first campaign reservation each UTC
-day, and reuse that exact census for every campaign on the same controller host.
+census plus every persistent reservation. Version 1 reserves one source group
+at a time. Before any version 2 source Job can be created, `reserve-wave` must
+atomically publish one durable record covering every source group and campaign
+cell. Each later group launch adopts that exact record; partial coverage cannot
+create anything. An exact replay is idempotent, while a changed binding,
+overlapping reservation, or total above 500 fails closed. Use the first
+authoritative census for that UTC day on the controller host and never replace
+it with a later corroborating census.
+
+The scaled creator is deliberately small: reserve the complete wave once, then
+run the generic campaign step with `--execute --fail-fast` only after every
+cell has an accepted preview. The frozen plan fixes launch order, the v2 binding
+fixes the plan digest and complete packet set, and every create uses the exact
+bytes validated before its final duplicate checks. The creator contains no
+cleanup or delete command. Monitoring and any later UID-bound cleanup remain a
+separately reviewed operation.
 
 Terminal observation is score-blind. The adapter binds the Job UID, reuses the
 existing terminal collector, and reads only one exact PostgreSQL cell's state

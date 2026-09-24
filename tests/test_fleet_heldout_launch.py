@@ -690,6 +690,7 @@ def test_create_response_must_retain_database_client_label(tmp_path):
     assert cluster.create_calls == 1
     assert [json.loads(line)["state"] for line in journal.read_text().splitlines()] == [
         "KUBECTL_CREATE_INTENT_DO_NOT_RETRY",
+        "KUBERNETES_CREATE_RESPONSE_UIDS",
         "KUBECTL_CREATE_RESPONSE_UNCERTAIN_DO_NOT_RETRY",
     ]
 
@@ -961,12 +962,14 @@ def test_current_fresh75_selection_contract_remains_compatible():
     split_manifest = json.loads(split_path.read_text())
     packet = launch.LaunchPacket(
         path=ROOT / "synthetic-packet.json",
+        packet_sha256="sha256:" + "f" * 64,
         namespace=NAMESPACE,
         job_name=JOB_NAME,
         config_map_name=CONFIG_MAP_NAME,
         output_root=OUTPUT_ROOT,
         database=DATABASE,
         files={},
+        file_bytes={},
         file_sha256={"split_manifest": selection["split_manifest"]["file_sha256"]},
         identity={"split_manifest_sha256": selection["split_manifest"]["object_sha256"]},
         identity_sha256="sha256:" + "0" * 64,
@@ -1017,11 +1020,67 @@ def test_successful_two_preview_gate_writes_intent_and_creates_once_at_most_once
     lines = [json.loads(line) for line in journal.read_text().splitlines()]
     assert [line["state"] for line in lines] == [
         "KUBECTL_CREATE_INTENT_DO_NOT_RETRY",
+        "KUBERNETES_CREATE_RESPONSE_UIDS",
         "KUBECTL_CREATE_RESPONSE",
     ]
     with pytest.raises(launch.HeldoutLaunchError, match="journal already exists"):
         _launch(packet, cluster, database, journal)
     assert cluster.create_calls == 1
+
+
+def test_prebuilt_package_is_the_exact_bundle_created_after_source_files_change(tmp_path):
+    packet = _packet(tmp_path)
+    package = launch.build_package(packet)
+    original_job = json.loads(json.dumps(package.job))
+    packet.unlink()
+    package.packet.files["job"].write_text("changed after validation\n", encoding="utf-8")
+    cluster, database = FakeCluster(), FakeDatabase()
+    launch.launch_package_once(
+        package,
+        cluster=cluster,
+        database=database,
+        journal=tmp_path / "intent.jsonl",
+        output_exists=lambda _: False,
+    )
+    created_job = next(item for item in cluster.created["items"] if item["kind"] == "Job")
+    assert package.job == original_job
+    assert launch._contains(created_job["spec"], original_job["spec"])  # noqa: SLF001
+
+
+def test_create_response_journal_append_failure_is_not_swallowed(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    packet = _packet(tmp_path)
+    cluster, database = FakeCluster(), FakeDatabase()
+    journal = tmp_path / "intent.jsonl"
+    real_open = launch.os.open
+
+    def fail_append(path, flags, *args):
+        if Path(path) == journal and flags & launch.os.O_APPEND:
+            raise OSError("injected append failure")
+        return real_open(path, flags, *args)
+
+    monkeypatch.setattr(launch.os, "open", fail_append)
+    with pytest.raises(launch.HeldoutLaunchError, match="durably append"):
+        _launch(packet, cluster, database, journal)
+    assert cluster.create_calls == 1
+
+
+def test_returned_uids_are_durable_before_later_response_validation(tmp_path):
+    packet = _packet(tmp_path)
+    _enable_rollout_database(packet)
+    cluster, database = FakeCluster(), FakeDatabase()
+    cluster.drop_postgres_contract_in_create = True
+    journal = tmp_path / "intent.jsonl"
+    with pytest.raises(launch.HeldoutLaunchError):
+        _launch(packet, cluster, database, journal)
+    lines = [json.loads(line) for line in journal.read_text().splitlines()]
+    assert lines[1] == {
+        "state": "KUBERNETES_CREATE_RESPONSE_UIDS",
+        "job_uid": JOB_UID,
+        "config_map_uid": CONFIG_MAP_UID,
+    }
+    assert lines[-1]["state"] == "KUBECTL_CREATE_RESPONSE_UNCERTAIN_DO_NOT_RETRY"
 
 
 def test_uncertain_create_is_observed_but_never_retried(tmp_path):
