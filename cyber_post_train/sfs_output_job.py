@@ -604,7 +604,10 @@ def _validate_server_job_surface(
         raise ValueError("server output-check root annotations drifted")
     if metadata.get("labels") != expected["metadata"]["labels"]:
         raise ValueError("server output-check root labels drifted")
-    spec = _only_keys(actual.get("spec"), _SERVER_JOB_SPEC_KEYS, "Job spec")
+    allowed_spec_keys = set(_SERVER_JOB_SPEC_KEYS)
+    if "ttlSecondsAfterFinished" in expected.get("spec", {}):
+        allowed_spec_keys.add("ttlSecondsAfterFinished")
+    spec = _only_keys(actual.get("spec"), allowed_spec_keys, "Job spec")
     if spec.get("manualSelector") not in (None, False):
         raise ValueError("server output-check Job enabled manual selector control")
     if spec.get("podReplacementPolicy") not in (None, "Failed", "TerminatingOrFailed"):

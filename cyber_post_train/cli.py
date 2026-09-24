@@ -144,10 +144,14 @@ def _external_action_gate(plan: dict, action: str) -> None:
     gate = qualification.get("submission_gate")
     field = {
         "preview": "preview_authorized",
+        "preflight": "preflight_authorized",
         "submit": "submission_authorized",
     }.get(action)
     if field is None:
         raise ValueError("unknown external action")
+    if action == "preflight" and isinstance(gate, dict) and "preflight_authorized" not in gate:
+        # Older packets authorized zero-GPU setup under the submission bit.
+        field = "submission_authorized"
     if not isinstance(gate, dict) or type(gate.get(field)) is not bool:
         raise ValueError(f"{action} blocked by an incomplete qualification gate")
     if gate[field] is True:
@@ -1085,7 +1089,7 @@ def sfs_output_receipt(
     try:
         plan, request = _prepared(directory)
         _submission_gate(directory, plan, request)
-        _external_action_gate(plan, "submit")
+        _external_action_gate(plan, "preflight")
         _require_preflight(directory, plan, request)
         if plan.get("schema") not in {"cyber_sft_runtime_v2", "cyber_sft_runtime_dense_v1"}:
             raise ValueError("SFS output-absence receipts are restricted to SFT")
@@ -1108,7 +1112,7 @@ def sfs_output_job_create(
     try:
         plan, request = _prepared(directory)
         _submission_gate(directory, plan, request)
-        _external_action_gate(plan, "submit")
+        _external_action_gate(plan, "preflight")
         _require_preflight(directory, plan, request)
         result = create_sfs_output_check_once(
             plan=plan,
@@ -1135,7 +1139,7 @@ def sfs_output_job_collect(
     try:
         plan, request = _prepared(directory)
         _submission_gate(directory, plan, request)
-        _external_action_gate(plan, "submit")
+        _external_action_gate(plan, "preflight")
         _require_preflight(directory, plan, request)
         receipt = collect_sfs_output_check(
             plan=plan,
@@ -1162,7 +1166,7 @@ def sft_cpu_preflight_job_create(
     try:
         plan, request = _prepared(directory)
         _submission_gate(directory, plan, request)
-        _external_action_gate(plan, "submit")
+        _external_action_gate(plan, "preflight")
         if is_qwen38_lora_plan(plan):
             raise ValueError("Qwen3.8 LoRA requires qwen38-lora-sft-cpu-preflight-job-create")
         if (directory / "PREFLIGHT.json").exists():
@@ -1193,7 +1197,7 @@ def sft_cpu_preflight_job_collect(
     try:
         plan, request = _prepared(directory)
         _submission_gate(directory, plan, request)
-        _external_action_gate(plan, "submit")
+        _external_action_gate(plan, "preflight")
         if is_qwen38_lora_plan(plan):
             raise ValueError("Qwen3.8 LoRA requires qwen38-lora-sft-cpu-preflight-job-collect")
         if (directory / "PREFLIGHT.json").exists():

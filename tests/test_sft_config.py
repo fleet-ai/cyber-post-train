@@ -15,7 +15,7 @@ from types import SimpleNamespace
 import pytest
 
 from cyber_post_train.jobs import digest
-from training import sft, sft_runtime
+from training import sft, sft_dispatch, sft_runtime
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -108,6 +108,8 @@ def test_compile_uses_exact_model_manifest_and_complete_epochs(config, tmp_path)
     request = sft.job_request(plan)
     assert request["workers"] == 1 and request["gpus_per_worker"] == 8
     assert request["priority_class"] == "c1"
+    assert "cluster_target" not in plan["execution"]
+    assert "jobs_api_base_url" not in plan["execution"]
     assert "queue_priority_class" not in request
     assert request["secrets"] == ["wandb-api"]
     assert "image_pull_secrets" not in request
@@ -115,6 +117,126 @@ def test_compile_uses_exact_model_manifest_and_complete_epochs(config, tmp_path)
     content = json.loads(gzip.decompress(base64.b64decode(request["env"]["CYBER_SFT_BUNDLE"])))
     assert json.loads(content["plan"]) == plan
     assert hashlib.sha256(content["runtime"].encode()).hexdigest() == plan["runtime_sha256"]
+
+
+def test_four_node_262k_full_sft_fails_closed_without_runtime_qualification(config, tmp_path):
+    source, manifest, save = config
+    manifest["validation_mode"] = "task_outcomes_only"
+    manifest["files"] = {"train": manifest["files"]["train"]}
+    manifest["files"]["train"]["rows"] = 320
+    save(manifest)
+    source["recipe"] = {
+        "epochs": 1,
+        "batch_size": 32,
+        "microbatch_per_gpu": 1,
+        "nodes": 4,
+        "gpus_per_node": 8,
+        "lr": 1e-6,
+        "max_length": 262_144,
+        "eval_interval": 0,
+        "checkpoint_interval": 5,
+        "keep_checkpoints": 3,
+        "seed": 42,
+    }
+    source["cluster"] = {"priority": "c1"}
+
+    with pytest.raises(ValueError, match="separately qualified long-context runtime"):
+        sft_dispatch.compiler_for_config(source)
+
+
+def test_four_node_262k_held_shape_cannot_bypass_compile_gate(config, tmp_path):
+    source, manifest, save = config
+    manifest["validation_mode"] = "task_outcomes_only"
+    manifest["files"] = {"train": manifest["files"]["train"]}
+    manifest["files"]["train"]["rows"] = 320
+    save(manifest)
+    source["recipe"] = {
+        "nodes": 4,
+        "gpus_per_node": 8,
+        "batch_size": 32,
+        "max_length": 98_304,
+        "eval_interval": 0,
+        "checkpoint_interval": 5,
+        "keep_checkpoints": 3,
+    }
+    plan = sft.compile_sft(source, relative_to=tmp_path)
+    plan["recipe"]["max_length"] = 262_144
+
+    with pytest.raises(ValueError, match="separately qualified long-context runtime"):
+        sft_dispatch.compiler_for_plan(plan)
+
+
+def test_four_node_262k_qualification_packet_is_bounded_and_not_launchable():
+    packet = json.loads(
+        (ROOT / "configs/qualification/qwen38-teacher3k-262k-4node-canary-v1.json").read_text()
+    )
+    assert packet["status"] == "held_nonlaunchable_hypothesis"
+    assert packet["submission_authorized"] is False
+    parent = packet["exact_parent"]
+    assert parent["plan_sha256"] == (
+        "sha256:3b9e81acb301327c40007a40ab13c3bf5c164152655fb49f96a8db52eb117690"
+    )
+    assert parent["runtime_source"] == (
+        "git:45c04d709f855e20d931456233b85f427558525f:training/sft_runtime.py"
+    )
+    assert parent["runtime_sha256"] == (
+        "sha256:b6b81c9876ddf8379a0837a0aaf5f0426acf8ccc4388d79bd93bad94c59e38d3"
+    )
+    evidence_path = (
+        "docs/evidence/qwen38-study/2026-09-24-qwen38-teacher3k-262k-v12-recovered-parent.md"
+    )
+    assert parent["historical_evidence_document"] == evidence_path
+    evidence = (ROOT / evidence_path).read_text()
+    assert parent["plan_sha256"].removeprefix("sha256:") in evidence
+    assert parent["image"] == (
+        "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@"
+        "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4"
+    )
+    assert parent["model"] == {
+        "repo": "Qwen/Qwen3.8-27B",
+        "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "weights_manifest_sha256": (
+            "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
+        ),
+        "full_parameter_training": True,
+    }
+    assert parent["dataset"]["rows"] == 112
+    assert parent["recipe"]["nodes"] == 8
+    assert parent["recipe"]["global_batch"] == 64
+    assert parent["recipe"]["gdn_chunk_tokens"] == 512
+    assert parent["recipe"]["lm_head_chunk_tokens"] == 1024
+    assert parent["recipe"]["layer_checkpoint_group_size"] == 1
+    hypothesis = packet["four_node_hypothesis"]
+    assert hypothesis["hypothesis_only"] is True
+    assert hypothesis["mutations"] == {
+        "nodes": 4,
+        "world_size": 32,
+        "data_parallel_size": 32,
+        "global_batch": 32,
+        "gradient_accumulation_rounds": 1,
+        "max_steps": 4,
+        "run_name_and_output_root": "new create-once identities",
+        "wandb_identity": "new run identity and four-node topology tags",
+    }
+    assert hypothesis["jobs_api"] == {
+        "target": "prod",
+        "priority": "c1",
+        "requeue_if_preempted": False,
+        "required_new_root_annotations": {"fleet.ai/failure-alerts": "off"},
+    }
+    assert packet["remaining_blockers_before_any_post"]
+    assert packet["current_port"]["status"] == ("implemented_and_locally_tested_not_live_qualified")
+    assert packet["resource_accounting"] == {
+        "candidate_nodes": 4,
+        "planned_concurrent_nodes": 9,
+        "authorized_concurrent_node_limit": 10,
+    }
+    assert packet["dev_qualification"] == {
+        "exact_four_node_gpu_shape_available": False,
+        "allowed_work": "zero_gpu_preflight_only",
+        "cleanup_maximum_seconds": 1800,
+        "priority": "c1",
+    }
 
 
 def test_compile_binds_and_enforces_first_checkpoint_recovery_horizon(config, tmp_path):

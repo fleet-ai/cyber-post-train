@@ -55,6 +55,7 @@ def test_package_is_exact_alert_off_c1_q1_zero_gpu_read_only(package):
     assert job["metadata"]["labels"]["kueue.x-k8s.io/queue-name"] == "training-lq"
     assert job["metadata"]["labels"]["kueue.x-k8s.io/priority-class"] == "q1"
     assert job["spec"]["suspend"] is True
+    assert job["spec"]["ttlSecondsAfterFinished"] == 0
     pod = job["spec"]["template"]["spec"]
     assert pod["priorityClassName"] == "c1" and pod["priority"] == 10_000
     assert pod["automountServiceAccountToken"] is False
@@ -123,6 +124,7 @@ def test_driver_output_absence_fails_closed_on_symlink_and_inspection_error(tmp_
     [
         "root-alert",
         "template-alert",
+        "ttl",
         "priority",
         "gpu",
         "secret-env",
@@ -146,6 +148,8 @@ def test_server_response_rejects_security_resource_and_placement_drift(package, 
         actual["metadata"]["annotations"]["fleet.ai/failure-alerts"] = "on"
     elif fault == "template-alert":
         actual["spec"]["template"]["metadata"]["annotations"]["fleet.ai/failure-alerts"] = "on"
+    elif fault == "ttl":
+        actual["spec"]["ttlSecondsAfterFinished"] = 1
     elif fault == "priority":
         pod["priority"] = 0
     elif fault == "gpu":

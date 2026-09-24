@@ -964,7 +964,7 @@
   },
   "schema": "cyber_qwen38_skyrl_launch_readiness_audit_v1",
   "scope": "offline_no_submit_no_launch_no_cancel_no_private_logs_no_external_reads_or_writes",
-  "sha256": "sha256:5699caad2b7bd1cef82bfccaffe6008eee30f2b843a68780e2996c77a7e52186",
+  "sha256": "sha256:2f154224033b6f211cebe1bec5e26d6b69be1b109d3143eac52051c6ddb49d6c",
   "source_queue": {
     "file_sha256": "sha256:549bca1a8409cab10aaa9e0f754e5200c4401895e1507eb9c483d53e06286bd3",
     "path": "docs/evidence/qwen38-study/2026-09-20-skyrl-next-gates-queue-v1.json",
@@ -973,7 +973,7 @@
   "status": "offline_repairs_complete_external_execution_gates_pending",
   "tooling_bindings": {
     "CLI": {
-      "file_sha256": "sha256:d183215c17160251a28d94d8d90fba8723581e2b284565f06b8feea58903e3fb",
+      "file_sha256": "sha256:361d446683164de483c73bc8593e668db11a4c32675f35912ac44a0c2cfc89ef",
       "path": "cyber_post_train/cli.py"
     },
     "Jobs_client": {

@@ -1,0 +1,184 @@
+{
+  "schema": "cyber_qwen38_262k_full_weight_4node_qualification_v1",
+  "status": "held_nonlaunchable_hypothesis",
+  "submission_authorized": false,
+  "purpose": "Preserve the exact successful eight-node capacity parent and one explicit four-node hypothesis without claiming that current main can execute or scientifically accept it.",
+  "exact_parent": {
+    "run_name": "chris-q38-t3k262-can-v12",
+    "jobs_api_name": "chris-q38-t3k262-can-v12-a421f0a3",
+    "jobs_api_run_id": "a421f0a3-5ed2-48cb-99ee-f830fa395cb7",
+    "rayjob_uid": "36f915ca-d882-46b3-9d8b-5e4e2bfddae7",
+    "output_root": "/mnt/sfs/jobs/chris-q38-t3k262-can-v12",
+    "durable_plan_path": "/mnt/sfs/jobs/chris-q38-t3k262-can-v12/.runtime/plan.json",
+    "plan_sha256": "sha256:3b9e81acb301327c40007a40ab13c3bf5c164152655fb49f96a8db52eb117690",
+    "runtime_source": "git:45c04d709f855e20d931456233b85f427558525f:training/sft_runtime.py",
+    "historical_evidence_document": "docs/evidence/qwen38-study/2026-09-24-qwen38-teacher3k-262k-v12-recovered-parent.md",
+    "runtime_sha256": "sha256:b6b81c9876ddf8379a0837a0aaf5f0426acf8ccc4388d79bd93bad94c59e38d3",
+    "runtime_bundle_sha256": "sha256:e1eb27e77aa42088feac8913de75414910fe919e1f818dfbe5a086e4a210b5b8",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "model": {
+      "repo": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "weights_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+      "full_parameter_training": true
+    },
+    "dataset": {
+      "path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher3k-262k-v1/capacity-v5/train.parquet",
+      "rows": 112,
+      "sha256": "sha256:2359c54e5c5cd756761a0f6e8c250ec8b32b87c8f84f0888252ddac932cfc5ec",
+      "corpus_manifest_sha256": "sha256:c5c7d82127d524593ed7e1cf5375fb3457e36c0d92376531808b6eeaacda10f5",
+      "split_manifest_sha256": "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c"
+    },
+    "recipe": {
+      "context_tokens": 262144,
+      "nodes": 8,
+      "gpus_per_node": 8,
+      "world_size": 64,
+      "data_parallel_size": 64,
+      "global_batch": 64,
+      "microbatch_per_gpu": 1,
+      "gradient_accumulation_rounds": 1,
+      "epochs": 1,
+      "max_steps": 2,
+      "learning_rate": 0.000003,
+      "seed": 20260916,
+      "checkpoint_interval": 1,
+      "keep_checkpoints": 2,
+      "pause_after_optimizer_step": 1,
+      "sequence_parallel_size": 1,
+      "gdn_chunk_tokens": 512,
+      "lm_head_chunk_tokens": 1024,
+      "mlp_chunk_tokens": 1024,
+      "rmsnorm_chunk_tokens": 1024,
+      "layer_checkpoint_group_size": 1,
+      "cpu_optimizer_offload": false,
+      "cpu_parameter_offload": false
+    },
+    "execution_evidence": {
+      "rayjob_status": "SUCCEEDED",
+      "training_paused_receipt_self_sha256": "sha256:0b00877a5c40ec25fc1da622177ede0c4c35e3e0febe7e07563416b3ff42e919",
+      "training_paused_file_sha256": "sha256:399b18c57e03c9c6c6429a4d64bf4c31da24ed88e050eff1facf54e5886d1c5a",
+      "step1_checkpoint_receipt_self_sha256": "sha256:3f0cbcd958121499859560f521a8b2f262ffc5d20c6be3cdc472c68f65706758",
+      "step1_checkpoint_receipt_file_sha256": "sha256:834b1c11c57c64806b71b583e9c9b916f73bdc8fca868a60f0be0bd0e866f6af",
+      "proves": "one finite optimizer step and one simple checkpoint path",
+      "does_not_prove": [
+        "sealed checkpoint file inventory",
+        "checkpoint GPU reload",
+        "final export",
+        "scientific acceptance"
+      ]
+    }
+  },
+  "four_node_hypothesis": {
+    "hypothesis_only": true,
+    "run_name": "chris-q38-t3k262-4n-can-v1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-t3k262-4n-can-v1",
+    "parent_plan_sha256": "sha256:3b9e81acb301327c40007a40ab13c3bf5c164152655fb49f96a8db52eb117690",
+    "mutations": {
+      "nodes": 4,
+      "world_size": 32,
+      "data_parallel_size": 32,
+      "global_batch": 32,
+      "gradient_accumulation_rounds": 1,
+      "max_steps": 4,
+      "run_name_and_output_root": "new create-once identities",
+      "wandb_identity": "new run identity and four-node topology tags"
+    },
+    "unchanged_parent_fields": [
+      "model and weight manifest",
+      "dataset and manifests",
+      "context_tokens: 262144",
+      "microbatch_per_gpu: 1",
+      "epochs: 1",
+      "learning_rate: 3e-6",
+      "seed: 20260916",
+      "checkpoint_interval: 1",
+      "keep_checkpoints: 2",
+      "pause_after_optimizer_step: 1",
+      "sequence_parallel_size: 1",
+      "gdn_chunk_tokens: 512",
+      "lm_head_chunk_tokens: 1024",
+      "mlp_chunk_tokens: 1024",
+      "rmsnorm_chunk_tokens: 1024",
+      "layer_checkpoint_group_size: 1",
+      "CPU offload disabled"
+    ],
+    "jobs_api": {
+      "target": "prod",
+      "priority": "c1",
+      "requeue_if_preempted": false,
+      "required_new_root_annotations": {
+        "fleet.ai/failure-alerts": "off"
+      }
+    }
+  },
+  "current_port": {
+    "status": "implemented_and_locally_tested_not_live_qualified",
+    "runtime_variant": "qwen38_sft_262k_4node_v1",
+    "base_runtime_sha256": "sha256:8cb671f377d089e1303248e237f386c256b212b15e41dadc07ac49cf2695ee17",
+    "candidate_runtime_sha256": "sha256:fed7acaa5e08451da11231197aa20316de9cea2729fb31de22cc23cdb97d1001",
+    "historical_hook_evidence": "configs/qualification/qwen38-teacher3k-262k-v12-hook-asts.json",
+    "candidate_config": "configs/runs/qwen38-teacher3k-262k-4node-canary-v1.json",
+    "isolated_runtime": "training/sft_262k_runtime.py",
+    "compiler": "training/sft_262k_4node_v1.py",
+    "offline_prepare": {
+      "submitted": false,
+      "plan_sha256": "sha256:3f96ba9d9233a969e47110f70ccf52c0e72d7c2f01d1ab5ce09678d982507a7e",
+      "request_sha256": "sha256:1679d4699b36bbd6e687ae9e84f6c0d6288620583bdb7a857ec873b87b908470"
+    }
+  },
+  "remaining_blockers_before_any_post": [
+    "The four-node hypothesis has no accepted execution or checkpoint-reload receipt.",
+    "A fresh zero-GPU preflight must prove the exact model, data, runtime, recipe, output absence and checkpoint policy.",
+    "A live server preview must prove the exact root alert annotation and 4x8 c1 resources before creation.",
+    "Root review must explicitly open the otherwise false GPU submission gate."
+  ],
+  "server_render_gates": {
+    "live_preview_required": true,
+    "root_failure_alert_annotation": "fleet.ai/failure-alerts: off",
+    "exact_topology": "4x8",
+    "priority": "c1",
+    "complete_jobs_api_duplicate_census_required": true,
+    "destination_absence_recheck_required": true,
+    "single_post_intent_journal_required": true
+  },
+  "standard_jobs_rail": {
+    "submission_route": "Jobs.submit_once",
+    "operator_preview_required_before_submit": true,
+    "submit_repeats_server_preview": true,
+    "complete_duplicate_census_required": true,
+    "durable_intent_journal": "SUBMISSION.jsonl",
+    "runtime_watchdog_bounds": {
+      "anchor": "ProgressWatchdog construction in _wait_for_training",
+      "startup_seconds": 1800,
+      "idle_seconds": 1200,
+      "hard_seconds": 28800,
+      "checkpoint_drain_seconds": 300
+    },
+    "rendered_root_contract": {
+      "failure_alerts": "off",
+      "priority_class": "c1",
+      "queue_priority": "q1",
+      "shutdown_after_job_finishes": true,
+      "ttl_seconds_after_finished": 0
+    },
+    "monitoring": {
+      "identity": "exact Jobs API run name and Kubernetes UIDs",
+      "release_route": "one exact Jobs API DELETE after confirmed failure or stall",
+      "uncertain_delete_policy": "reconcile exact API and Kubernetes state before any retry"
+    }
+  },
+  "dev_qualification": {
+    "exact_four_node_gpu_shape_available": false,
+    "allowed_work": "zero_gpu_preflight_only",
+    "cleanup_maximum_seconds": 1800,
+    "priority": "c1"
+  },
+  "resource_accounting": {
+    "candidate_nodes": 4,
+    "planned_concurrent_nodes": 9,
+    "authorized_concurrent_node_limit": 10
+  },
+  "next_gate": "From the committed isolated runtime port, prepare the exact candidate, execute and collect its zero-GPU preflight, obtain a fresh destination-absence result, run the standard Jobs API preview twice (operator preview and submit-time preview), then obtain root review before the sole GPU POST."
+}

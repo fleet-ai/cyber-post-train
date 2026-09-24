@@ -162,6 +162,31 @@ counts. Train and dev are distinct immutable artifacts and task families.
 5. `cyber-post-train status <returned-name>` reads sanitized state. Monitor the
    exact API/Kubernetes UIDs, progress receipts, utilization and checkpoints too.
 
+The proposed four-node, 262,144-token, full-parameter Qwen3.8 canary is recorded in
+`configs/qualification/qwen38-teacher3k-262k-4node-canary-v1.json`. It is held,
+not launchable. The exact compiler derives a 4×8, batch-32, four-step candidate
+from the recovered eight-node v12 plan, changes no other scientific setting,
+and stages the recovered long-context hooks in the isolated
+`training/sft_262k_runtime.py` variant. The shared SFT runtime is unchanged.
+It checkpoints every step, keeps two checkpoints, and pauses after step 1.
+
+The candidate uses the standard production Jobs API rail: one operator preview,
+then a second duplicate census and preview immediately before the sole POST.
+Both rendered previews must prove the root RayJob annotation
+`fleet.ai/failure-alerts: "off"`, c1/q1 priority, four nodes, eight GPUs per
+node, exact image and output. Submission remains false until a tracked zero-GPU
+preflight succeeds, the output is freshly proven absent, and root review passes.
+The existing zero-GPU preflight Job has a 1,800-second deadline and creates no
+GPU allocation. Do not hand-edit the prepared plan or request to bypass these
+gates.
+
+After any future authorized POST, monitor the exact API name and Kubernetes UIDs.
+The runtime watchdog applies a 30-minute startup allowance, 20-minute confirmed
+no-progress check, eight-hour hard bound and five-minute checkpoint drain. On a
+confirmed failure or stall, release that exact owned run once through the Jobs
+API and reconcile absence before any successor. No custom resource controller is
+part of this launch rail.
+
 When the submitter does not already run inside the pinned image with the shared
 SFS mount, dense SFT has one tracked zero-GPU preflight Job. Start from a clean
 checkout whose exact `HEAD` equals freshly fetched canonical `main`, then run:
