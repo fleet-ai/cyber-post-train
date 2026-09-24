@@ -8,11 +8,7 @@
     "schema",
     "state",
     "launchable",
-    "observed_at",
-    "authority",
-    "future_bindings",
     "gates",
-    "transition_rule",
     "sha256"
   ],
   "properties": {
@@ -63,6 +59,12 @@
     "transition_rule": {"type": "string", "minLength": 1},
     "predecessor_candidate_sha256": {"$ref": "#/$defs/sha256"},
     "parent_review_receipt_sha256": {"$ref": "#/$defs/sha256"},
+    "lane": {"type": "string", "minLength": 1},
+    "plan_sha256": {"$ref": "#/$defs/sha256"},
+    "request_sha256": {"$ref": "#/$defs/sha256"},
+    "task_get_receipt_sha256": {"$ref": "#/$defs/sha256"},
+    "post_receipt_bundle_sha256": {"$ref": "#/$defs/sha256"},
+    "approved_at": {"type": "string", "format": "date-time"},
     "sha256": {"$ref": "#/$defs/sha256"}
   },
   "allOf": [
@@ -73,6 +75,7 @@
         }
       },
       "then": {
+        "required": ["observed_at", "authority", "future_bindings", "transition_rule"],
         "properties": {
           "state": {"const": "parent_review_required"},
           "launchable": {"const": false}
@@ -96,7 +99,16 @@
           "state": {"const": "reviewed_launchable"},
           "launchable": {"const": true}
         },
-        "required": ["predecessor_candidate_sha256", "parent_review_receipt_sha256"]
+        "required": [
+          "lane",
+          "plan_sha256",
+          "request_sha256",
+          "predecessor_candidate_sha256",
+          "parent_review_receipt_sha256",
+          "task_get_receipt_sha256",
+          "post_receipt_bundle_sha256",
+          "approved_at"
+        ]
       }
     }
   ],

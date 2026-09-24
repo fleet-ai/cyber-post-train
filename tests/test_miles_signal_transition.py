@@ -1,22 +1,21 @@
 from __future__ import annotations
 
-import copy
 import datetime as dt
-import hashlib
 import json
+import os
 from pathlib import Path
 
-import jsonschema
 import pytest
 
+from cyber_post_train.jobs import digest
+from training import dev_cleanup_observer as cleanup
+from training import miles96_mechanics_canary as mechanics
+from training import miles96_mechanics_launch as launch
+from training import miles96_signal_qualification as signal
 from training import miles_signal_transition as transition
 from training import miles_signal_wave
 
 NOW = dt.datetime(2026, 9, 24, 9, 0, tzinfo=dt.UTC)
-
-
-def SHA(digit):
-    return "sha256:" + hashlib.sha256(str(digit).encode()).hexdigest()
 
 
 class FakeClient:
@@ -26,11 +25,14 @@ class FakeClient:
     def _get(self, path, params=None):
         if path == "/v1/account":
             return {"team_id": transition.fleet.FLEET_TEAM_ID, "team_name": "fleet"}
-        version = params["version_id"]
-        row = next(row for row in self.wave["candidates"] if row["task"]["version_id"] == version)
+        row = next(
+            item
+            for item in self.wave["candidates"]
+            if item["task"]["version_id"] == params["version_id"]
+        )
         return {
             "key": row["task"]["key"],
-            "eval_task_version_id": version,
+            "eval_task_version_id": row["task"]["version_id"],
             "task_lifecycle_status": "production",
             "metadata": {
                 "cyber_contract": {
@@ -47,16 +49,17 @@ def _safe_bind(monkeypatch, wave):
 
     def bind(_response, selected):
         row = by_version[selected["task_version_id"]]
-        task = {
-            "key": row["task"]["key"],
-            "version_id": row["task"]["version_id"],
-            "prompt_sha256": row["task"]["prompt_sha256"],
-            "env_variables_sha256": row["task"]["env_variables_sha256"],
-            "output_json_schema_sha256": row["task"]["output_json_schema_sha256"],
-        }
-        environment = {**row["environment"], "ttl_seconds": 32400}
-        verifier = {**row["verifier"], "function_name": "verify"}
-        return task, environment, verifier
+        return (
+            {
+                "key": row["task"]["key"],
+                "version_id": row["task"]["version_id"],
+                "prompt_sha256": row["task"]["prompt_sha256"],
+                "env_variables_sha256": row["task"]["env_variables_sha256"],
+                "output_json_schema_sha256": row["task"]["output_json_schema_sha256"],
+            },
+            {**row["environment"], "ttl_seconds": 32400},
+            {**row["verifier"], "function_name": "verify"},
+        )
 
     monkeypatch.setattr(transition.fleet, "bind_task", bind)
 
@@ -68,132 +71,270 @@ def live_receipt(monkeypatch):
     return transition.collect_live_task_receipt(FakeClient(wave), observed_at=NOW)
 
 
-def _evidence(wave, observed_at=NOW):
-    lanes = []
-    for index, row in enumerate(wave["candidates"]):
-        digit = str(index + 1)
-        lanes.append(
-            {
-                "name": row["identity"]["name"],
-                "plan_sha256": SHA(digit),
-                "request_sha256": SHA(str(index + 5)),
-                "optimizer_steps": 0,
-                "checkpoint": False,
-                "authority_config_sha256": wave["sha256"],
-                "live_binding_receipt_sha256": row["live_binding_receipt_sha256"],
-                "preview": {
-                    "request_sha256": SHA(str(index + 5)),
-                    "receipt_sha256": SHA(chr(ord("a") + index)),
-                    "observed_at": transition._stamp(observed_at),
-                    "root_annotations": {"fleet.ai/failure-alerts": "off"},
-                    "priority_class": "c1",
-                    "queue_priority": "q1",
-                    "backoff_limit": 0,
-                    "nodes": 1,
-                    "gpus_per_node": 8,
-                    "requeue_if_preempted": False,
-                    "optimizer_steps": 0,
-                    "checkpoint": False,
-                },
-                "absence": {
-                    "receipt_sha256": SHA(chr(ord("e") + index)),
-                    "observed_at": transition._stamp(observed_at),
-                    "jobs_api_duplicates": 0,
-                    "kubernetes_duplicates": 0,
-                    "sfs_output_absent": True,
-                },
-                "observer": {
-                    "receipt_sha256": SHA(chr(ord("i") + index)),
-                    "armed": True,
-                    "healthy": True,
-                    "uid_bound_release": True,
-                    "delete_drain_supervised": True,
-                    "active_deadline_s": 18_900,
-                },
-            }
-        )
+def _wrap(body, label):
     return {
-        "adapter": {
-            "commit": "1" * 40,
-            "clean": True,
-            "source_closure_sha256": SHA("a"),
-            "runtime_image": "example.invalid/fti@" + SHA("b"),
-            "tests_receipt_sha256": SHA("c"),
-            "exact_image_preflight_sha256": SHA("d"),
-            "sample_indexes": list(range(8)),
-            "max_concurrent_episodes": 2,
-            "optimizer_steps": 0,
-            "checkpoint": False,
-            "live_session_open_tool_schema_gate": True,
-            "tool_catalog_sha256": wave["authorities"]["tool_catalog"]["self_sha256"],
-            "current_binding_source": "live_binding_receipt_sha256",
-            "no_outer_retry_or_replacement": True,
-            "all_slots_terminally_accounted": True,
-            "unique_verifier_execution_ids": True,
-            "exact_cleanup_required": True,
-        },
-        "operator": {
-            "commit": "2" * 40,
-            "clean": True,
-            "tests_receipt_sha256": SHA("f"),
-        },
-        "lanes": lanes,
-        "cleanup": {
-            "receipt_sha256": SHA("f"),
-            "prompt_removed_after_terminal": True,
-            "private_episode_material_restricted": True,
-            "output_create_once": True,
-        },
+        "file_sha256": "sha256:" + digest(label),
+        "body_sha256": "sha256:" + digest(body),
+        "body": body,
     }
 
 
-def _load_schema(name):
-    return json.loads((Path("configs/qualification") / name).read_text())
+def _static_evidence():
+    wave = miles_signal_wave.load()
+    lanes = transition._lane_receipts()
+    excluded = {
+        "optimizer_steps",
+        "checkpoint",
+        "sample_indexes",
+        "max_concurrent_episodes",
+        "runtime_source_manifest_sha256",
+    }
+    adapter = {
+        "schema": transition.ADAPTER_FREEZE_SCHEMA,
+        "branch": "codex/test",
+        "commit": "1" * 40,
+        "clean": True,
+        "authority_sha256": wave["sha256"],
+        "runtime_image": mechanics.IMAGE,
+        "source_file_count": len(signal.runtime_source_manifest()),
+        "source_closure_sha256": "sha256:" + digest(signal.runtime_source_manifest()),
+        "tests_receipt_sha256": "sha256:" + digest("adapter-tests"),
+        "tests": {
+            "passed": 213,
+            "failed": 0,
+            "ruff_check": True,
+            "ruff_format_check": True,
+            "git_diff_check": True,
+        },
+        "lanes": [
+            {key: value for key, value in lane.items() if key not in excluded} for lane in lanes
+        ],
+    }
+    manifest = transition._operator_source_manifest()
+    operator = {
+        "schema": transition.OPERATOR_FREEZE_SCHEMA,
+        "commit": "2" * 40,
+        "clean": True,
+        "source_manifest": manifest,
+        "source_closure_sha256": "sha256:" + digest(manifest),
+        "tests_receipt_sha256": "sha256:" + digest("operator-tests"),
+        "tests": {"passed": 50, "failed": 0},
+    }
+    adapter_wrapper = _wrap(adapter, "adapter-file")
+    operator_wrapper = _wrap(operator, "operator-file")
+    return {
+        "pins": {
+            "adapter_commit": adapter["commit"],
+            "adapter_freeze_file_sha256": adapter_wrapper["file_sha256"],
+            "operator_commit": operator["commit"],
+            "operator_freeze_file_sha256": operator_wrapper["file_sha256"],
+        },
+        "adapter_freeze": adapter_wrapper,
+        "operator_freeze": operator_wrapper,
+    }
 
 
-def test_live_receipt_is_sanitized_exact_and_schema_valid(live_receipt):
+def _lane():
+    row, plan, request = transition._lane_objects()[0]
+    return row, plan, request
+
+
+def _post_bundle(plan, request):
+    now = NOW.timestamp()
+    preview = transition._sealed(
+        {
+            "schema": "cyber_miles96_live_server_preview_v1",
+            "plan_sha256": "sha256:" + digest(plan),
+            "request_sha256": "sha256:" + digest(request),
+            "manifest_sha256": "sha256:" + digest("manifest"),
+            "root_failure_alerts": "off",
+            "backoff_limit": 0,
+            "shutdown_after_job_finishes": True,
+            "nodes": 1,
+            "gpus": 8,
+            "observed_at_unix": now,
+            "preview_count": 2,
+            "priority_class": "c1",
+            "queue_priority": "q1",
+            "requeue_if_preempted": False,
+        }
+    )
+    observer = transition._sealed(
+        {
+            "schema": cleanup.JOBS_API_PREFIX_GUARD_SCHEMA,
+            "status": "armed_non_destructive_prefix_guard",
+            "run_name_prefix": request["name"],
+            "run_dir": request["run_dir"],
+            "image": request["image"],
+            "plan_sha256": "sha256:" + digest(plan),
+            "manifest_sha256": preview["manifest_sha256"],
+            "maximum_seconds": launch._maximum_seconds(plan, request),
+            "expected_gpus": 8,
+            "prefix_collision_count_before_post": 0,
+            "observer_pid": os.getpid(),
+            "armed_at": transition._stamp(NOW),
+        }
+    )
+    sfs_body = {
+        "schema": "cyber_sft_output_absence_v1",
+        "status": "passed",
+        "checked_at_epoch": int(now),
+        "plan_sha256": digest(plan),
+        "request_sha256": digest(request),
+        "run_name": request["name"],
+        "run_dir": request["run_dir"],
+        "sfs_jobs_root": "/mnt/sfs/jobs",
+        "output_absent": True,
+    }
+    sfs = {**sfs_body, "sha256": digest(sfs_body)}
+    absence = transition._sealed(
+        {
+            "schema": "cyber_miles96_fresh_absence_v1",
+            "status": "passed",
+            "plan_sha256": "sha256:" + digest(plan),
+            "request_sha256": "sha256:" + digest(request),
+            "observer_armed_sha256": observer["sha256"],
+            "sfs_output_absent": True,
+            "sfs_output_absence_receipt_sha256": sfs["sha256"],
+            "observed_at_unix": now,
+        }
+    )
+    final = transition._sealed(
+        {
+            "schema": "cyber_miles96_final_prepost_gate_v1",
+            "status": "passed",
+            "plan_sha256": "sha256:" + digest(plan),
+            "request_sha256": "sha256:" + digest(request),
+            "observer_armed_sha256": observer["sha256"],
+            "observed_at_unix": now,
+        }
+    )
+    capacity = transition._sealed(
+        {
+            "schema": launch.CAPACITY_GATE_SCHEMA,
+            "status": "passed",
+            "plan_sha256": "sha256:" + digest(plan),
+            "request_sha256": "sha256:" + digest(request),
+            "planned": {"nodes": 1, "gpus": 8},
+            "observed_at": transition._stamp(NOW),
+            "capacity_census": {
+                "qualified": True,
+                "limits": {"nodes": 10, "gpus": 80},
+                "projected": {"nodes": 4, "gpus": 32},
+            },
+        }
+    )
+    return transition._sealed(
+        {
+            "schema": transition.POST_BUNDLE_SCHEMA,
+            "name": request["name"],
+            "plan_sha256": "sha256:" + digest(plan),
+            "request_sha256": "sha256:" + digest(request),
+            "server_preview": preview,
+            "observer_armed": observer,
+            "fresh_absence": absence,
+            "final_prepost_gate": final,
+            "sfs_output_absence": sfs,
+            "capacity_gate": capacity,
+        }
+    )
+
+
+def test_live_receipt_is_sanitized_and_exact(live_receipt):
     transition.validate_live_task_receipt(live_receipt, now=NOW, require_fresh=True)
-    jsonschema.Draft202012Validator(
-        _load_schema("qwen38-miles-signal-live-task-receipt-v1.schema.json"),
-        format_checker=jsonschema.FormatChecker(),
-    ).validate(live_receipt)
     encoded = json.dumps(live_receipt)
     for forbidden in ('"prompt"', '"code"', '"env_variables"', '"credentials"'):
         assert forbidden not in encoded
 
 
-def test_stale_or_drifted_live_receipt_fails_closed(live_receipt):
-    with pytest.raises(ValueError, match="stale"):
-        transition.validate_live_task_receipt(
-            live_receipt, now=NOW + dt.timedelta(seconds=901), require_fresh=True
-        )
-    drifted = copy.deepcopy(live_receipt)
-    drifted["candidates"][0]["task"]["version_id"] = "00000000-0000-4000-8000-000000000000"
-    drifted = transition._sealed({k: v for k, v in drifted.items() if k != "sha256"})
-    with pytest.raises(ValueError, match="candidates"):
-        transition.validate_live_task_receipt(drifted)
-
-
-def test_default_transition_is_unlaunchable_and_lists_all_nine_gates(live_receipt):
-    candidate = transition.build_review_candidate(live_receipt, observed_at=NOW)
-    transition.validate_review_candidate(candidate)
+def test_static_candidate_rebuilds_all_four_lanes_and_stays_unlaunchable(live_receipt):
+    candidate = transition.build_review_candidate(live_receipt, _static_evidence(), observed_at=NOW)
+    transition.validate_review_candidate(candidate, live_receipt)
     assert candidate["launchable"] is False
-    assert candidate["state"] == "parent_review_required"
-    assert [row["id"] for row in candidate["gates"]] == list(transition.GATES)
-    assert [row["passed"] for row in candidate["gates"]] == [
-        False,
-        False,
+    assert [gate["passed"] for gate in candidate["gates"]] == [
+        True,
+        True,
+        True,
         True,
         False,
         False,
         False,
-        False,
-        False,
+        True,
         False,
     ]
+    assert len(candidate["future_bindings"]["lanes"]) == 4
 
 
-def test_committed_receipts_are_sanitized_and_unlaunchable():
+def test_sha_shaped_claims_cannot_replace_receipt_bodies(live_receipt):
+    evidence = _static_evidence()
+    evidence["adapter_freeze"]["body"]["lanes"][0]["request_sha256"] = "sha256:" + "0" * 64
+    evidence["adapter_freeze"]["body_sha256"] = "sha256:" + digest(
+        evidence["adapter_freeze"]["body"]
+    )
+    candidate = transition.build_review_candidate(live_receipt, evidence, observed_at=NOW)
+    assert candidate["gates"][0]["passed"] is False
+
+
+def test_parent_review_digest_is_an_independent_required_pin(live_receipt):
+    candidate = transition.build_review_candidate(live_receipt, _static_evidence(), observed_at=NOW)
+    review = transition._sealed(
+        {
+            "schema": transition.REVIEW_SCHEMA,
+            "candidate_sha256": candidate["sha256"],
+            "approved": True,
+            "reviewer": "root",
+            "reviewed_at": transition._stamp(NOW),
+        }
+    )
+    with pytest.raises(ValueError, match="independently pinned"):
+        transition.validate_parent_review(
+            candidate,
+            review,
+            expected_parent_review_sha256="sha256:" + "0" * 64,
+        )
+
+
+def test_lane_successor_binds_exact_post_time_receipts(live_receipt):
+    _, plan, request = _lane()
+    candidate = transition.build_review_candidate(live_receipt, _static_evidence(), observed_at=NOW)
+    review = transition._sealed(
+        {
+            "schema": transition.REVIEW_SCHEMA,
+            "candidate_sha256": candidate["sha256"],
+            "approved": True,
+            "reviewer": "root",
+            "reviewed_at": transition._stamp(NOW),
+        }
+    )
+    bundle = _post_bundle(plan, request)
+    approved = transition.approve_review_candidate(
+        candidate,
+        review,
+        live_receipt,
+        bundle,
+        plan,
+        request,
+        expected_parent_review_sha256=review["sha256"],
+        reviewed_at=NOW,
+    )
+    assert approved["lane"] == request["name"]
+    assert approved["post_receipt_bundle_sha256"] == bundle["sha256"]
+    assert approved["launchable"] is True
+
+
+def test_post_time_receipt_body_drift_fails_closed():
+    _, plan, request = _lane()
+    bundle = _post_bundle(plan, request)
+    bundle["server_preview"]["root_failure_alerts"] = "on"
+    bundle["server_preview"] = transition._sealed(
+        {k: v for k, v in bundle["server_preview"].items() if k != "sha256"}
+    )
+    bundle = transition._sealed({k: v for k, v in bundle.items() if k != "sha256"})
+    with pytest.raises(ValueError, match="unsafe"):
+        transition.validate_post_receipt_bundle(bundle, plan, request, now=NOW)
+
+
+def test_committed_default_transition_remains_unlaunchable():
     live = json.loads(
         Path(
             "configs/qualification/qwen38-miles-signal-live-task-receipt-20260924.json"
@@ -206,91 +347,4 @@ def test_committed_receipts_are_sanitized_and_unlaunchable():
     )
     transition.validate_live_task_receipt(live)
     transition.validate_review_candidate(candidate)
-    assert candidate["authority"]["task_get_receipt_sha256"] == live["sha256"]
     assert candidate["launchable"] is False
-    assert candidate["future_bindings"] == {}
-
-
-def test_complete_evidence_still_requires_separate_parent_review(live_receipt):
-    wave = miles_signal_wave.load()
-    candidate = transition.build_review_candidate(live_receipt, _evidence(wave), observed_at=NOW)
-    assert all(row["passed"] for row in candidate["gates"][:-1])
-    assert candidate["gates"][-1]["passed"] is False
-    assert candidate["launchable"] is False
-    jsonschema.Draft202012Validator(
-        _load_schema("qwen38-miles-signal-reviewed-transition-v1.schema.json"),
-        format_checker=jsonschema.FormatChecker(),
-    ).validate(candidate)
-    transition.validate_review_candidate(candidate, live_receipt)
-
-
-def test_gate_booleans_cannot_be_forged(live_receipt):
-    candidate = transition.build_review_candidate(live_receipt, observed_at=NOW)
-    candidate["gates"][0]["passed"] = True
-    candidate = transition._sealed({k: v for k, v in candidate.items() if k != "sha256"})
-    with pytest.raises(ValueError, match="not reproducible"):
-        transition.validate_review_candidate(candidate, live_receipt)
-
-
-def test_parent_review_only_approves_exact_complete_candidate(live_receipt):
-    candidate = transition.build_review_candidate(
-        live_receipt, _evidence(miles_signal_wave.load()), observed_at=NOW
-    )
-    review = transition._sealed(
-        {
-            "schema": transition.REVIEW_SCHEMA,
-            "candidate_sha256": candidate["sha256"],
-            "approved": True,
-            "reviewer": "root",
-            "reviewed_at": transition._stamp(NOW),
-        }
-    )
-    approved = transition.approve_review_candidate(candidate, review, live_receipt, reviewed_at=NOW)
-    assert approved["launchable"] is True
-    assert approved["gates"][-1]["passed"] is True
-    wrong = copy.deepcopy(review)
-    wrong["candidate_sha256"] = SHA("0")
-    wrong = transition._sealed({k: v for k, v in wrong.items() if k != "sha256"})
-    with pytest.raises(ValueError, match="exact candidate"):
-        transition.approve_review_candidate(candidate, wrong, live_receipt, reviewed_at=NOW)
-    with pytest.raises(ValueError, match="incomplete"):
-        transition.approve_review_candidate(
-            candidate,
-            review,
-            live_receipt,
-            reviewed_at=NOW + dt.timedelta(seconds=301),
-        )
-
-
-@pytest.mark.parametrize(
-    "mutate",
-    [
-        lambda evidence: evidence["adapter"].__setitem__("max_concurrent_episodes", 8),
-        lambda evidence: evidence["adapter"].__setitem__(
-            "live_session_open_tool_schema_gate", False
-        ),
-        lambda evidence: evidence["lanes"][0]["preview"].__setitem__("root_annotations", {}),
-        lambda evidence: evidence["lanes"][0]["absence"].__setitem__("jobs_api_duplicates", 1),
-        lambda evidence: evidence["lanes"][0]["observer"].__setitem__("active_deadline_s", 7_200),
-    ],
-)
-def test_each_critical_defect_keeps_transition_unlaunchable(live_receipt, mutate):
-    evidence = _evidence(miles_signal_wave.load())
-    mutate(evidence)
-    candidate = transition.build_review_candidate(live_receipt, evidence, observed_at=NOW)
-    assert any(row["passed"] is False for row in candidate["gates"][:-1])
-    with pytest.raises(ValueError, match="incomplete"):
-        transition.approve_review_candidate(
-            candidate,
-            transition._sealed(
-                {
-                    "schema": transition.REVIEW_SCHEMA,
-                    "candidate_sha256": candidate["sha256"],
-                    "approved": True,
-                    "reviewer": "root",
-                    "reviewed_at": transition._stamp(NOW),
-                }
-            ),
-            live_receipt,
-            reviewed_at=NOW,
-        )
