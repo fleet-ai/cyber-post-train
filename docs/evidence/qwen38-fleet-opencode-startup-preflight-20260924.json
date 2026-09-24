@@ -1,0 +1,80 @@
+{
+  "schema": "cyber_fleet_opencode_startup_preflight_incident_v1",
+  "observed_at": "2026-09-24T08:20:00Z",
+  "classification": "infrastructure_invalid_before_database_or_rollout",
+  "failed_source_job": {
+    "name": "chris-q38-f8-s46-t3k32s1000-p1-v1",
+    "uid": "4bf05ab3-a997-470e-9b78-c491f274ca7d",
+    "pod": "chris-q38-f8-s46-t3k32s1000-p1-v1-fddz5",
+    "pod_uid": "19c31f30-6521-45ff-abf3-5667ea8d5978",
+    "pod_started_at": "2026-09-24T06:55:16Z",
+    "pod_finished_at": "2026-09-24T06:59:10Z",
+    "exit_code": 1,
+    "restart_count": 0,
+    "root_failure_alert_annotation": "off",
+    "controller_log_sha256": "sha256:d93bca3029a04b3e95c9737578c71fa8a95ae89f80683f3ab8a9e5c7284cfde7",
+    "failure": "The offline Docker startup subprocess exceeded its combined 60-second timeout while running OpenCode version and database-path commands.",
+    "database_created": false,
+    "rollout_claimed": false,
+    "model_or_scoring_call_made": false
+  },
+  "pinned_harness": {
+    "opencode_version": "1.18.27",
+    "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "image_id": "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92",
+    "platform": "linux/amd64",
+    "mounted_evaluate_py_sha256": "sha256:33b88cf783bffdfa7fc194e8107afbd6721e762cb5d7020da9057c8d797e761e"
+  },
+  "same_image_control": {
+    "job": "chris-q38-dev17-harness-diag-v2",
+    "job_uid": "939136f8-5bf5-476d-9c6e-ae13d670e6a6",
+    "pod_uid": "11b92c6b-f93a-4239-8cf7-c9737daf30f0",
+    "container_started_at": "2026-09-20T23:35:28Z",
+    "container_finished_at": "2026-09-20T23:35:39Z",
+    "result": "The identical offline version-plus-database-path command succeeded against the exact pinned image and shared bind mount."
+  },
+  "source_finding": {
+    "upstream_tag": "anomalyco/opencode/v1.18.27",
+    "database_path_command": "packages/opencode/src/cli/cmd/db.ts marks the command instance-free but executes it through AppRuntime.",
+    "application_runtime": "packages/opencode/src/effect/app-runtime.ts constructs the complete application service layer, including database migration and numerous unrelated services.",
+    "conclusion": "The database-path command performs much more startup work than its output suggests. Its variable cold-start duration is not evidence that the pinned image, user, HOME, or writable mount is invalid."
+  },
+  "local_bounded_timing": {
+    "scope": "A local linux/amd64 image rebuilt from the exact repository Dockerfile, base-image digest and release asset; its rebuilt OS package layer means it is supporting timing evidence rather than exact-image qualification.",
+    "rebuilt_image_id": "sha256:4d7f3400ea31999f2a114e9a23ee3644265d1622d6b345a006b0baf97dde9968",
+    "legacy_probe_five_trials_seconds": {
+      "minimum": 7.215,
+      "median": 12.747,
+      "maximum": 37.0
+    },
+    "semantic_probe_five_trials_seconds": {
+      "minimum": 3.098,
+      "median": 3.167,
+      "maximum": 3.251
+    },
+    "network": "none",
+    "cpu_limit": 4
+  },
+  "repair": {
+    "status": "code_and_tests_only_not_live_qualified",
+    "normal_probe": "Run the pinned binary once, require the exact version, require non-root execution and explicit HOME, and directly create and remove a private file in each OpenCode config, cache, state and data directory.",
+    "safety_timeout_seconds": 300,
+    "preserved_gates": [
+      "exact local content-addressed image identity",
+      "linux/amd64 platform",
+      "release-asset label",
+      "actual controller user mapping",
+      "offline network",
+      "private mounted HOME",
+      "exact OpenCode version"
+    ],
+    "not_authorized": [
+      "paid evaluation",
+      "database creation",
+      "rollout",
+      "model call",
+      "scoring call"
+    ]
+  },
+  "sha256": "216d131d97fc5e580a4145646d5f400fbc926cbcf132177333e6e6ae68565414"
+}

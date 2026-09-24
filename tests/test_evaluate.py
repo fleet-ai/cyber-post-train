@@ -266,7 +266,7 @@ def prepared(configuration, tmp_path, monkeypatch):
         lambda args, **kwargs: SimpleNamespace(
             returncode=0,
             stdout=(
-                "1.18.27\n/home/node/.local/share/opencode/opencode.db\n"
+                "1.18.27\n"
                 if args[1] == "run"
                 else json.dumps(
                     {
@@ -404,9 +404,13 @@ def test_image_check_accepts_exact_oci_index_resolved_to_amd64_child(monkeypatch
         assert command[:3] == ["docker", "run", "--rm"]
         mount = command[command.index("-v") + 1]
         assert mount.startswith(str(tmp_path) + "/cpt-agent-preflight-")
+        assert command[-4:-1] == ["bash", "-ceu", "--"]
+        assert command[-1] == evaluation.AGENT_STARTUP_PROBE
+        assert "opencode db path" not in command[-1]
+        assert _kwargs["timeout"] == evaluation.AGENT_STARTUP_PROBE_TIMEOUT_SECONDS
         return SimpleNamespace(
             returncode=0,
-            stdout="1.18.27\n/home/node/.local/share/opencode/opencode.db\n",
+            stdout="1.18.27\n",
         )
 
     monkeypatch.setattr(evaluation.subprocess, "run", run)
@@ -532,8 +536,14 @@ def test_execution_host_images_checked_before_claim(prepared, monkeypatch, defec
     def inspect(args, **kwargs):
         if args[1] == "run":
             assert args[args.index("-e") : args.index("-e") + 2] == ["-e", "HOME=/home/node"]
-            assert args[-1] == "opencode --version && opencode db path"
-            return SimpleNamespace(returncode=int(defect == "home"), stdout="different-version")
+            assert args[-4:-1] == ["bash", "-ceu", "--"]
+            assert args[-1] == evaluation.AGENT_STARTUP_PROBE
+            assert "opencode db path" not in args[-1]
+            assert kwargs["timeout"] == evaluation.AGENT_STARTUP_PROBE_TIMEOUT_SECONDS
+            return SimpleNamespace(
+                returncode=int(defect == "home"),
+                stdout="different-version",
+            )
         info = {
             "RepoDigests": [args[3]],
             "Os": "linux",
@@ -552,6 +562,32 @@ def test_execution_host_images_checked_before_claim(prepared, monkeypatch, defec
     with pytest.raises(RuntimeError):
         evaluation.run(prepared, dsn="synthetic", route="shared", worker_id="bad", limit=1)
     assert not (prepared / "STARTED-bad.json").exists()
+
+
+def test_startup_probe_timeout_is_sanitized_before_claim(prepared, monkeypatch):
+    monkeypatch.setattr(evaluation.postgres, "verify_plan", Mock())
+    monkeypatch.setattr(rollout_worker, "run_one", lambda **k: pytest.fail("claimed after timeout"))
+
+    def run(args, **kwargs):
+        if args[1] == "run":
+            raise evaluation.subprocess.TimeoutExpired(args, kwargs["timeout"])
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "Id": args[3] if args[3].startswith("sha256:") else "sha256:" + "f" * 64,
+                    "RepoDigests": [args[3]],
+                    "Os": "linux",
+                    "Architecture": "amd64",
+                    "Config": {"Labels": {"cyber.opencode.release-sha256": "sha256:" + "b" * 64}},
+                }
+            ),
+        )
+
+    monkeypatch.setattr(evaluation.subprocess, "run", run)
+    with pytest.raises(RuntimeError, match="startup probe exceeded its safety deadline"):
+        evaluation.run(prepared, dsn="synthetic", route="shared", worker_id="slow", limit=1)
+    assert not (prepared / "STARTED-slow.json").exists()
 
 
 def test_eval_cli_prepare_and_status(configuration, tmp_path, monkeypatch):

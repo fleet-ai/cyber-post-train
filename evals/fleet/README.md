@@ -19,7 +19,10 @@ task/runtime/verifier bindings, ready inference routes and staged Linux/amd64
 Docker images, including the release label and actual OpenCode version. The
 execution host checks its images again before claims. Its offline startup check
 uses the actual controller UID, an explicitly set HOME and a private mounted
-directory; `--version` alone misses startup permission errors. Build the agent with
+directory. It starts the pinned binary once and directly creates and removes a
+private probe file in every OpenCode state/config/cache/data directory. This catches
+permission errors without using `opencode db path`, whose full application-runtime
+startup latency is unrelated to image or HOME validity. Build the agent with
 `evals/fleet/Dockerfile.opencode` and freeze its resulting digest. Preflight
 creates no challenge or scored session. Init writes only
 an empty dedicated PostgreSQL database; it is not a migration/reset command.
