@@ -1,0 +1,59 @@
+{
+  "bundle_sha256": "sha256:1ee7c619ac51c041fb73acf7ec1387d4c100c47ef88c0eeec95075543b44b5fb",
+  "cleanup": {
+    "config_map_absent": true,
+    "job_absent": true,
+    "pod_absent": true,
+    "resource_release_confirmed": true,
+    "workload_absent": true
+  },
+  "config_map": {
+    "name": "chris-q38-m96-signal-abs-a2-code",
+    "uid": "bec4424c-7341-4a20-91f3-3fccf9cc5be1"
+  },
+  "job": {
+    "failed": 0,
+    "name": "chris-q38-m96-signal-abs-a2",
+    "status": "Complete",
+    "succeeded": 1,
+    "uid": "af2de84b-e117-4455-bd17-4d0bec045502"
+  },
+  "observed_at": "2026-09-24T05:34:30Z",
+  "packet_file_sha256": "sha256:0c774a99dd1246ad3eac2356fede58a8d746e77a2483490426f49cd6deb39fac",
+  "packet_sha256": "sha256:9904a238dafb03288675768b30e1e9b7fdd3289f2f03abb64db57f34b67c413b",
+  "pod": {
+    "name": "chris-q38-m96-signal-abs-a2-tmh5k",
+    "phase": "Succeeded",
+    "restart_count": 0,
+    "uid": "ef9fe441-e7b5-456a-adea-490eae7d55f3"
+  },
+  "raw_weights_prompts_traces_flags_answers_scores_or_credentials_included": false,
+  "receipt": {
+    "checked_at_epoch": 1790228042,
+    "error_class": null,
+    "external_writes": 0,
+    "gpus": 0,
+    "output": "/mnt/sfs/jobs/chris-q38-m96-signal-a2",
+    "read_only": true,
+    "schema": "cyber_qwen38_miles96_signal_absence_receipt_v1",
+    "sha256": "sha256:f4fa3148b348ec9295bc9522f6457222177bd0776a4918af2b89d59ad7653b24",
+    "status": "absent",
+    "weights_prompts_traces_flags_answers_scores_or_credentials_included": false
+  },
+  "resources": {
+    "failure_alerts": "off",
+    "gpus": 0,
+    "priority": "c1/q1"
+  },
+  "schema": "cyber_qwen38_miles96_signal_absence_terminal_v1",
+  "server_preview_sha256": {
+    "config_map": "sha256:d7e0744a766fefacdea00be6e0fe1859f6f3b120bd726a3801be8c3999ff4c7a",
+    "job": "sha256:b2ce34860b4405659d8954099b004d2225360a78a0bb455cbfd9040d92315899"
+  },
+  "sha256": "sha256:33bb76fbd6d463dfd96fbfdcd2c1502d0b7bf17fb34c2aadd6b7003f048cd0bc",
+  "workload": {
+    "finished": "Succeeded",
+    "name": "job-chris-q38-m96-signal-abs-a2-63401",
+    "uid": "66f847a4-13e8-4e14-94ca-e94dc24870b0"
+  }
+}
