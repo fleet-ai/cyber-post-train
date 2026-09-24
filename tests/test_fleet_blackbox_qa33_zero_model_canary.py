@@ -139,6 +139,7 @@ def test_future_contract_is_zero_model_cpu_only_create_once_and_cleanup_bound():
     assert contract["zero_gpu_must_hold_for_all_init_regular_and_ephemeral_containers"] is True
     assert contract["zero_gpu_resource_claims_forbidden"] is True
     assert contract["active_deadline_seconds_maximum"] == 1800
+    assert contract["ttl_seconds_after_finished"] == 3600
     assert contract["backoff_limit"] == 0
     assert contract["restart_policy"] == "Never"
     assert contract["server_preview_count"] == 2

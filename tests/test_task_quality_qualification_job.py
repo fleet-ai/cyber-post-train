@@ -301,10 +301,22 @@ def test_package_is_cpu_only_alert_suppressed_and_keeps_plan_private(packet: Pat
     assert root["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
     assert root["spec"]["activeDeadlineSeconds"] == 1800
     assert root["spec"]["backoffLimit"] == 0
+    assert root["spec"]["ttlSecondsAfterFinished"] == 3600
     assert root["spec"]["template"]["spec"]["priorityClassName"] == "c1"
     job._assert_zero_accelerators(root["spec"]["template"]["spec"])  # noqa: SLF001
     assert "plan.json" not in package.config_map["data"]
     assert "plan.json" in package.secret["data"]
+
+
+@pytest.mark.parametrize("ttl", [None, 3599, 3601])
+def test_job_missing_or_wrong_terminal_ttl_is_rejected(packet: Path, ttl: int | None) -> None:
+    package = job.build_package(packet)
+    if ttl is None:
+        package.job["spec"].pop("ttlSecondsAfterFinished")
+    else:
+        package.job["spec"]["ttlSecondsAfterFinished"] = ttl
+    with pytest.raises(job.QualificationJobError, match="safety contract"):
+        job._assert_exact_job(package.job, package.packet)  # noqa: SLF001
 
 
 @pytest.mark.parametrize(

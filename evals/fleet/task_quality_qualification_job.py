@@ -36,6 +36,7 @@ NAMESPACE = "fleet-train-jobs"
 QUEUE_NAME = "training-lq"
 PRIORITY_CLASS = "c1"
 DEADLINE_SECONDS = 1800
+TTL_SECONDS_AFTER_FINISHED = 3600
 PRIVATE_ROOT = "/mnt/sfs/jobs"
 SFS_PVC = "sfs-shared"
 FLEET_SECRET = "fleet-api"
@@ -779,6 +780,7 @@ def _job(packet: Packet) -> dict[str, Any]:
             "backoffLimit": 0,
             "completions": 1,
             "parallelism": 1,
+            "ttlSecondsAfterFinished": TTL_SECONDS_AFTER_FINISHED,
             "template": {
                 "metadata": {
                     "annotations": {PACKET_ANNOTATION: packet.value["sha256"]},
@@ -921,6 +923,7 @@ def _assert_exact_job(value: dict[str, Any], packet: Packet) -> None:
         or spec.get("backoffLimit") != 0
         or spec.get("completions") != 1
         or spec.get("parallelism") != 1
+        or spec.get("ttlSecondsAfterFinished") != TTL_SECONDS_AFTER_FINISHED
         or not isinstance(pod, dict)
         or pod.get("priorityClassName") != PRIORITY_CLASS
         or pod.get("restartPolicy") != "Never"
