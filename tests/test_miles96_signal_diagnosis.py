@@ -171,3 +171,34 @@ def test_header_packet_has_silent_zero_gpu_root_job() -> None:
     assert job["spec"]["suspend"] is True
     assert job["spec"]["template"]["spec"]["priorityClassName"] == "c1"
     assert "nvidia.com/gpu" not in json.dumps(job)
+
+
+def test_predicate_probe_emits_only_aggregate_counts(tmp_path: Path, monkeypatch) -> None:
+    source, release_sha256 = _output(tmp_path)
+    monkeypatch.setattr(diagnosis, "PREDICATE_RECEIPT", source / "SIGNAL_PREDICATE_PROBE.json")
+    monkeypatch.setattr(diagnosis, "RELEASE_SHA256", release_sha256)
+    result = json.loads((source / "attempts/0/result.json").read_text())
+    result["agent_termination"] = "not-completed"
+    _write(source / "attempts/0/result.json", result)
+    receipt = diagnosis.predicate_probe(source)
+    assert receipt["complete_contract_count"] == 7
+    assert receipt["failed_predicate_counts"]["completed_termination"] == 1
+    assert sum(receipt["failed_predicate_counts"].values()) == 1
+    assert receipt["identities_or_values_included"] is False
+    assert receipt["prompts_traces_flags_answers_rewards_or_scores_included"] is False
+    assert "execution-" not in json.dumps(receipt)
+
+
+def test_predicate_packet_has_silent_zero_gpu_root_job() -> None:
+    value = diagnosis.predicate_packet()
+    job = value["bundle"]["items"][1]
+    assert value["sha256"] == diagnosis.digest(
+        {key: item for key, item in value.items() if key != "sha256"}
+    )
+    assert job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+    assert job["spec"]["template"]["metadata"]["annotations"]["fleet.ai/failure-alerts"] == ("off")
+    assert job["spec"]["backoffLimit"] == 0
+    assert job["spec"]["suspend"] is True
+    assert job["spec"]["template"]["spec"]["priorityClassName"] == "c1"
+    assert job["spec"]["template"]["spec"]["containers"][0]["command"][-1] == ("--predicate-probe")
+    assert "nvidia.com/gpu" not in json.dumps(job)

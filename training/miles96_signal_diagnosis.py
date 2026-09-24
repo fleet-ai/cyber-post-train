@@ -14,6 +14,7 @@ from typing import Any
 SOURCE = Path("/mnt/sfs/jobs/chris-q38-m96-signal-a2")
 RECEIPT = SOURCE / "SIGNAL_DIAGNOSIS.json"
 HEADER_RECEIPT = SOURCE / "SIGNAL_HEADER_PROBE.json"
+PREDICATE_RECEIPT = SOURCE / "SIGNAL_PREDICATE_PROBE.json"
 SOURCE_JOB_UID = "d3388003-61ce-4b5d-95cf-5b85d7e6ac8b"
 PLAN_SHA256 = "a4cca0bc9af5f8cd47d572c02bf7d513759a8b7c7ee4e912aada087c439261c0"
 TASK_VERSION_ID = "0920e798-c7e7-4da6-9d5e-ebeba45ec05a"
@@ -25,6 +26,8 @@ JOB_NAME = "chris-q38-m96-signal-a2-diagnosis-a2"
 CM_NAME = JOB_NAME + "-code"
 HEADER_JOB_NAME = "chris-q38-m96-signal-a2-header-a1"
 HEADER_CM_NAME = HEADER_JOB_NAME + "-code"
+PREDICATE_JOB_NAME = "chris-q38-m96-signal-a2-diagnosis-a3"
+PREDICATE_CM_NAME = PREDICATE_JOB_NAME + "-code"
 NAMESPACE = "fleet-train-jobs"
 IMAGE = (
     "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:"
@@ -201,6 +204,103 @@ def diagnose(source: Path = SOURCE) -> dict[str, Any]:
         "release_receipt_sha256": RELEASE_SHA256,
         "raw_reward_values_included": False,
         "prompts_traces_flags_answers_or_scores_included": False,
+    }
+    receipt = {**body, "sha256": digest(body)}
+    _write_once(receipt_path, receipt)
+    return receipt
+
+
+def predicate_probe(source: Path = SOURCE) -> dict[str, Any]:
+    """Report only aggregate pass/fail counts for the exact attempt contract."""
+    receipt_path = source / PREDICATE_RECEIPT.name
+    if source.is_symlink() or not source.is_dir() or receipt_path.exists():
+        raise ValueError("source output is absent, unsafe, or already probed")
+    release = _read(source / "LEAK_RECONCILED.json")
+    if (
+        release.get("sha256") != RELEASE_SHA256
+        or release.get("sha256") != digest({k: v for k, v in release.items() if k != "sha256"})
+        or release.get("source_job_uid") != SOURCE_JOB_UID
+        or release.get("all_instances_released_after") is not True
+        or release.get("live_instance_count_after") != 0
+    ):
+        raise ValueError("instance release receipt differs")
+    terminal = _read(source / "EVAL_TERMINAL.json")
+    if (
+        terminal.get("schema") != "fleet_eval_campaign_terminal_v1"
+        or not _terminal_digests_match(terminal)
+        or terminal.get("plan_sha256") != PLAN_SHA256
+    ):
+        raise ValueError("evaluation terminal differs")
+
+    attempts = sorted((source / "attempts").iterdir())
+    if len(attempts) != 8 or any(path.is_symlink() or not path.is_dir() for path in attempts):
+        raise ValueError("bounded campaign attempt count differs")
+    failures: collections.Counter[str] = collections.Counter()
+    complete = 0
+    for attempt in attempts:
+        result = _read(attempt / "result.json")
+        reward = _read(attempt / "reward-result.json")
+        binding = _read(attempt / "binding.json")
+        cleanup = _read(attempt / "cleanup.json")
+        score = reward.get("reward")
+        attestation = reward.get("direct_authority_attestation") or {}
+        context = attestation.get("context") or {}
+        execution_id = reward.get("verifier_execution_id")
+        checks = {
+            "authority_task_identity": context.get("task_version_id") == TASK_VERSION_ID,
+            "authority_verifier_identity": context.get("verifier_version_id")
+            == VERIFIER_VERSION_ID,
+            "binding_model_revision": binding.get("model", {}).get("revision") == MODEL_REVISION,
+            "binding_served_model": binding.get("model", {}).get("session_model") == SERVED_MODEL,
+            "binding_task_identity": binding.get("task", {}).get("version_id") == TASK_VERSION_ID,
+            "binding_verifier_identity": binding.get("verifier", {}).get("version_id")
+            == VERIFIER_VERSION_ID,
+            "completed_termination": result.get("agent_termination") == "completed",
+            "exact_cleanup": cleanup
+            == {
+                "instance_created": True,
+                "instance_closed": True,
+                "containers_removed": True,
+            },
+            "execution_identity_equal": result.get("verifier_execution_id") == execution_id,
+            "execution_identity_present": isinstance(execution_id, str) and bool(execution_id),
+            "finite_unit_reward": not isinstance(score, bool)
+            and isinstance(score, (int, float))
+            and math.isfinite(float(score))
+            and 0.0 <= float(score) <= 1.0,
+            "result_reward_equal": result.get("score") == score,
+            "result_task_identity": result.get("task_version_id") == TASK_VERSION_ID,
+        }
+        failures.update(key for key, passed in checks.items() if not passed)
+        complete += all(checks.values())
+
+    body = {
+        "schema": "cyber_qwen38_miles96_signal_predicate_probe_v1",
+        "source_job_uid": SOURCE_JOB_UID,
+        "episode_count": 8,
+        "complete_contract_count": complete,
+        "failed_predicate_counts": {
+            key: failures[key]
+            for key in (
+                "authority_task_identity",
+                "authority_verifier_identity",
+                "binding_model_revision",
+                "binding_served_model",
+                "binding_task_identity",
+                "binding_verifier_identity",
+                "completed_termination",
+                "exact_cleanup",
+                "execution_identity_equal",
+                "execution_identity_present",
+                "finite_unit_reward",
+                "result_reward_equal",
+                "result_task_identity",
+            )
+        },
+        "all_instances_released": True,
+        "release_receipt_sha256": RELEASE_SHA256,
+        "identities_or_values_included": False,
+        "prompts_traces_flags_answers_rewards_or_scores_included": False,
     }
     receipt = {**body, "sha256": digest(body)}
     _write_once(receipt_path, receipt)
@@ -405,16 +505,50 @@ def header_packet() -> dict[str, Any]:
     return {**body, "sha256": digest(body)}
 
 
+def predicate_packet() -> dict[str, Any]:
+    base = packet()
+    config_map, job = base["bundle"]["items"]
+    config_map["metadata"]["name"] = PREDICATE_CM_NAME
+    job["metadata"]["name"] = PREDICATE_JOB_NAME
+    job["metadata"]["labels"]["cyber-post-train.fleet.ai/role"] = "miles96-signal-predicate-probe"
+    job["spec"]["template"]["spec"]["containers"][0]["command"].append("--predicate-probe")
+    job["spec"]["template"]["spec"]["volumes"][0]["configMap"]["name"] = PREDICATE_CM_NAME
+    body = {
+        "schema": "cyber_qwen38_miles96_signal_predicate_packet_v1",
+        "job_name": PREDICATE_JOB_NAME,
+        "config_map_name": PREDICATE_CM_NAME,
+        "source_job_uid": SOURCE_JOB_UID,
+        "bundle": base["bundle"],
+        "create_counts": {"config_map": 1, "job": 1, "retry": 0, "patch": 0},
+        "expected": base["expected"],
+    }
+    return {**body, "sha256": digest(body)}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--packet", action="store_true")
     parser.add_argument("--header-packet", action="store_true")
     parser.add_argument("--header-probe", action="store_true")
+    parser.add_argument("--predicate-packet", action="store_true")
+    parser.add_argument("--predicate-probe", action="store_true")
     args = parser.parse_args()
-    selected = sum((args.packet, args.header_packet, args.header_probe))
+    selected = sum(
+        (
+            args.packet,
+            args.header_packet,
+            args.header_probe,
+            args.predicate_packet,
+            args.predicate_probe,
+        )
+    )
     if selected > 1:
         parser.error("select at most one operation")
-    if args.packet:
+    if args.predicate_packet:
+        value = predicate_packet()
+    elif args.predicate_probe:
+        value = predicate_probe()
+    elif args.packet:
         value = packet()
     elif args.header_packet:
         value = header_packet()
