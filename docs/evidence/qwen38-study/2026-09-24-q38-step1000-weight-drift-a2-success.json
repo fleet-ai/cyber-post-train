@@ -1,0 +1,213 @@
+{
+  "schema": "cyber_qwen38_weight_drift_audit_success_v1",
+  "observed_at": "2026-09-24T09:06:55Z",
+  "status": "terminal_success_released_structural_weight_drift_passed",
+  "scope": "Read-only, zero-GPU aggregate weight-drift audit for the accepted Qwen3.8 teacher3k 32k BF16 exports at optimizer steps 600, 700, 800, 900, and 1000",
+  "attempt": {
+    "name": "chris-q38-t3k32-drift-a2",
+    "job": {
+      "uid": "1e4079ba-29e1-477f-88be-780f17ea3964",
+      "created_at": "2026-09-24T08:25:24Z",
+      "started_at": "2026-09-24T08:25:24Z",
+      "terminal_at": "2026-09-24T09:06:03Z",
+      "condition": "Complete",
+      "succeeded": 1,
+      "failed": 0,
+      "active": 0,
+      "root_failure_alert_annotation": "off"
+    },
+    "pod": {
+      "name": "chris-q38-t3k32-drift-a2-2jqp2",
+      "uid": "e8af9630-80a8-46e5-9f23-f3e91a90945e",
+      "started_at": "2026-09-24T08:25:25Z",
+      "finished_at": "2026-09-24T09:06:00Z",
+      "exit_code": 0,
+      "restart_count": 0,
+      "gpu_request": 0,
+      "cpu_request": "8",
+      "memory_request": "32Gi",
+      "image_sha256": "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4"
+    },
+    "workload": {
+      "name": "job-chris-q38-t3k32-drift-a2-7fcf7",
+      "uid": "77d4a4e8-4ae2-4b3d-bb5c-c48c0d2542a0",
+      "exact_owner_job_uid": "1e4079ba-29e1-477f-88be-780f17ea3964",
+      "finished": true,
+      "finished_reason": "Succeeded",
+      "finished_at": "2026-09-24T09:06:03Z"
+    },
+    "resource_release": {
+      "active_owned_pods": 0,
+      "running_owned_pods": 0,
+      "workload_finished": true,
+      "gpu_allocation": 0,
+      "verified_after_terminal": true,
+      "objects_preserved_for_evidence": true
+    }
+  },
+  "immutable_input": {
+    "config_map": {
+      "name": "chris-q38-t3k32-drift-a2",
+      "uid": "215e129b-f757-4e2a-a668-60a0fae29c96",
+      "immutable": true
+    },
+    "files": {
+      "audit.py": {
+        "bytes": 28477,
+        "sha256": "776d08c9c58bb9cad9d984cd57924f6100ce766e10d98455afd4c8c3b636963e"
+      },
+      "lock.json": {
+        "bytes": 2230,
+        "sha256": "f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac"
+      },
+      "weights.json": {
+        "bytes": 3468,
+        "sha256": "80a5e9de066e068abb012a0e9bd144676813a31042bb578226472803f8e0e84f"
+      }
+    },
+    "source_commit": "6e2f22cfd2108abaa0d0057cdc4d0970acc94e13"
+  },
+  "aggregate_receipt": {
+    "schema": "cyber_qwen38_weight_drift_audit_v1",
+    "status": "passed",
+    "stdout_line_count": 1,
+    "stdout_bytes": 44714,
+    "stdout_sha256": "95c7cf4d66e0b46260acd4451601eb415a4c9b6028d15edd1e093ba8909b3415",
+    "self_sha256": "db8451cee96db2139466da47fef2b2e3e75e06d57903189a18dbad3fbac27baf",
+    "self_sha256_verified": true,
+    "base": {
+      "base_matches_frozen_lock": true,
+      "weight_shards_verified": 18,
+      "index_and_sidecars_verified": 10,
+      "tensor_count": 1199,
+      "tensor_bytes": 55562855904,
+      "layout_sha256": "3d093dffdcc8d7c1502fe93380800bb9288574cb9c1a2fda285e852fcf2a21ad",
+      "weight_manifest_sha256": "06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
+    },
+    "exports": {
+      "step600": {
+        "optimizer_step": 600,
+        "receipt_file_sha256": "93b27c9a58ec85c309ee214a8e6924754fbfdd766f9537ec68d2ac3f978d1543",
+        "receipt_sha256": "24ea5e61ef8b6866ec72b4150f308ce90e0c07a585fd486692f4cd98e1e6ec67",
+        "payload_manifest_sha256": "adf5d8c6609ea441744eab13ed0649c22eb4ad5f95baeebdcd60880c206702a6"
+      },
+      "step700": {
+        "optimizer_step": 700,
+        "receipt_file_sha256": "049d32a529673dea10c0dfbf250bd6c0d873a9cfe7b2c24d9755f91cca3ef55c",
+        "receipt_sha256": "ed320b7535ed439850a419cd717d55172b260cfa63df8abf4f0ebf6f4714c0ec",
+        "payload_manifest_sha256": "41310cfdc8ea0d096d784c2f86c2d01fba9ad12263426d1e0fcd812bedcde013"
+      },
+      "step800": {
+        "optimizer_step": 800,
+        "receipt_file_sha256": "f3762da74e131ccf2ff2df5c3e0b54f5352822e98c86539f640b6e3996808970",
+        "receipt_sha256": "3dca4cf10610bcbaf263e730682ffea9cbe2bd540613b81123c14d087d2e09a9",
+        "payload_manifest_sha256": "bd1b01c25d96a5e4f637399282ade26275c2a8b9d0f2a38302b173aff07e3d5b"
+      },
+      "step900": {
+        "optimizer_step": 900,
+        "receipt_file_sha256": "84b8d965fe08f988fdab6fbe3a3d9c5153af392f75233b3224ff579998fd069f",
+        "receipt_sha256": "33fab68ad59aab8ff24753c2edbb81371a94b99e3d0284fc29e200e0a664f7e6",
+        "payload_manifest_sha256": "d7f3e596b3b54736ece2f7d1c67c220ea19c27ba47defedd923e61c48ca2df73"
+      },
+      "step1000": {
+        "optimizer_step": 1000,
+        "receipt_file_sha256": "e79d2cdaaebe52da61a37e4f4ad35c2c8ccd4878afaf77de0fc4796e8e1c6463",
+        "receipt_sha256": "8a1d9e093fa1f856c35d357cf34861862317491ee83a9268613f1cf86160eef0",
+        "payload_manifest_sha256": "023c5f8b0559ba050f0d672a6bc27aabecec7d5837595f8ea5bc914446d26db5"
+      }
+    },
+    "export_contract": {
+      "accepted_export_count": 5,
+      "payload_files_verified_per_export": 29,
+      "trained_tensors_per_export": 1184,
+      "restored_frozen_tensors_per_export": 15,
+      "sidecars_matching_base_per_export": 9,
+      "all_exact_payload_identities_verified": true,
+      "all_source_inventory_stability_receipts_verified": true,
+      "all_output_tensors_reopened_equal": true,
+      "all_exports_have_identical_layout": true,
+      "export_tensor_count": 1199,
+      "export_tensor_bytes": 55562855904,
+      "export_layout_sha256": "068ec3b29b45e4dfc81f33089be8c131306926a1c41d589657f7749d64c24b21"
+    },
+    "drift_summary": {
+      "all_structural_weight_checks_pass": true,
+      "structural_issues": [],
+      "diagnostic_warnings": [],
+      "checkpoints": {
+        "step600": {
+          "changed_training_tensors_vs_base": 707,
+          "changed_non_mtp_tensors_vs_previous": 707,
+          "changed_layers_vs_base": 64,
+          "changed_mtp_tensors_vs_base": 0,
+          "changed_visual_tensors_vs_base": 0
+        },
+        "step700": {
+          "changed_training_tensors_vs_base": 707,
+          "changed_non_mtp_tensors_vs_previous": 696,
+          "changed_layers_vs_base": 64,
+          "changed_mtp_tensors_vs_base": 0,
+          "changed_visual_tensors_vs_base": 0
+        },
+        "step800": {
+          "changed_training_tensors_vs_base": 710,
+          "changed_non_mtp_tensors_vs_previous": 692,
+          "changed_layers_vs_base": 64,
+          "changed_mtp_tensors_vs_base": 0,
+          "changed_visual_tensors_vs_base": 0
+        },
+        "step900": {
+          "changed_training_tensors_vs_base": 712,
+          "changed_non_mtp_tensors_vs_previous": 690,
+          "changed_layers_vs_base": 64,
+          "changed_mtp_tensors_vs_base": 0,
+          "changed_visual_tensors_vs_base": 0
+        },
+        "step1000": {
+          "changed_training_tensors_vs_base": 718,
+          "changed_non_mtp_tensors_vs_previous": 698,
+          "changed_layers_vs_base": 64,
+          "changed_mtp_tensors_vs_base": 0,
+          "changed_visual_tensors_vs_base": 0
+        }
+      }
+    },
+    "native_f32_sample": {
+      "available": false,
+      "reason": "checkpoint_not_requested",
+      "scope_statement": "This receipt proves structural and value drift across the accepted BF16 exports. It does not make a native-checkpoint FP32-to-BF16 comparison claim."
+    }
+  },
+  "sanitized_conclusion": {
+    "statement": "The accepted BF16 exports at steps 600 through 1000 are structurally valid, digest-bound, and not inert copies of the frozen base or of one another. Every checkpoint changes hundreds of non-MTP tensors relative to the previous accepted checkpoint, and every one of the 64 transformer layers changes relative to the frozen base. Step 1000 changes 718 trained tensors relative to base and 698 non-MTP tensors relative to step 900. MTP and visual tensors stay equal to base in every audited export.",
+    "rules_out": [
+      "step1000 BF16 export identical to frozen base",
+      "step1000 BF16 export identical to step900",
+      "no cross-layer BF16 weight change in accepted exports",
+      "nonfinite BF16 weights",
+      "new entirely-zero tensors",
+      "payload, sidecar, layout, or accepted export identity drift"
+    ],
+    "does_not_claim": [
+      "training quality or benchmark lift",
+      "native checkpoint FP32-to-BF16 equality",
+      "semantic correctness of any individual tensor value"
+    ]
+  },
+  "source_stability": {
+    "sfs_mount_read_only": true,
+    "observed_process_write_bytes_during_run": 0,
+    "current_payload_digests_match_accepted_receipts": true,
+    "export_receipts_report_source_inventory_sizes_mtimes_unchanged": true,
+    "export_receipts_report_reopened_output_equality": true
+  },
+  "privacy": {
+    "contains_secrets": false,
+    "contains_private_logs": false,
+    "contains_model_values": false,
+    "contains_tensor_names": false,
+    "contains_prompts_traces_flags_answers_or_scores": false,
+    "raw_weights_emitted": false
+  },
+  "receipt_sha256": "5ee87e410a22518d9896d747af66ceb39c4267c192e25633f60a859374de4a0e"
+}
