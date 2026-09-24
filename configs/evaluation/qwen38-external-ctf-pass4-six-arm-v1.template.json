@@ -9,17 +9,17 @@
     "source_path": "evals/campaign.py",
     "source_sha256": "sha256:0b3e81836f3f4fdd68e554f376bd656379165d406b588c71e19f803af4a8c201",
     "driver_adapter_path": "evals/external_ctf/campaign_adapter.py",
-    "driver_adapter_sha256": "sha256:b6022811175ec9d0af2d45bc6cd0c695f86e8f6152c896f33938256582c71219",
+    "driver_adapter_sha256": "sha256:bb35f7950ca99eb3d37e761c7cc82cb822d0b85ebb01ffb2172656a1ac373dfd",
     "binding_schema": "external_ctf_campaign_bindings_v1",
     "resolved_config_path": null,
     "resolved_config_sha256": null,
     "rule": "render_only_after_the_controller_interface_and_all_external_bindings_are_immutable"
   },
   "checkpoint_matrix": {
-    "schema": null,
-    "path": null,
-    "file_sha256": null,
-    "receipt_sha256": null,
+    "schema": "cyber_qwen38_top5_multibench_pass4_matrix_v1",
+    "path": "configs/evaluation/qwen38-top5-multibench-pass4-matrix-20260923-v1.json",
+    "file_sha256": "sha256:2f6fbf5b1956f05f1906fa77513afb742f0d96c5321fc6ea0a20ab0d1fc37dff",
+    "receipt_sha256": "sha256:f4459e4d939f99973ad04ab114b03643073da43b9e767681f375bc0e33685da6",
     "required_selected_checkpoint_count": 5,
     "total_arm_count_with_baseline": 6,
     "selection_must_predate_external_results": true,
@@ -29,38 +29,52 @@
     {
       "slot": "baseline",
       "role": "baseline",
+      "matrix_arm_id": "base",
+      "matrix_arm_sha256": "sha256:77b4515412eff1258155082511c536415a3b987dc72c903935ea8be35c4d67da",
+      "matrix_artifact_id": "qwen38-27b-base-control",
       "external_protocol_arm": "base",
       "external_protocol_arm_sha256": "sha256:1041e58b2d7fb9b1111ddbb8c479c9c98164fabdc13223eb3141b85cdb33d62d"
     },
     {
       "slot": "checkpoint_01",
       "role": "selected_checkpoint",
-      "matrix_artifact_id": null
+      "matrix_arm_id": "step1000",
+      "matrix_arm_sha256": "sha256:cd2bbcd76b0127876ce6f74d1b3d8d24457dfb67ff263f80cf492a2b96a6ad22",
+      "matrix_artifact_id": "q38-teacher3k-32k-step1000"
     },
     {
       "slot": "checkpoint_02",
       "role": "selected_checkpoint",
-      "matrix_artifact_id": null
+      "matrix_arm_id": "b16_step300",
+      "matrix_arm_sha256": "sha256:586bb29d3700f3266d67a3c1e5daf79f4605897df572347178458876c710ffb0",
+      "matrix_artifact_id": "q38-d32-b16-lr5e6-step300"
     },
     {
       "slot": "checkpoint_03",
       "role": "selected_checkpoint",
-      "matrix_artifact_id": null
+      "matrix_arm_id": "context64_step285",
+      "matrix_arm_sha256": "sha256:413ecf01573f68bda3c71f0fa0f73521017715ab3cf1bfd242a99a6f724ed477",
+      "matrix_artifact_id": "q38-t3k64-b8-step285"
     },
     {
       "slot": "checkpoint_04",
       "role": "selected_checkpoint",
-      "matrix_artifact_id": null
+      "matrix_arm_id": "lr1_step700",
+      "matrix_arm_sha256": "sha256:b379270a30e3b939786bcd725224b82ead8e50f294127379f79bd4b66b462adc",
+      "matrix_artifact_id": "q38-t3k32-lr1-step700"
     },
     {
       "slot": "checkpoint_05",
       "role": "selected_checkpoint",
-      "matrix_artifact_id": null
+      "matrix_arm_id": "context96_step300",
+      "matrix_arm_sha256": "sha256:389fa8c4363963a291d3796f4e9258818a95003a591d1d0a910bb61c56c2fb67",
+      "matrix_artifact_id": "q38-t3k96-b8-step300"
     }
   ],
   "model_binding_requirements": {
     "required_per_arm": [
       "checkpoint_id",
+      "matrix_arm_sha256",
       "weights_sha256",
       "checkpoint_or_base_manifest_sha256",
       "export_or_base_clone_receipt_sha256",
@@ -353,5 +367,5 @@
     "prompts_traces_flags_answers_private_scores_and_secrets_included": false,
     "results_remain_sealed_until_a_complete_predeclared_matched_aggregate": true
   },
-  "template_sha256": "sha256:168106917777b0a114b78b325c5e1fcfe2eee46cc8580a35fa2676e3cff0c1d2"
+  "template_sha256": "sha256:eb03f2f1287502ea4d9c487af44397a16673b0bbf5cef7decab668da79fe5bce"
 }

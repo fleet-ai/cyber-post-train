@@ -11,29 +11,32 @@ from evals.external_ctf import campaign_adapter
 from evals.external_ctf.protocol import DEFAULT_PROTOCOL, canonical, file_digest, load_protocol
 
 SHA = "sha256:" + "1" * 64
+ROOT = Path(__file__).resolve().parents[1]
+MATRIX = ROOT / "configs/evaluation/qwen38-top5-multibench-pass4-matrix-20260923-v1.json"
 
 
 def _models() -> list[dict]:
+    matrix = json.loads(MATRIX.read_bytes())
     return [
         {
-            "id": model_id,
-            "checkpoint_id": "checkpoint-" + model_id,
+            "id": arm["arm_id"],
+            "checkpoint_id": arm["artifact_id"],
+            "matrix_arm_sha256": campaign.digest(arm),
             "weights_sha256": "sha256:" + str(index) * 64,
             "matched_treatment_receipt_sha256": SHA,
             "serving_route_receipt_sha256": "sha256:" + "7" * 64,
             "live_parity_receipt_sha256": "sha256:" + "8" * 64,
-            "served_model": "served-" + model_id,
+            "served_model": "served-" + arm["arm_id"],
         }
-        for index, model_id in enumerate(
-            ("base", "teacher", "self-sft", "long-context", "lora", "rl"), start=1
-        )
+        for index, arm in enumerate(matrix["arms"], start=1)
     ]
 
 
 def _bindings() -> dict:
+    matrix = json.loads(MATRIX.read_bytes())
     return {
         "budgets_sha256": "sha256:" + "2" * 64,
-        "matrix_sha256": "sha256:" + "3" * 64,
+        "matrix_sha256": "sha256:" + matrix["sha256"],
         "harness_receipt_sha256": {
             benchmark: "sha256:" + "4" * 64 for benchmark in campaign_adapter.BENCHMARKS
         },
@@ -109,7 +112,9 @@ def test_binding_loader_accepts_formatted_protocol_and_exact_signed_evidence(
         bindings_path,
         {
             "schema": campaign_adapter.SCHEMA,
-            "matrix_sha256": "sha256:" + "3" * 64,
+            "matrix": _reference(
+                MATRIX, "sha256:" + json.loads(MATRIX.read_bytes())["sha256"]
+            ),
             "budgets_sha256": "sha256:" + "2" * 64,
             "protocol": _reference(DEFAULT_PROTOCOL, protocol["protocol_sha256"]),
             "web_retry_execution": _reference(retry_path, retry["receipt_sha256"]),
@@ -128,6 +133,7 @@ def test_binding_loader_accepts_formatted_protocol_and_exact_signed_evidence(
     loaded, observed_protocol = campaign_adapter.load_bindings(bindings_path)
 
     assert loaded["receipt_sha256"] == bindings["receipt_sha256"]
+    assert loaded["matrix_sha256"] == "sha256:" + json.loads(MATRIX.read_bytes())["sha256"]
     assert observed_protocol["protocol_sha256"] == protocol["protocol_sha256"]
     assert [row["id"] for row in loaded["models_loaded"]] == [row["id"] for row in models]
 
@@ -192,6 +198,25 @@ def test_remote_names_bind_model_attempt_and_experiment_key(monkeypatch) -> None
     assert first["experiment_key"].removeprefix("sha256:")[:12] in campaign_adapter.remote_name(
         first
     )
+
+
+def test_packet_rejects_driver_source_drift(tmp_path: Path, monkeypatch) -> None:
+    protocol = load_protocol()
+    bindings = _bindings()
+    monkeypatch.setattr(campaign_adapter, "load_bindings", lambda _path: (bindings, protocol))
+    packet = campaign.build_plan(
+        campaign_adapter.controller_config(Path("/private/tmp/bindings.json"))
+    )["targets"][0]
+    packet_path = tmp_path / "packet.json"
+    packet_path.write_bytes(canonical(packet) + b"\n")
+
+    observed, _cell = campaign_adapter._packet(packet_path, bindings, protocol)  # noqa: SLF001
+    assert observed["experiment_key"] == packet["experiment_key"]
+
+    packet["drivers"]["rollout"]["source_sha256"] = "sha256:" + "0" * 64
+    packet_path.write_bytes(canonical(packet) + b"\n")
+    with pytest.raises(campaign_adapter.ExternalCampaignError, match="campaign_packet_invalid"):
+        campaign_adapter._packet(packet_path, bindings, protocol)  # noqa: SLF001
 
 
 def test_current_adapter_gates_enable_cve_and_hold_nyu_and_cybench() -> None:

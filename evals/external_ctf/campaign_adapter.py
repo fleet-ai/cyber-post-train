@@ -185,10 +185,64 @@ def _file_binding(
     return path, loaded
 
 
-def _models(value: object) -> list[dict[str, Any]]:
+def _matrix(value: object) -> tuple[Path, dict[str, Any], str]:
+    if not isinstance(value, dict) or set(value) != {
+        "path",
+        "file_sha256",
+        "receipt_sha256",
+    }:
+        raise ExternalCampaignError("matrix_binding_invalid")
+    path = Path(value["path"])
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise ExternalCampaignError("matrix_binding_invalid") from exc
+    matrix = _read(path, "matrix")
+    unsigned = {key: item for key, item in matrix.items() if key != "sha256"}
+    receipt = digest(unsigned)
+    arms = matrix.get("arms")
+    arm_ids = (
+        [row.get("arm_id") for row in arms]
+        if isinstance(arms, list) and all(isinstance(row, dict) for row in arms)
+        else []
+    )
+    operation = matrix.get("operation")
+    if (
+        not path.is_absolute()
+        or file_digest(raw) != _sha(value["file_sha256"], "matrix_file_sha256")
+        or value["receipt_sha256"] != receipt
+        or matrix.get("sha256") != receipt.removeprefix("sha256:")
+        or matrix.get("schema") != "cyber_qwen38_top5_multibench_pass4_matrix_v1"
+        or matrix.get("status") != "prepared_no_launch"
+        or matrix.get("launchable") is not False
+        or not isinstance(arms, list)
+        or len(arms) != 6
+        or [row.get("rank") for row in arms] != list(range(6))
+        or len(set(arm_ids)) != 6
+        or matrix.get("evaluation_protocol", {}).get("arms") != arm_ids
+        or matrix.get("evaluation_protocol", {}).get("pass_k") != 4
+        or matrix.get("evaluation_protocol", {}).get("independent_pass1_attempt_indices")
+        != [0, 1, 2, 3]
+        or not isinstance(operation, dict)
+        or set(operation)
+        != {
+            "checkpoint_promotions_started",
+            "routes_created_or_mutated",
+            "jobs_created",
+            "evaluation_cells_created",
+            "fleet_confirmation_campaigns_created",
+        }
+        or any(item != 0 for item in operation.values())
+    ):
+        raise ExternalCampaignError("matrix_binding_invalid")
+    return path, matrix, receipt
+
+
+def _models(value: object, matrix: dict[str, Any]) -> list[dict[str, Any]]:
     required = {
         "id",
         "checkpoint_id",
+        "matrix_arm_sha256",
         "weights_sha256",
         "matched_treatment_receipt_sha256",
         "serving_route_receipt_sha256",
@@ -198,6 +252,7 @@ def _models(value: object) -> list[dict[str, Any]]:
     }
     if not isinstance(value, list) or len(value) != 6:
         raise ExternalCampaignError("six_model_bindings_required")
+    matrix_arms = {row["arm_id"]: row for row in matrix["arms"]}
     result: list[dict[str, Any]] = []
     ids: set[str] = set()
     for row in value:
@@ -208,14 +263,16 @@ def _models(value: object) -> list[dict[str, Any]]:
             not isinstance(model_id, str)
             or _ID.fullmatch(model_id) is None
             or model_id in ids
-            or not isinstance(row["checkpoint_id"], str)
-            or not row["checkpoint_id"]
+            or model_id not in matrix_arms
+            or row["checkpoint_id"] != matrix_arms[model_id].get("artifact_id")
+            or row["matrix_arm_sha256"] != digest(matrix_arms[model_id])
             or not isinstance(row["served_model"], str)
             or not row["served_model"]
         ):
             raise ExternalCampaignError("model_binding_invalid")
         ids.add(model_id)
         for field in (
+            "matrix_arm_sha256",
             "weights_sha256",
             "matched_treatment_receipt_sha256",
             "serving_route_receipt_sha256",
@@ -234,7 +291,9 @@ def _models(value: object) -> list[dict[str, Any]]:
         ):
             raise ExternalCampaignError("route_preflight_binding_invalid")
         result.append({**row, "route_preflight_path": str(preflight_path)})
-    if len({row["matched_treatment_receipt_sha256"] for row in result}) != 1:
+    if ids != set(matrix_arms) or len(
+        {row["matched_treatment_receipt_sha256"] for row in result}
+    ) != 1:
         raise ExternalCampaignError("model_treatment_mismatch")
     return result
 
@@ -243,7 +302,7 @@ def load_bindings(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     value = _read(path, "campaign_bindings", signed=True)
     expected = {
         "schema",
-        "matrix_sha256",
+        "matrix",
         "budgets_sha256",
         "protocol",
         "web_retry_execution",
@@ -256,8 +315,8 @@ def load_bindings(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     }
     if value.get("schema") != SCHEMA or set(value) != expected:
         raise ExternalCampaignError("campaign_bindings_invalid")
-    _sha(value["matrix_sha256"], "matrix_sha256")
     _sha(value["budgets_sha256"], "budgets_sha256")
+    matrix_path, matrix, matrix_sha256 = _matrix(value["matrix"])
     protocol_path, protocol_file = _file_binding(
         value["protocol"], "protocol", signed=False, receipt_field="protocol_sha256"
     )
@@ -303,9 +362,12 @@ def load_bindings(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     for field in ("harness_receipt_sha256", "scoring_protocol_sha256"):
         for benchmark, item in value[field].items():
             _sha(item, field + "_" + benchmark)
-    models = _models(value["models"])
+    models = _models(value["models"], matrix)
     return {
         **value,
+        "matrix_path": matrix_path,
+        "matrix_loaded": matrix,
+        "matrix_sha256": matrix_sha256,
         "protocol_path": protocol_path,
         "web_retry_execution_path": retry_path,
         "qualification_packet_path": qualification_path,
@@ -485,7 +547,17 @@ def _packet(
 ) -> tuple[dict, dict]:
     packet = _read(packet_path, "campaign_packet")
     identity = packet.get("identity")
-    if not isinstance(identity, dict):
+    drivers = packet.get("drivers")
+    source_sha256 = file_digest(Path(__file__).read_bytes())
+    if (
+        not isinstance(identity, dict)
+        or not isinstance(drivers, dict)
+        or any(
+            not isinstance(drivers.get(phase), dict)
+            or drivers[phase].get("source_sha256") != source_sha256
+            for phase in ("rollout", "score")
+        )
+    ):
         raise ExternalCampaignError("campaign_packet_invalid")
     benchmark = identity.get("benchmark", {}).get("id")
     target = identity.get("target", {}).get("id")

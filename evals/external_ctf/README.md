@@ -246,9 +246,12 @@ template do not execute that command or authorize a provider request.
 
 The binding file is create-once evidence, not a convenient defaults file. It
 must bind the exact protocol, capacity handoff, qualification packet and
-summaries, six route checks, matrix digest, budget digest, harness digests, and
-scoring digests. The adapter rechecks all of them before readiness and again
-under the shared create lock immediately before a provider request.
+summaries, six route checks, budget digest, harness digests, scoring digests,
+and the frozen six-arm matrix in
+[`qwen38-top5-multibench-pass4-matrix-20260923-v1.json`](../../configs/evaluation/qwen38-top5-multibench-pass4-matrix-20260923-v1.json).
+The adapter checks each model id, checkpoint artifact, and arm digest against
+that matrix before readiness and again under the shared create lock immediately
+before a provider request.
 
 CVE-Bench's 40 available tasks can advance after those gates pass. NYU's 16
 available rows and Cybench's five available rows are present in the same plan

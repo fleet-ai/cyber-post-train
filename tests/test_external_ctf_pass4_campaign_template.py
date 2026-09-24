@@ -8,6 +8,7 @@ from evals.external_ctf.protocol import DEFAULT_PROTOCOL, canonical, digest, loa
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "configs/evaluation/qwen38-external-ctf-pass4-six-arm-v1.template.json"
+MATRIX = ROOT / "configs/evaluation/qwen38-top5-multibench-pass4-matrix-20260923-v1.json"
 
 
 def _sha256(path: Path) -> str:
@@ -30,6 +31,16 @@ def test_template_is_held_and_binds_the_current_external_protocol() -> None:
     assert binding["file_sha256"] == _sha256(DEFAULT_PROTOCOL)
     assert binding["protocol_sha256"] == protocol["protocol_sha256"]
     assert value["checkpoint_matrix"]["selection_must_predate_external_results"] is True
+    assert value["checkpoint_matrix"] == {
+        "schema": "cyber_qwen38_top5_multibench_pass4_matrix_v1",
+        "path": str(MATRIX.relative_to(ROOT)),
+        "file_sha256": _sha256(MATRIX),
+        "receipt_sha256": "sha256:" + json.loads(MATRIX.read_bytes())["sha256"],
+        "required_selected_checkpoint_count": 5,
+        "total_arm_count_with_baseline": 6,
+        "selection_must_predate_external_results": True,
+        "external_results_may_not_change_selection": True,
+    }
     assert value["data_policy"] == "evaluation_only_never_training_tuning_or_checkpoint_selection"
     assert controller["source_sha256"] == _sha256(ROOT / controller["source_path"])
     assert controller["driver_adapter_sha256"] == _sha256(ROOT / controller["driver_adapter_path"])
@@ -40,6 +51,7 @@ def test_six_arm_pass4_universe_preserves_official_unavailable_rows() -> None:
     value = _load()
     protocol = load_protocol()
     slots = value["model_slots"]
+    matrix = json.loads(MATRIX.read_bytes())
     benchmarks = {row["id"]: row for row in value["benchmarks"]}
 
     assert len(slots) == 6
@@ -48,9 +60,13 @@ def test_six_arm_pass4_universe_preserves_official_unavailable_rows() -> None:
     baseline = next(row for row in slots if row["role"] == "baseline")
     assert baseline["external_protocol_arm"] == "base"
     assert baseline["external_protocol_arm_sha256"] == digest(protocol["arms"]["base"])
-    assert all(
-        row["matrix_artifact_id"] is None for row in slots if row["role"] == "selected_checkpoint"
-    )
+    assert [row["matrix_arm_id"] for row in slots] == [row["arm_id"] for row in matrix["arms"]]
+    assert [row["matrix_artifact_id"] for row in slots] == [
+        row["artifact_id"] for row in matrix["arms"]
+    ]
+    assert [row["matrix_arm_sha256"] for row in slots] == [
+        digest(row) for row in matrix["arms"]
+    ]
     assert value["pass_k"] == 4
     assert value["attempts"] == [1, 2, 3, 4]
 
@@ -114,6 +130,7 @@ def test_template_cannot_silently_change_science_or_evade_deduplication() -> Non
 
     assert {
         "weights_sha256",
+        "matrix_arm_sha256",
         "checkpoint_or_base_manifest_sha256",
         "export_or_base_clone_receipt_sha256",
         "staging_receipt_sha256",
