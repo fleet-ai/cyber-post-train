@@ -1,0 +1,48 @@
+{
+  "classification": "diagnostic-contract-invalid",
+  "cleanup": {
+    "config_map_absent": false,
+    "job_absent": false,
+    "pod_absent": false,
+    "uid_preconditioned_cleanup_at": null,
+    "workload_absent": false
+  },
+  "config_map": {
+    "name": "chris-q38-m96-signal-a2-diagnosis-a1-code",
+    "uid": "148f6697-034b-4862-bc62-e6c80aa2f20d"
+  },
+  "execution": {
+    "exit_code": 1,
+    "failure_class": "evaluation_terminal_identity_mismatch",
+    "finished_at": "2026-09-24T06:24:18Z",
+    "private_reward_or_trace_content_read": false,
+    "restart_count": 0
+  },
+  "job": {
+    "name": "chris-q38-m96-signal-a2-diagnosis-a1",
+    "status": "Failed",
+    "uid": "d5b38717-77e3-4c27-8962-9991824e6f87"
+  },
+  "packet": {
+    "bundle_sha256": "sha256:6fd46c99fda6480080bb32478ea5bfcf535ab240e13e715d4c89ab45c521c19e",
+    "file_sha256": "sha256:ebbc4738bf0c5225cb542c33dd0f492134e9fff154e65eda6e0cc6c25eedaea5",
+    "internal_sha256": "sha256:f7d4b502997a1f2e7d5f1e2cc37aaf15f7960c6795604f7ee96231e6e1329cbe",
+    "normalized_server_preview_sha256": "sha256:044aead35ecd168597f625f376427e2862863e18d3c5c4fbad6382c6851b0dd2"
+  },
+  "pod": {
+    "name": "chris-q38-m96-signal-a2-diagnosis-a1-v6jr7",
+    "uid": "34011be6-90b8-40af-bca7-3a4f8042be2e"
+  },
+  "private_instance_ids_prompts_traces_rewards_scores_or_credentials_included": false,
+  "resources": {
+    "failure_alerts": "off",
+    "gpus": 0,
+    "priority": "c1/q1"
+  },
+  "schema": "cyber_qwen38_miles96_signal_diagnosis_terminal_v1",
+  "sha256": "sha256:a5ae0a77f97741635ae606549e091aca7d5b77fbb3a3484a4bcae019a2074a0b",
+  "workload": {
+    "name": "job-chris-q38-m96-signal-a2-diagnosis-a1-6fd01",
+    "uid": "7f74d576-4ca9-482c-818f-e40ae48cf492"
+  }
+}
