@@ -19,6 +19,13 @@ JOB_UID = "11111111-2222-4333-8444-555555555555"
 CONFIG_MAP_UID = "66666666-7777-4888-8999-aaaaaaaaaaaa"
 PACKET_SHA = "sha256:" + "c" * 64
 ROUTE_SHA = "sha256:" + "d" * 64
+TRACKED_STRICT_PROFILE = (
+    Path(__file__).resolve().parents[1]
+    / "configs/evaluation/qwen38-heldout20-base-step1000-strict-wave-profile-v6.json"
+)
+TRACKED_STRICT_PROFILE_FILE_SHA256 = (
+    "sha256:1d0135c0d0ad21349dc34ee6f7c1a8d2744d476dbe85b637148a929a491fb812"
+)
 
 
 def _write(path: Path, value: dict[str, Any]) -> Path:
@@ -129,8 +136,17 @@ def _phase_files(tmp_path: Path) -> tuple[Path, Path]:
 def test_shared_source_job_is_created_once_and_siblings_resume(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    packets, bindings = _campaign(tmp_path)
+    packets, bindings, plan = _strict_wave_campaign(tmp_path)
+    profile = _patch_strict_contract(monkeypatch, tmp_path, bindings, plan)
     _patch_source(monkeypatch, bindings)
+    monkeypatch.setattr(
+        adapter,
+        "_cluster_duplicate_absence",
+        lambda *_args, **_kwargs: (
+            lambda _path: False,
+            adapter._AbsentDatabase("heldout_base_seed46"),
+        ),
+    )
     preview, ready = _phase_files(tmp_path)
     calls = 0
 
@@ -149,16 +165,29 @@ def test_shared_source_job_is_created_once_and_siblings_resume(
         }
 
     monkeypatch.setattr(heldout_launch, "launch_package_once", launch)
+    adapter.reserve_wave(
+        bindings,
+        plan,
+        profile,
+        _profile_file_sha256(profile),
+        bindings["wave"]["reservation_id"],
+        expected_sessions=160,
+        packet_set_sha256=bindings["wave"]["packet_set_sha256"],
+        root=tmp_path / "budget",
+    )
     common = {
         "action": "launch",
         "phase": "rollout",
-        "bindings_path": tmp_path / "bindings.json",
+        "bindings_path": tmp_path / "fleet-bindings.json",
+        "strict_profile_path": profile,
+        "strict_profile_file_sha256": _profile_file_sha256(profile),
         "context": "fleet",
         "preview_receipt": preview,
         "readiness_receipt": ready,
         "cluster": Cluster(),
         "database": Database(),
         "budget_root": tmp_path / "budget",
+        "duplicate_gate_evidence": tmp_path / "duplicate-gate-evidence.json",
     }
     first = adapter.run_action(packet_path=packets[KEY_A], **common)
     second = adapter.run_action(packet_path=packets[KEY_B], **common)
@@ -174,7 +203,7 @@ def test_shared_source_job_is_created_once_and_siblings_resume(
     )
     assert len(reservations) == 1
     reservation = adapter._read(reservations[0])  # noqa: SLF001
-    assert reservation["count"] == 2
+    assert reservation["count"] == 160
 
 
 def test_daily_used_plus_reserved_gate_is_atomic_and_idempotent(tmp_path: Path) -> None:
@@ -260,9 +289,45 @@ def _wave_plan(
             )
         )
     return {
+        "campaign_id": "heldout20-base-step1000-test",
         "plan_sha256": binding["wave"]["campaign_plan_sha256"],
         "targets": rows,
     }
+
+
+def _strict_profile(
+    tmp_path: Path, binding: dict[str, Any], plan: dict[str, Any]
+) -> Path:
+    value = {
+        "schema": adapter.STRICT_PROFILE_SCHEMA,
+        "campaign_id": plan["campaign_id"],
+        "binding_schema": adapter.WAVE_BINDING_SCHEMA,
+        "campaign_plan_sha256": plan["plan_sha256"],
+        "bindings_sha256": binding["sha256"],
+        "reservation_id": binding["wave"]["reservation_id"],
+        "packet_set_sha256": binding["wave"]["packet_set_sha256"],
+        "group_count": adapter.WAVE_GROUP_COUNT,
+        "cell_count": adapter.WAVE_CELL_COUNT,
+        "control_source_sha256": adapter._control_source_sha256(),  # noqa: SLF001
+    }
+    value["sha256"] = adapter._digest(value)  # noqa: SLF001
+    return _write(tmp_path / "strict-wave-profile.json", value)
+
+
+def _profile_file_sha256(path: Path) -> str:
+    return "sha256:" + adapter.hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _patch_strict_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    binding: dict[str, Any],
+    plan: dict[str, Any],
+) -> Path:
+    _write(tmp_path / "fleet-bindings.json", binding)
+    profile = _strict_profile(tmp_path, binding, plan)
+    monkeypatch.setattr(adapter.campaign, "load_plan", lambda _state: plan)
+    return profile
 
 
 def _strict_wave_campaign(
@@ -271,27 +336,32 @@ def _strict_wave_campaign(
     packets, _ = _campaign(tmp_path)
     binding = _wave_binding(tmp_path)
     group = binding["groups"]["group-00"]
-    replaced = group["cells"][0]
+    replaced = group["cells"][:2]
     group["cells"][0] = KEY_A
+    group["cells"][1] = KEY_B
     group["leader"] = KEY_A
     group["packet_sha256"] = PACKET_SHA
-    binding["cells"][KEY_A] = {
-        **binding["cells"].pop(replaced),
-        "group": "group-00",
-    }
+    for key, old in zip((KEY_A, KEY_B), replaced, strict=True):
+        binding["cells"][key] = {
+            **binding["cells"].pop(old),
+            "group": "group-00",
+        }
     binding["wave"]["packet_set_sha256"] = adapter._packet_set_sha256(  # noqa: SLF001
         binding["groups"]
     )
     source = adapter._control_source_sha256()  # noqa: SLF001
-    target = json.loads(packets[KEY_A].read_text())
-    target["drivers"] = {
-        phase: {"source_sha256": source} for phase in adapter.campaign.PHASES
-    }
-    _write(packets[KEY_A], target)
+    targets = []
+    for key in (KEY_A, KEY_B):
+        target = json.loads(packets[key].read_text())
+        target["drivers"] = {
+            phase: {"source_sha256": source} for phase in adapter.campaign.PHASES
+        }
+        _write(packets[key], target)
+        targets.append(target)
     binding["sha256"] = adapter._digest(  # noqa: SLF001
         {key: value for key, value in binding.items() if key != "sha256"}
     )
-    return packets, binding, _wave_plan(binding, target)
+    return packets, binding, _wave_plan(binding, *targets)
 
 
 def test_wave_control_digest_binds_all_three_creator_modules() -> None:
@@ -306,6 +376,33 @@ def test_wave_control_digest_binds_all_three_creator_modules() -> None:
         }
     )
     assert adapter._control_source_sha256() == expected  # noqa: SLF001
+
+
+def test_tracked_strict_profile_binds_the_render_v6_control_envelope() -> None:
+    profile = adapter._strict_profile(  # noqa: SLF001
+        TRACKED_STRICT_PROFILE, TRACKED_STRICT_PROFILE_FILE_SHA256
+    )
+    assert profile == {
+        "binding_schema": adapter.WAVE_BINDING_SCHEMA,
+        "bindings_sha256": (
+            "sha256:f441fb2b255174fca364ed1c744fe7f053cb5db0f6400de658f2bbc8b3f9f0b8"
+        ),
+        "campaign_id": "q38-heldout20-base-step1000-p4-v2",
+        "campaign_plan_sha256": (
+            "sha256:9983b1305c6a30bab8c859183f56205b94c90994f6fa8aef40a7ae6a41e884f7"
+        ),
+        "cell_count": 160,
+        "control_source_sha256": adapter._control_source_sha256(),  # noqa: SLF001
+        "group_count": 16,
+        "packet_set_sha256": (
+            "sha256:e3864de77eb57a05aafb9d7fcd5cae9c16cb00dcf8cd56fdb97da3f1d258b94b"
+        ),
+        "reservation_id": "heldout20-base-step1000-v6",
+        "schema": adapter.STRICT_PROFILE_SCHEMA,
+        "sha256": (
+            "sha256:d829d1da9d9261c2eed1018c331410ad9bbbe8d206dad3eb24812fe04bf3a834"
+        ),
+    }
 
 
 def test_strict_wave_rejects_partial_binding_and_arbitrary_packet_set(tmp_path: Path) -> None:
@@ -331,6 +428,8 @@ def test_strict_wave_rejects_partial_binding_and_arbitrary_packet_set(tmp_path: 
         adapter.reserve_wave(
             binding,
             _wave_plan(binding),
+            (profile := _strict_profile(tmp_path, binding, _wave_plan(binding))),
+            _profile_file_sha256(profile),
             binding["wave"]["reservation_id"],
             expected_sessions=1,
             packet_set_sha256=binding["wave"]["packet_set_sha256"],
@@ -347,6 +446,8 @@ def test_strict_wave_rejects_partial_binding_and_arbitrary_packet_set(tmp_path: 
         adapter.reserve_wave(
             complete,
             _wave_plan(complete),
+            (profile := _strict_profile(tmp_path, complete, _wave_plan(complete))),
+            _profile_file_sha256(profile),
             complete["wave"]["reservation_id"],
             expected_sessions=160,
             packet_set_sha256=complete["wave"]["packet_set_sha256"],
@@ -374,6 +475,8 @@ def test_wave_reservation_requires_the_exact_plan_before_state_write(
         adapter.reserve_wave(
             binding,
             plan,
+            (profile := _strict_profile(tmp_path, binding, _wave_plan(binding))),
+            _profile_file_sha256(profile),
             binding["wave"]["reservation_id"],
             expected_sessions=160,
             packet_set_sha256=binding["wave"]["packet_set_sha256"],
@@ -424,6 +527,8 @@ def test_wave_reservation_counts_existing_reservations_and_every_group_adopts(
     first = adapter.reserve_wave(
         binding,
         _wave_plan(binding),
+        (profile := _strict_profile(tmp_path, binding, _wave_plan(binding))),
+        _profile_file_sha256(profile),
         "heldout20-base-step1000-v3",
         expected_sessions=160,
         packet_set_sha256=binding["wave"]["packet_set_sha256"],
@@ -432,6 +537,8 @@ def test_wave_reservation_counts_existing_reservations_and_every_group_adopts(
     second = adapter.reserve_wave(
         binding,
         _wave_plan(binding),
+        (profile := _strict_profile(tmp_path, binding, _wave_plan(binding))),
+        _profile_file_sha256(profile),
         "heldout20-base-step1000-v3",
         expected_sessions=160,
         packet_set_sha256=binding["wave"]["packet_set_sha256"],
@@ -486,6 +593,8 @@ def test_wave_reservation_over_cap_writes_no_reservation(tmp_path: Path) -> None
         adapter.reserve_wave(
             binding,
             _wave_plan(binding),
+            (profile := _strict_profile(tmp_path, binding, _wave_plan(binding))),
+            _profile_file_sha256(profile),
             "heldout20-base-step1000-v3",
             expected_sessions=160,
             packet_set_sha256=binding["wave"]["packet_set_sha256"],
@@ -516,6 +625,8 @@ def test_wave_reservation_conflict_and_partial_overlap_fail_closed(tmp_path: Pat
         adapter.reserve_wave(
             binding,
             _wave_plan(binding),
+            (profile := _strict_profile(tmp_path, binding, _wave_plan(binding))),
+            _profile_file_sha256(profile),
             "heldout20-base-step1000-v3",
             expected_sessions=160,
             packet_set_sha256=binding["wave"]["packet_set_sha256"],
@@ -529,6 +640,8 @@ def test_wave_reservation_same_id_with_changed_binding_fails_closed(tmp_path: Pa
     adapter.reserve_wave(
         binding,
         _wave_plan(binding),
+        (profile := _strict_profile(tmp_path, binding, _wave_plan(binding))),
+        _profile_file_sha256(profile),
         "heldout20-base-step1000-v3",
         expected_sessions=160,
         packet_set_sha256=binding["wave"]["packet_set_sha256"],
@@ -546,6 +659,8 @@ def test_wave_reservation_same_id_with_changed_binding_fails_closed(tmp_path: Pa
         adapter.reserve_wave(
             changed,
             _wave_plan(changed),
+            (profile := _strict_profile(tmp_path, changed, _wave_plan(changed))),
+            _profile_file_sha256(profile),
             "heldout20-base-step1000-v3",
             expected_sessions=160,
             packet_set_sha256=changed["wave"]["packet_set_sha256"],
@@ -568,6 +683,8 @@ def test_wave_reservation_write_failure_leaves_no_final_wave(tmp_path: Path, mon
         adapter.reserve_wave(
             binding,
             _wave_plan(binding),
+            (profile := _strict_profile(tmp_path, binding, _wave_plan(binding))),
+            _profile_file_sha256(profile),
             "heldout20-base-step1000-v3",
             expected_sessions=160,
             packet_set_sha256=binding["wave"]["packet_set_sha256"],
@@ -651,6 +768,8 @@ def test_wave_reservation_validates_full_binding_before_state_write(
         adapter.reserve_wave(
             binding,
             _wave_plan(binding),
+            (profile := _strict_profile(tmp_path, binding, _wave_plan(binding))),
+            _profile_file_sha256(profile),
             "heldout20-base-step1000-v3",
             expected_sessions=160,
             packet_set_sha256=binding["wave"]["packet_set_sha256"],
@@ -663,8 +782,8 @@ def test_wave_bound_launch_cannot_reach_create_before_full_reservation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     packets, bindings, plan = _strict_wave_campaign(tmp_path)
+    profile = _patch_strict_contract(monkeypatch, tmp_path, bindings, plan)
     _patch_source(monkeypatch, bindings)
-    monkeypatch.setattr(adapter.campaign, "load_plan", lambda _state: plan)
     monkeypatch.setattr(
         heldout_launch,
         "launch_package_once",
@@ -685,6 +804,8 @@ def test_wave_bound_launch_cannot_reach_create_before_full_reservation(
             phase="rollout",
             packet_path=packets[KEY_A],
             bindings_path=tmp_path / "fleet-bindings.json",
+            strict_profile_path=profile,
+            strict_profile_file_sha256=_profile_file_sha256(profile),
             context="fleet",
             preview_receipt=preview,
             readiness_receipt=ready,
@@ -700,6 +821,7 @@ def test_wave_bound_control_plane_drift_fails_before_preview(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, drift: str
 ) -> None:
     packets, bindings, plan = _strict_wave_campaign(tmp_path)
+    profile = _patch_strict_contract(monkeypatch, tmp_path, bindings, plan)
     target = json.loads(packets[KEY_A].read_text())
     _patch_source(monkeypatch, bindings)
     planned_target = json.loads(json.dumps(target))
@@ -728,6 +850,88 @@ def test_wave_bound_control_plane_drift_fails_before_preview(
             phase="rollout",
             packet_path=packets[KEY_A],
             bindings_path=tmp_path / "fleet-bindings.json",
+            strict_profile_path=profile,
+            strict_profile_file_sha256=_profile_file_sha256(profile),
+            context="fleet",
+            duplicate_gate_evidence=tmp_path / "duplicate-gate-evidence.json",
+            cluster=Cluster(),
+            database=Database(),
+        )
+
+
+def test_strict_wave_action_rejects_legacy_binding_downgrade_before_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    packets, binding, plan = _strict_wave_campaign(tmp_path)
+    profile = _patch_strict_contract(monkeypatch, tmp_path, binding, plan)
+    downgraded = json.loads(json.dumps(binding))
+    downgraded["schema"] = adapter.SCHEMA
+    downgraded.pop("wave")
+    leader = downgraded["groups"]["group-00"]["leader"]
+    downgraded["groups"] = {
+        "group-00": {
+            **downgraded["groups"]["group-00"],
+            "cells": [leader],
+        }
+    }
+    downgraded["cells"] = {leader: downgraded["cells"][leader]}
+    downgraded["sha256"] = adapter._digest(  # noqa: SLF001
+        {key: value for key, value in downgraded.items() if key != "sha256"}
+    )
+    _write(tmp_path / "fleet-bindings.json", downgraded)
+    monkeypatch.setattr(
+        adapter,
+        "_source",
+        lambda *_args, **_kwargs: pytest.fail("legacy binding reached source capture"),
+    )
+    with pytest.raises(adapter.AdapterError, match="wave-bound campaign"):
+        adapter.run_action(
+            action="preview",
+            phase="rollout",
+            packet_path=packets[KEY_A],
+            bindings_path=tmp_path / "fleet-bindings.json",
+            strict_profile_path=profile,
+            strict_profile_file_sha256=_profile_file_sha256(profile),
+            context="fleet",
+            duplicate_gate_evidence=tmp_path / "duplicate-gate-evidence.json",
+            cluster=Cluster(),
+            database=Database(),
+        )
+
+
+def test_strict_wave_action_rejects_coherent_alternate_plan_profile_and_packet_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    packets, binding, plan = _strict_wave_campaign(tmp_path)
+    profile = _patch_strict_contract(monkeypatch, tmp_path, binding, plan)
+    authorized_profile_sha256 = _profile_file_sha256(profile)
+    alternate = json.loads(json.dumps(binding))
+    alternate["groups"]["group-15"]["packet_sha256"] = "sha256:" + "f" * 64
+    alternate["wave"]["packet_set_sha256"] = adapter._packet_set_sha256(  # noqa: SLF001
+        alternate["groups"]
+    )
+    alternate_plan = json.loads(json.dumps(plan))
+    alternate_plan["plan_sha256"] = "sha256:" + "6" * 64
+    alternate["wave"]["campaign_plan_sha256"] = alternate_plan["plan_sha256"]
+    alternate["sha256"] = adapter._digest(  # noqa: SLF001
+        {key: value for key, value in alternate.items() if key != "sha256"}
+    )
+    _write(tmp_path / "fleet-bindings.json", alternate)
+    _strict_profile(tmp_path, alternate, alternate_plan)
+    monkeypatch.setattr(adapter.campaign, "load_plan", lambda _state: alternate_plan)
+    monkeypatch.setattr(
+        adapter,
+        "_source",
+        lambda *_args, **_kwargs: pytest.fail("alternate packet set reached source capture"),
+    )
+    with pytest.raises(adapter.AdapterError, match="differs from its authorization"):
+        adapter.run_action(
+            action="preview",
+            phase="rollout",
+            packet_path=packets[KEY_A],
+            bindings_path=tmp_path / "fleet-bindings.json",
+            strict_profile_path=profile,
+            strict_profile_file_sha256=authorized_profile_sha256,
             context="fleet",
             duplicate_gate_evidence=tmp_path / "duplicate-gate-evidence.json",
             cluster=Cluster(),
@@ -785,9 +989,18 @@ def test_cluster_output_absence_is_bound_to_exact_source_group(tmp_path: Path) -
 def test_unready_route_defers_without_duplicate_or_create(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    packets, bindings = _campaign(tmp_path)
+    packets, bindings, plan = _strict_wave_campaign(tmp_path)
+    profile = _patch_strict_contract(monkeypatch, tmp_path, bindings, plan)
     _patch_source(monkeypatch, bindings)
     preview, _ = _phase_files(tmp_path)
+    monkeypatch.setattr(
+        adapter,
+        "_cluster_duplicate_absence",
+        lambda *_args, **_kwargs: (
+            lambda _path: False,
+            adapter._AbsentDatabase("heldout_base_seed46"),
+        ),
+    )
     monkeypatch.setattr(
         heldout_launch,
         "duplicate_census",
@@ -797,9 +1010,12 @@ def test_unready_route_defers_without_duplicate_or_create(
         action="ready",
         phase="rollout",
         packet_path=packets[KEY_A],
-        bindings_path=tmp_path / "bindings.json",
+        bindings_path=tmp_path / "fleet-bindings.json",
+        strict_profile_path=profile,
+        strict_profile_file_sha256=_profile_file_sha256(profile),
         context="fleet",
         preview_receipt=preview,
+        duplicate_gate_evidence=tmp_path / "duplicate-gate-evidence.json",
         cluster=Cluster(),
         database=Database(),
         route_check=lambda _package: (_ for _ in ()).throw(RuntimeError("unready")),
@@ -866,12 +1082,21 @@ def test_terminal_cells_are_isolated_and_cleanup_is_proven_only_for_acceptance(
     expected: str,
     cleanup: bool,
 ) -> None:
-    packets, bindings = _campaign(tmp_path)
+    packets, bindings, plan = _strict_wave_campaign(tmp_path)
+    profile = _patch_strict_contract(monkeypatch, tmp_path, bindings, plan)
     _patch_source(monkeypatch, bindings)
-    root = packets[KEY_A].resolve().parents[2] / "fleet-source-jobs" / "base-seed46"
+    monkeypatch.setattr(
+        adapter,
+        "_cluster_duplicate_absence",
+        lambda *_args, **_kwargs: (
+            lambda _path: False,
+            adapter._AbsentDatabase("heldout_base_seed46"),
+        ),
+    )
+    root = packets[KEY_A].resolve().parents[2] / "fleet-source-jobs" / "group-00"
     launch_unsigned = {
         "schema": "cyber_fleet_source_launch_v1",
-        "group_id": "base-seed46",
+        "group_id": "group-00",
         "packet_sha256": PACKET_SHA,
         "route_profile_sha256": ROUTE_SHA,
         "job_uid": JOB_UID,
@@ -898,9 +1123,12 @@ def test_terminal_cells_are_isolated_and_cleanup_is_proven_only_for_acceptance(
         action="observe",
         phase="rollout",
         packet_path=packets[KEY_A],
-        bindings_path=tmp_path / "bindings.json",
+        bindings_path=tmp_path / "fleet-bindings.json",
+        strict_profile_path=profile,
+        strict_profile_file_sha256=_profile_file_sha256(profile),
         context="fleet",
         launch_receipt=launch,
+        duplicate_gate_evidence=tmp_path / "duplicate-gate-evidence.json",
         cluster=Cluster(),
         database=Database(row),
     )
@@ -913,12 +1141,21 @@ def test_terminal_cells_are_isolated_and_cleanup_is_proven_only_for_acceptance(
 def test_terminal_observation_rejects_resource_identity_drift(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, drift: str
 ) -> None:
-    packets, bindings = _campaign(tmp_path)
+    packets, bindings, plan = _strict_wave_campaign(tmp_path)
+    profile = _patch_strict_contract(monkeypatch, tmp_path, bindings, plan)
     _patch_source(monkeypatch, bindings)
-    root = packets[KEY_A].resolve().parents[2] / "fleet-source-jobs" / "base-seed46"
+    monkeypatch.setattr(
+        adapter,
+        "_cluster_duplicate_absence",
+        lambda *_args, **_kwargs: (
+            lambda _path: False,
+            adapter._AbsentDatabase("heldout_base_seed46"),
+        ),
+    )
+    root = packets[KEY_A].resolve().parents[2] / "fleet-source-jobs" / "group-00"
     launch_unsigned = {
         "schema": "cyber_fleet_source_launch_v1",
-        "group_id": "base-seed46",
+        "group_id": "group-00",
         "packet_sha256": PACKET_SHA,
         "route_profile_sha256": ROUTE_SHA,
         "job_uid": JOB_UID,
@@ -982,9 +1219,12 @@ def test_terminal_observation_rejects_resource_identity_drift(
             action="observe",
             phase="rollout",
             packet_path=packets[KEY_A],
-            bindings_path=tmp_path / "bindings.json",
+            bindings_path=tmp_path / "fleet-bindings.json",
+            strict_profile_path=profile,
+            strict_profile_file_sha256=_profile_file_sha256(profile),
             context="fleet",
             launch_receipt=launch,
+            duplicate_gate_evidence=tmp_path / "duplicate-gate-evidence.json",
             cluster=DriftingCluster(),
             database=Database(),
         )
