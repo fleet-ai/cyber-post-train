@@ -2,16 +2,25 @@ import hashlib
 import json
 from pathlib import Path
 
-EVIDENCE = (
-    Path(__file__).parents[1]
-    / "docs/evidence/qwen38-study/2026-09-24-q38-step1000-weight-drift-a2-success.json"
-)
+EVIDENCE_ROOT = Path(__file__).parents[1] / "docs/evidence/qwen38-study"
+EVIDENCE = EVIDENCE_ROOT / "2026-09-24-q38-step1000-weight-drift-a2-success.json"
 
 
 def _digest(value: dict) -> str:
     return hashlib.sha256(
         json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
+
+
+def test_step1000_weight_evidence_receipts_are_self_bound():
+    for name in (
+        "2026-09-24-q38-step1000-weight-drift-a1-permission-failure.json",
+        "2026-09-24-q38-step1000-weight-drift-a2-success.json",
+        "2026-09-24-q38-step1000-weight-lineage-reconciliation.json",
+    ):
+        value = json.loads((EVIDENCE_ROOT / name).read_text())
+        claimed = value.pop("receipt_sha256")
+        assert claimed == _digest(value), name
 
 
 def test_step1000_weight_drift_success_evidence_is_self_bound_and_sanitized():
