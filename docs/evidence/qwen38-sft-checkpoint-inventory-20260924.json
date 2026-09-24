@@ -36,8 +36,8 @@
     },
     "step400_successor": {
       "path": "configs/evaluation/qwen38-teacher3k96-step400-heldout20-pass4-successor-v1.json",
-      "file_sha256": "sha256:253b206ff493ad479a9d740e0dcc747b21f95434ba807e42a980947c84f2b990",
-      "logical_sha256": "sha256:3dca6ae5a320e67a10b9a66b96af2a4faa7597ce8a423951bc5d06a9aff91046"
+      "file_sha256": "sha256:39bdfaa38ca7f1040807e53e195be8a3fa01f8812b38eb233c6b0bdb198d279b",
+      "logical_sha256": "sha256:a46edd5c403bb2e6d3e29823b57382651a7df8842f9cd64bd51e155fcd85632f"
     },
     "top5_operational_matrix": {
       "path": "configs/evaluation/qwen38-top5-multibench-pass4-operational-matrix-20260924-v2.json",
@@ -435,5 +435,5 @@
     "model_calls": 0,
     "scoring_calls": 0
   },
-  "sha256": "sha256:9bcf1e145bba5ccb492e19a6bb9c99d76c987626224f9da45bd54cd25241c184"
+  "sha256": "sha256:d58a2f650a316f84676eb89a72dfda0d50350f2ad2b81cee7078f58b516ee3d0"
 }
