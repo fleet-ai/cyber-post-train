@@ -95,8 +95,10 @@ def test_candidate_changes_only_reviewed_topology_and_create_once_identity():
         "submission_authorized": False,
         "blockers": [
             "zero-GPU preflight receipt absent",
+            "independent exact-UID release supervision absent",
             "four-node GPU launch has not received root review",
         ],
+        "required_release_supervision": hooks.RELEASE_SUPERVISION,
     }
     request = compiler.job_request(plan)
     assert (request["workers"], request["gpus_per_worker"]) == (4, 8)
@@ -137,6 +139,29 @@ def test_candidate_allows_preview_and_zero_gpu_preflight_but_blocks_gpu_submit()
     cli._external_action_gate(plan, "preflight")
     with pytest.raises(ValueError, match="submit blocked by qualification gate"):
         cli._external_action_gate(plan, "submit")
+
+
+def test_candidate_release_supervision_bounds_match_runtime_watchdog():
+    plan = candidate()
+    supervision = plan["qualification"]["submission_gate"]["required_release_supervision"]
+    assert supervision["status"] == "absent_blocks_submission"
+    assert supervision["runtime_bounds"] == {
+        "startup_seconds": base_runtime.WATCHDOG_STARTUP_SECONDS,
+        "idle_seconds": base_runtime.WATCHDOG_IDLE_SECONDS,
+        "hard_seconds": base_runtime.sft_watchdog_hard_seconds(plan),
+        "checkpoint_drain_seconds": base_runtime.WATCHDOG_DRAIN_SECONDS,
+    }
+    assert supervision["terminal_release_grace_seconds"] == 300
+    assert supervision["required_uid_bindings"] == [
+        "RayJob",
+        "RayCluster",
+        "Kueue Workload",
+        "all Pods",
+    ]
+    assert supervision["terminal_proof"] == [
+        "all bound Kubernetes objects absent",
+        "all 32 requested GPUs released",
+    ]
 
 
 def test_current_hooks_are_ast_identical_to_recovered_v12_hooks():

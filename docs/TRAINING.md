@@ -193,6 +193,17 @@ both runtimes under digest checks. Its packet authorizes read-only preview and
 zero-GPU preflight only; GPU submission remains false. Never turn the held
 packet into a request by hand.
 
+Production submission is also blocked until an independent supervisor is
+already running. It must reconcile an uncertain create by exact rendered name
+and run ID, bind the created RayJob and every RayCluster, Kueue Workload and Pod
+UID, and observe them through terminal release. The candidate's internal bounds
+are 30 minutes for startup, 20 minutes of confirmed no progress, an eight-hour
+absolute runtime ceiling, and five minutes for a checkpoint already being
+written. After terminal state the supervisor must allow at most five minutes
+for release, then prove the bound objects are absent and all 32 GPUs are free.
+No such supervisor is assigned yet, so this packet remains nonlaunchable even
+if its zero-GPU preflight later passes.
+
 After preparing the candidate, these two commands exercise only non-creating
 server rendering:
 

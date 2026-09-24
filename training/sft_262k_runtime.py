@@ -40,6 +40,40 @@ QUALIFICATION = {
         ),
     },
 }
+RELEASE_SUPERVISION = {
+    "schema": "qwen38_262k_4node_release_supervision_v1",
+    "status": "absent_blocks_submission",
+    "poll_seconds": 60,
+    "runtime_bounds": {
+        "startup_seconds": 1800,
+        "idle_seconds": 1200,
+        "hard_seconds": 28800,
+        "checkpoint_drain_seconds": 300,
+    },
+    "required_uid_bindings": [
+        "RayJob",
+        "RayCluster",
+        "Kueue Workload",
+        "all Pods",
+    ],
+    "terminal_release_grace_seconds": 300,
+    "terminal_proof": [
+        "all bound Kubernetes objects absent",
+        "all 32 requested GPUs released",
+    ],
+    "uncertain_create_policy": ("reconcile the exact rendered name and run ID before any retry"),
+}
+SUBMISSION_GATE = {
+    "preview_authorized": True,
+    "preflight_authorized": True,
+    "submission_authorized": False,
+    "blockers": [
+        "zero-GPU preflight receipt absent",
+        "independent exact-UID release supervision absent",
+        "four-node GPU launch has not received root review",
+    ],
+    "required_release_supervision": RELEASE_SUPERVISION,
+}
 
 _BASE_VALIDATE_PLAN = base.validate_plan
 _BASE_ENTRYPOINT_SOURCES = base._validate_entrypoint_sources
@@ -525,15 +559,7 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
     }
     gate = {
         "schema": "qwen38_262k_four_node_submission_gate_v1",
-        "submission_gate": {
-            "preview_authorized": True,
-            "preflight_authorized": True,
-            "submission_authorized": False,
-            "blockers": [
-                "zero-GPU preflight receipt absent",
-                "four-node GPU launch has not received root review",
-            ],
-        },
+        "submission_gate": SUBMISSION_GATE,
     }
     expected_wandb = {
         "entity": "thefleet",

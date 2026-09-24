@@ -3,7 +3,8 @@
 This compiler accepts no scientific menu.  It reopens the retained v12 plan,
 verifies its canonical digest, changes only the reviewed four-node hypothesis,
 and binds the current runtime bytes.  The resulting plan may be previewed but
-remains submission-blocked until its zero-GPU preflight and root review exist.
+remains submission-blocked until its zero-GPU preflight, independent release
+supervision and root review exist.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ from pathlib import Path
 from cyber_post_train.jobs import API_URLS, digest, validate_request
 
 from . import sft
-from .sft_262k_runtime import QUALIFICATION, validate_plan
+from .sft_262k_runtime import QUALIFICATION, SUBMISSION_GATE, validate_plan
 
 VARIANT = "qwen38_sft_262k_4node_v1"
 PARENT_PLAN_SHA256 = "3b9e81acb301327c40007a40ab13c3bf5c164152655fb49f96a8db52eb117690"
@@ -79,15 +80,7 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
             "long_context_qualification": copy.deepcopy(QUALIFICATION),
             "qualification": {
                 "schema": "qwen38_262k_four_node_submission_gate_v1",
-                "submission_gate": {
-                    "preview_authorized": True,
-                    "preflight_authorized": True,
-                    "submission_authorized": False,
-                    "blockers": [
-                        "zero-GPU preflight receipt absent",
-                        "four-node GPU launch has not received root review",
-                    ],
-                },
+                "submission_gate": copy.deepcopy(SUBMISSION_GATE),
             },
         }
     )
