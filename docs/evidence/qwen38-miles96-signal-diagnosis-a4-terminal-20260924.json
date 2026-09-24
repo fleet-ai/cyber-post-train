@@ -1,5 +1,14 @@
 {
   "classification": "infrastructure-invalid",
+  "cleanup": {
+    "all_exact_objects_absent": true,
+    "config_map_absent_http_status": 404,
+    "job_absent_http_status": 404,
+    "method": "uid_preconditioned_foreground_delete",
+    "observed_at": "2026-09-24T06:53:18Z",
+    "pod_absent_http_status": 404,
+    "workload_absent_http_status": 404
+  },
   "namespace": "fleet-train-jobs",
   "objects": {
     "config_map": {
@@ -80,5 +89,5 @@
   "raw_reward_values_or_private_content_included": false,
   "reason": "all_attempts_terminated_process_error_and_the_finite_rewards_had_no_variation",
   "schema": "cyber_qwen38_miles96_signal_diagnosis_a4_terminal_v1",
-  "sha256": "sha256:d2c322bc03f80f5666e5ed1bf7783686288780eaa76fd34f099adc815b7d019e"
+  "sha256": "sha256:b4d670cd7e014fad7e21b748f6ab01201f99d374197d908c7927625130cece95"
 }
