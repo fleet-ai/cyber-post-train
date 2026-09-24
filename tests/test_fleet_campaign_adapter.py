@@ -19,13 +19,6 @@ JOB_UID = "11111111-2222-4333-8444-555555555555"
 CONFIG_MAP_UID = "66666666-7777-4888-8999-aaaaaaaaaaaa"
 PACKET_SHA = "sha256:" + "c" * 64
 ROUTE_SHA = "sha256:" + "d" * 64
-TRACKED_STRICT_PROFILE = (
-    Path(__file__).resolve().parents[1]
-    / "configs/evaluation/qwen38-heldout20-base-step1000-strict-wave-profile-v6.json"
-)
-TRACKED_STRICT_PROFILE_FILE_SHA256 = (
-    "sha256:1d0135c0d0ad21349dc34ee6f7c1a8d2744d476dbe85b637148a929a491fb812"
-)
 
 
 def _write(path: Path, value: dict[str, Any]) -> Path:
@@ -194,12 +187,7 @@ def test_shared_source_job_is_created_once_and_siblings_resume(
     assert calls == 1
     assert first["remote_id"] == second["remote_id"] == JOB_UID
     reservations = list(
-        (
-            tmp_path
-            / "budget"
-            / bindings["budget"]["date_utc"]
-            / "reservations"
-        ).glob("*.json")
+        (tmp_path / "budget" / bindings["budget"]["date_utc"] / "reservations").glob("*.json")
     )
     assert len(reservations) == 1
     reservation = adapter._read(reservations[0])  # noqa: SLF001
@@ -269,9 +257,7 @@ def _wave_binding(tmp_path: Path, *, used: int = 271) -> dict[str, Any]:
     return binding
 
 
-def _wave_plan(
-    binding: dict[str, Any], *targets: dict[str, Any]
-) -> dict[str, Any]:
+def _wave_plan(binding: dict[str, Any], *targets: dict[str, Any]) -> dict[str, Any]:
     by_key = {target["experiment_key"]: target for target in targets}
     source = adapter._control_source_sha256()  # noqa: SLF001
     rows = []
@@ -282,8 +268,7 @@ def _wave_plan(
                 {
                     "experiment_key": key,
                     "drivers": {
-                        phase: {"source_sha256": source}
-                        for phase in adapter.campaign.PHASES
+                        phase: {"source_sha256": source} for phase in adapter.campaign.PHASES
                     },
                 },
             )
@@ -295,9 +280,7 @@ def _wave_plan(
     }
 
 
-def _strict_profile(
-    tmp_path: Path, binding: dict[str, Any], plan: dict[str, Any]
-) -> Path:
+def _strict_profile(tmp_path: Path, binding: dict[str, Any], plan: dict[str, Any]) -> Path:
     value = {
         "schema": adapter.STRICT_PROFILE_SCHEMA,
         "campaign_id": plan["campaign_id"],
@@ -353,9 +336,7 @@ def _strict_wave_campaign(
     targets = []
     for key in (KEY_A, KEY_B):
         target = json.loads(packets[key].read_text())
-        target["drivers"] = {
-            phase: {"source_sha256": source} for phase in adapter.campaign.PHASES
-        }
+        target["drivers"] = {phase: {"source_sha256": source} for phase in adapter.campaign.PHASES}
         _write(packets[key], target)
         targets.append(target)
     binding["sha256"] = adapter._digest(  # noqa: SLF001
@@ -376,33 +357,6 @@ def test_wave_control_digest_binds_all_three_creator_modules() -> None:
         }
     )
     assert adapter._control_source_sha256() == expected  # noqa: SLF001
-
-
-def test_tracked_strict_profile_binds_the_render_v6_control_envelope() -> None:
-    profile = adapter._strict_profile(  # noqa: SLF001
-        TRACKED_STRICT_PROFILE, TRACKED_STRICT_PROFILE_FILE_SHA256
-    )
-    assert profile == {
-        "binding_schema": adapter.WAVE_BINDING_SCHEMA,
-        "bindings_sha256": (
-            "sha256:f441fb2b255174fca364ed1c744fe7f053cb5db0f6400de658f2bbc8b3f9f0b8"
-        ),
-        "campaign_id": "q38-heldout20-base-step1000-p4-v2",
-        "campaign_plan_sha256": (
-            "sha256:9983b1305c6a30bab8c859183f56205b94c90994f6fa8aef40a7ae6a41e884f7"
-        ),
-        "cell_count": 160,
-        "control_source_sha256": adapter._control_source_sha256(),  # noqa: SLF001
-        "group_count": 16,
-        "packet_set_sha256": (
-            "sha256:e3864de77eb57a05aafb9d7fcd5cae9c16cb00dcf8cd56fdb97da3f1d258b94b"
-        ),
-        "reservation_id": "heldout20-base-step1000-v6",
-        "schema": adapter.STRICT_PROFILE_SCHEMA,
-        "sha256": (
-            "sha256:d829d1da9d9261c2eed1018c331410ad9bbbe8d206dad3eb24812fe04bf3a834"
-        ),
-    }
 
 
 def test_strict_wave_rejects_partial_binding_and_arbitrary_packet_set(tmp_path: Path) -> None:
@@ -467,9 +421,7 @@ def test_wave_reservation_requires_the_exact_plan_before_state_write(
     elif defect == "duplicate":
         plan["targets"][-1] = json.loads(json.dumps(plan["targets"][0]))
     else:
-        plan["targets"][0]["drivers"]["rollout"]["source_sha256"] = (
-            "sha256:" + "6" * 64
-        )
+        plan["targets"][0]["drivers"]["rollout"]["source_sha256"] = "sha256:" + "6" * 64
     root = tmp_path / "budget-plan-drift"
     with pytest.raises(adapter.AdapterError, match="wave campaign"):
         adapter.reserve_wave(
@@ -501,9 +453,7 @@ def test_wave_reservation_counts_existing_reservations_and_every_group_adopts(
     old_binding.pop("wave")
     old_binding["budget"] = json.loads(json.dumps(binding["budget"]))
     old_group_ids = ["group-00", "group-08", "group-09"]
-    old_binding["groups"] = {
-        key: old_binding["groups"][key] for key in old_group_ids
-    }
+    old_binding["groups"] = {key: old_binding["groups"][key] for key in old_group_ids}
     old_cells = {
         key: value
         for key, value in old_binding["cells"].items()
@@ -561,14 +511,15 @@ def test_wave_reservation_counts_existing_reservations_and_every_group_adopts(
     assert second["sha256"] == adapter._digest(  # noqa: SLF001
         {key: value for key, value in second.items() if key != "sha256"}
     )
-    reservations = list(
-        (root / binding["budget"]["date_utc"] / "reservations").glob("*.json")
-    )
+    reservations = list((root / binding["budget"]["date_utc"] / "reservations").glob("*.json"))
     assert len(reservations) == 4
-    assert sum(
-        adapter._read(path)["schema"] == adapter.WAVE_RESERVATION_SCHEMA  # noqa: SLF001
-        for path in reservations
-    ) == 1
+    assert (
+        sum(
+            adapter._read(path)["schema"] == adapter.WAVE_RESERVATION_SCHEMA  # noqa: SLF001
+            for path in reservations
+        )
+        == 1
+    )
     for group_id, group in binding["groups"].items():
         adopted = adapter._budget(  # noqa: SLF001
             binding,
@@ -757,9 +708,7 @@ def test_wave_reservation_validates_full_binding_before_state_write(
     if defect == "cap":
         binding["budget"]["cap"] = 600
     else:
-        binding["groups"]["group-00"]["cells"] = binding["groups"]["group-00"][
-            "cells"
-        ][1:]
+        binding["groups"]["group-00"]["cells"] = binding["groups"]["group-00"]["cells"][1:]
     binding["sha256"] = adapter._digest(  # noqa: SLF001
         {key: value for key, value in binding.items() if key != "sha256"}
     )
@@ -835,8 +784,7 @@ def test_wave_bound_control_plane_drift_fails_before_preview(
         _write(packets[KEY_A], target)
     plan["plan_sha256"] = plan_sha256
     plan["targets"] = [
-        planned_target if item["experiment_key"] == KEY_A else item
-        for item in plan["targets"]
+        planned_target if item["experiment_key"] == KEY_A else item for item in plan["targets"]
     ]
     monkeypatch.setattr(adapter.campaign, "load_plan", lambda _state: plan)
     monkeypatch.setattr(

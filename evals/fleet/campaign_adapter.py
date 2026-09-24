@@ -51,9 +51,12 @@ class CapacityUnavailable(AdapterError):
 
 
 def _digest(value: object) -> str:
-    return "sha256:" + hashlib.sha256(
-        json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
-    ).hexdigest()
+    return (
+        "sha256:"
+        + hashlib.sha256(
+            json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        ).hexdigest()
+    )
 
 
 def _control_source_sha256() -> str:
@@ -80,9 +83,7 @@ def _packet_set_sha256(groups: dict[str, Any]) -> str:
 
 
 def _strict_profile(path: Path, expected_file_sha256: str) -> dict[str, Any]:
-    expected_file_sha256 = _validate_digest(
-        expected_file_sha256, "strict-wave profile file"
-    )
+    expected_file_sha256 = _validate_digest(expected_file_sha256, "strict-wave profile file")
     if path.is_symlink() or not path.is_file():
         raise AdapterError("Fleet strict-wave profile is absent")
     try:
@@ -392,9 +393,7 @@ def reserve_wave(
             _write_once(baseline_path, baseline)
         reservations = day / "reservations"
         _mkdir_durable(reservations)
-        key = hashlib.sha256(
-            f"{reservation_id}:wave".encode()
-        ).hexdigest()
+        key = hashlib.sha256(f"{reservation_id}:wave".encode()).hexdigest()
         path = reservations / f"wave-{key}.json"
         reservation = {
             "schema": WAVE_RESERVATION_SCHEMA,
@@ -520,8 +519,7 @@ def _validate_bindings(value: dict[str, Any]) -> dict[str, Any]:
             or not isinstance(members, list)
             or not members
             or any(
-                not isinstance(member, str) or _SHA.fullmatch(member) is None
-                for member in members
+                not isinstance(member, str) or _SHA.fullmatch(member) is None for member in members
             )
             or len(members) != len(set(members))
             or group["leader"] not in members
@@ -683,8 +681,7 @@ def _cluster_duplicate_absence(
         or evidence.get("sha256") != _digest(unsigned)
         or evidence.get("date_utc") != datetime.now(UTC).date().isoformat()
         or evidence.get("bindings_sha256") != bindings["sha256"]
-        or evidence.get("source_gate_receipt_sha256")
-        != bindings["budget"]["census_receipt_sha256"]
+        or evidence.get("source_gate_receipt_sha256") != bindings["budget"]["census_receipt_sha256"]
         or not isinstance(group, dict)
         or group.get("packet_sha256") != bindings["groups"][group_id]["packet_sha256"]
         or group.get("job_name") != packet.job_name
@@ -745,9 +742,7 @@ def _budget(
             _write_once(baseline_path, baseline)
         reservations = day / "reservations"
         _mkdir_durable(reservations)
-        reservation_key = hashlib.sha256(
-            f"{binding['sha256']}:{group_id}".encode()
-        ).hexdigest()
+        reservation_key = hashlib.sha256(f"{binding['sha256']}:{group_id}".encode()).hexdigest()
         path = reservations / f"{reservation_key}.json"
         reservation = {
             "schema": RESERVATION_SCHEMA,
@@ -810,9 +805,9 @@ def _launch_record(path: Path) -> dict[str, Any] | None:
         return None
     value = _read(path)
     unsigned = {key: item for key, item in value.items() if key != "sha256"}
-    if value.get("schema") != "cyber_fleet_source_launch_v1" or value.get(
-        "sha256"
-    ) != _digest(unsigned):
+    if value.get("schema") != "cyber_fleet_source_launch_v1" or value.get("sha256") != _digest(
+        unsigned
+    ):
         raise AdapterError("shared Fleet source launch record is invalid")
     return value
 
@@ -840,16 +835,10 @@ def run_action(
     state = packet_path.resolve().parents[2]
     plan = campaign.load_plan(state)
     prebound = load_bindings(bindings_path)
-    _validate_wave_contract(
-        prebound, plan, strict_profile_path, strict_profile_file_sha256
-    )
+    _validate_wave_contract(prebound, plan, strict_profile_path, strict_profile_file_sha256)
     expected_packet = state / "targets" / target["experiment_key"] / "packet.json"
     planned_target = next(
-        (
-            item
-            for item in plan["targets"]
-            if item["experiment_key"] == target["experiment_key"]
-        ),
+        (item for item in plan["targets"] if item["experiment_key"] == target["experiment_key"]),
         None,
     )
     driver = target.get("drivers", {}).get(phase, {})
@@ -1058,9 +1047,7 @@ def run_action(
         raise AdapterError("Fleet source Job has not been launched")
     launch = _read(launch_receipt)
     job = cluster.get("jobs.batch", package.packet.namespace, package.packet.job_name)
-    config_map = cluster.get(
-        "configmaps", package.packet.namespace, package.packet.config_map_name
-    )
+    config_map = cluster.get("configmaps", package.packet.namespace, package.packet.config_map_name)
     if (
         job.get("metadata", {}).get("uid") != shared["job_uid"]
         or config_map.get("metadata", {}).get("uid") != shared["config_map_uid"]
@@ -1097,8 +1084,7 @@ def run_action(
         or source_terminal.get("sha256") != _digest(terminal_unsigned)
         or source_terminal.get("job", {}).get("uid") != shared["job_uid"]
         or source_terminal.get("config_map", {}).get("uid") != shared["config_map_uid"]
-        or source_terminal.get("evaluation_identity_sha256")
-        != shared["evaluation_identity_sha256"]
+        or source_terminal.get("evaluation_identity_sha256") != shared["evaluation_identity_sha256"]
     ):
         raise AdapterError("shared Fleet terminal evidence is invalid")
     final_job = cluster.get("jobs.batch", package.packet.namespace, package.packet.job_name)
@@ -1212,9 +1198,7 @@ def main(argv: list[str] | None = None) -> None:
         STRICT_PROFILE_DIGEST_ENV
     )
     if strict_profile_file_sha256 is None:
-        parser.error(
-            f"--strict-profile-file-sha256 or {STRICT_PROFILE_DIGEST_ENV} is required"
-        )
+        parser.error(f"--strict-profile-file-sha256 or {STRICT_PROFILE_DIGEST_ENV} is required")
     result = run_action(
         action=args.action,
         phase=args.phase,

@@ -366,9 +366,7 @@ def test_fail_fast_stops_on_persisted_uncertain_intent_before_later_targets(
     )
     result = step(state, execute=True, fail_fast=True)
     assert attempted == []
-    assert result["errors"] == [
-        {"experiment_key": first, "error": "CampaignLaunchUncertain"}
-    ]
+    assert result["errors"] == [{"experiment_key": first, "error": "CampaignLaunchUncertain"}]
     assert result["counts"] == {"rollout_launch_uncertain": 1, "rollout_pending": 15}
 
 
