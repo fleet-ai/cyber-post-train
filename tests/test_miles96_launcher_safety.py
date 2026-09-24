@@ -86,7 +86,19 @@ def test_armed_observer_receipt_binds_preview_pattern_and_deadline(
         "workers": 1,
         "gpus_per_worker": 8,
     }
-    preview = {"manifest_sha256": "sha256:" + "a" * 64}
+    preview = launch._seal(
+        {
+            "schema": "cyber_miles96_live_server_preview_v1",
+            "plan_sha256": "sha256:" + launch.mechanics.digest(plan),
+            "request_sha256": "sha256:" + launch.digest(request),
+            "manifest_sha256": "sha256:" + "a" * 64,
+            "root_failure_alerts": "off",
+            "backoff_limit": 0,
+            "shutdown_after_job_finishes": True,
+            "nodes": 1,
+            "gpus": 8,
+        }
+    )
     (tmp_path / "SERVER_PREVIEW.json").write_text(json.dumps(preview))
     body = {
         "schema": cleanup.JOBS_API_PREFIX_GUARD_SCHEMA,

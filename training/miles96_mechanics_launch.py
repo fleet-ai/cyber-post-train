@@ -322,9 +322,32 @@ def validate_armed_observer(
     except (OSError, ValueError) as exc:
         raise JobsError("cleanup observer is not armed") from exc
     body = {key: item for key, item in value.items() if key != "sha256"}
+    preview_body = {key: item for key, item in preview.items() if key != "sha256"}
     pid = value.get("observer_pid")
     if (
-        value.get("schema") != cleanup.JOBS_API_PREFIX_GUARD_SCHEMA
+        set(preview)
+        != {
+            "schema",
+            "plan_sha256",
+            "request_sha256",
+            "manifest_sha256",
+            "root_failure_alerts",
+            "backoff_limit",
+            "shutdown_after_job_finishes",
+            "nodes",
+            "gpus",
+            "sha256",
+        }
+        or preview.get("schema") != "cyber_miles96_live_server_preview_v1"
+        or preview.get("sha256") != "sha256:" + digest(preview_body)
+        or preview.get("plan_sha256") != "sha256:" + mechanics.digest(plan)
+        or preview.get("request_sha256") != "sha256:" + digest(request)
+        or preview.get("root_failure_alerts") != "off"
+        or preview.get("backoff_limit") != 0
+        or preview.get("shutdown_after_job_finishes") is not True
+        or preview.get("nodes") != request["workers"]
+        or preview.get("gpus") != request["workers"] * request["gpus_per_worker"]
+        or value.get("schema") != cleanup.JOBS_API_PREFIX_GUARD_SCHEMA
         or value.get("status") != "armed_non_destructive_prefix_guard"
         or value.get("sha256") != "sha256:" + digest(body)
         or value.get("context") != plan["execution"]["kubernetes_context"]
