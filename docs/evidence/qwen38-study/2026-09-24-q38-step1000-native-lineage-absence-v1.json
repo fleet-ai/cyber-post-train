@@ -1,0 +1,226 @@
+{
+  "bounded_search": {
+    "common_snapshot_or_trash_paths": {
+      "/mnt/sfs/.snapshot": "absent",
+      "/mnt/sfs/.snapshots": "absent",
+      "/mnt/sfs/.trash": "absent",
+      "/mnt/sfs/.Trash": "absent",
+      "/mnt/sfs/jobs/.snapshot": "absent",
+      "/mnt/sfs/jobs/.snapshots": "absent",
+      "/mnt/sfs/jobs/.trash": "absent",
+      "/mnt/sfs/jobs/.Trash": "absent"
+    },
+    "discoverable_native_copy": false,
+    "exact_identity_reference_results": {
+      "native_model_rank0_sha256": {
+        "sha256": "d63864712e2a8a825e4cc4091cb9164aaffafe43ccddad2b729b6d69d9c78ff2",
+        "references": [
+          "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoint-seals-v1/step-1000.json"
+        ]
+      },
+      "native_optimizer_rank0_sha256": {
+        "sha256": "16915d931f2c546f7b711d9db17d3d4a3fa6b6cf98a623410a0c8d34bab43975",
+        "references": [
+          "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoint-seals-v1/step-1000.json"
+        ]
+      },
+      "source_checkpoint_path": {
+        "path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoints/global_step_1000",
+        "references": [
+          "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoint-seals-v1/step-1000.json",
+          "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoint_receipts/step-001000.json"
+        ]
+      },
+      "source_seal_receipt_sha256": {
+        "sha256": "685af3a1a85bee98d4fa26994f968ec7315107157ea0a4b99a500b7b2e030359",
+        "references": [
+          "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoint-seals-v1/step-1000.json",
+          "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/hf-export-step1000-v1/EXPORT.json"
+        ]
+      }
+    },
+    "generic_checkpoint_root": {
+      "path": "/mnt/sfs/checkpoints",
+      "run_or_api_name_matches": 0,
+      "step1000_directories": 0
+    },
+    "kubernetes_snapshot_api": {
+      "available": false,
+      "observation": "the server does not have resource type volumesnapshots"
+    },
+    "manifest_roots": [
+      "/mnt/sfs/jobs",
+      "/mnt/sfs/cyber-post-train",
+      "/mnt/sfs/exports",
+      "/mnt/sfs/checkpoints"
+    ],
+    "other_native_roots_checked": [
+      "/mnt/sfs/exports",
+      "/mnt/sfs/cyber-post-train",
+      "/mnt/sfs/models",
+      "/mnt/sfs/inference",
+      "/mnt/sfs/hf-cache"
+    ],
+    "repository_search": {
+      "backup_or_preservation_locator_found": false,
+      "checkpoint_upload_mechanism_found": false,
+      "exact_path_references_are_promotion_or_evaluation_evidence_only": true
+    },
+    "scope_limitations": [
+      "Some unrelated private and evaluation-output directories reject the observer UID; their contents were not inspected.",
+      "An out-of-band storage-provider or administrator backup not exposed through the authorized mount, Kubernetes API, repository, or receipts cannot be disproved by this audit.",
+      "No receipt, locator, or repository record indicates that such an out-of-band backup exists."
+    ],
+    "storage_volume": {
+      "access_modes": [
+        "ReadWriteMany"
+      ],
+      "kubernetes_pv": "sfs-shared-fleet-train-data-plane",
+      "kubernetes_pv_uid": "e39d03a1-d4e3-4e63-b63e-24e1d9a757b6",
+      "kubernetes_pvc": "fleet-train-data-plane/sfs-shared",
+      "kubernetes_pvc_uid": "4719fcf8-d376-4452-a93e-908637eab00f",
+      "provisioner": "kubernetes.io/no-provisioner",
+      "reclaim_policy": "Retain",
+      "type": "hostPath"
+    }
+  },
+  "classification": {
+    "accepted_bf16_payload_available": true,
+    "absolute_external_backup_absence_claimed": false,
+    "exact_fp32_to_bf16_replay_possible_from_discoverable_artifacts": false,
+    "immutable_checkpoint_receipt_available": true,
+    "immutable_checkpoint_seal_available": true,
+    "native_fp32_checkpoint_available": false,
+    "status": "native_fp32_not_discoverable_receipts_survive_exact_replay_unavailable"
+  },
+  "native_checkpoint_observation": {
+    "observed_at": "2026-09-24T11:26:14Z",
+    "observer": {
+      "container": "filebrowser",
+      "name": "filebrowser-67d5c9ff4c-69d2m",
+      "namespace": "fleet-train-data-plane",
+      "pod_uid": "75426281-cf5d-4da4-a5a1-404369452435",
+      "storage_mount": "/mnt/sfs"
+    },
+    "paths": {
+      "native_step1000": {
+        "path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoints/global_step_1000",
+        "state": "absent"
+      },
+      "retained_step1800": {
+        "path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoints/global_step_1800",
+        "state": "present_directory"
+      },
+      "retained_step1837": {
+        "path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoints/global_step_1837",
+        "state": "present_directory"
+      },
+      "step1000_receipt": {
+        "path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoint_receipts/step-001000.json",
+        "state": "present_file"
+      },
+      "step1000_seal": {
+        "path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoint-seals-v1/step-1000.json",
+        "state": "present_file"
+      }
+    }
+  },
+  "privacy": {
+    "benchmark_content_included": false,
+    "credentials_included": false,
+    "flags_or_answers_included": false,
+    "model_outputs_included": false,
+    "private_logs_included": false,
+    "prompts_or_task_text_included": false,
+    "raw_scores_included": false,
+    "tensor_names_or_values_included": false,
+    "traces_included": false
+  },
+  "receipt_sha256": "6e6956fed6effd6ea779444b967b4d5812d5bd928b143575403af185a4898c4a",
+  "replay": {
+    "accepted_bf16_payload_can_be_rehashed_or_reused": true,
+    "accepted_bf16_payload_is_a_native_replay": false,
+    "conversion": {
+      "code_path": "training/export.py",
+      "code_sha256": "af0fc6cc2c388f8948f6be02a3cfedc189bbafbffa9511aacae35a08ce9125b1",
+      "operation": "FP32 DTensor reconstruction followed by torch.bfloat16 cast",
+      "requires_eight_native_cpu_fp32_model_shards": true,
+      "source_to_output_cast_is_lossy": true
+    },
+    "exact_fp32_to_bf16_replay_possible": false,
+    "reasons": [
+      "The native FP32 model shards are absent from every discoverable authorized source.",
+      "The surviving seal authenticates hashes and sizes but contains no native tensor bytes.",
+      "The BF16 export cannot recover discarded FP32 low bits.",
+      "The BF16 export contains neither the native optimizer shards nor the complete native resume state."
+    ],
+    "recovery_condition": "A storage administrator must produce all 33 native files and every file must match the surviving step-1000 seal before exact replay can be considered possible."
+  },
+  "retention_contract": {
+    "checkpoint_interval_steps": 100,
+    "config_path": "configs/runs/qwen38-teacher3k-32k-full-b8-lr3e6-v3.json",
+    "deletion_operation": "shutil.rmtree",
+    "implementation_path": "training/sft_runtime.py",
+    "implementation_symbol": "prune_checkpoints",
+    "keep_checkpoints": 2,
+    "receipts_are_outside_deleted_checkpoint_directories": true
+  },
+  "schema": "cyber_qwen38_step1000_native_lineage_absence_v1",
+  "source_run": {
+    "api_run_id": "34148b91-efe7-45e3-861f-1edd1798935b",
+    "name": "chris-q38-t3k32-b8-v3",
+    "output_root": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3",
+    "plan_sha256": "8488f03a65e3d158a46697eefda2751736681e3a503c26ee9c39c63fb130679c",
+    "rayjob": {
+      "end_time": "2026-09-23T20:37:17Z",
+      "name": "chris-q38-t3k32-b8-v3-34148b91",
+      "namespace": "fleet-train-jobs",
+      "status": "SUCCEEDED",
+      "uid": "e4d1376c-5d3f-49e5-9f0c-6469cd32c753"
+    },
+    "run_config_path": "configs/runs/qwen38-teacher3k-32k-full-b8-lr3e6-v3.json"
+  },
+  "surviving_artifacts": {
+    "bf16_export": {
+      "file_sha256": "e79d2cdaaebe52da61a37e4f4ad35c2c8ccd4878afaf77de0fc4796e8e1c6463",
+      "files": 29,
+      "path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/hf-export-step1000-v1/EXPORT.json",
+      "payload_manifest_sha256": "023c5f8b0559ba050f0d672a6bc27aabecec7d5837595f8ea5bc914446d26db5",
+      "payload_total_bytes": 55586032099,
+      "receipt_sha256": "8a1d9e093fa1f856c35d357cf34861862317491ee83a9268613f1cf86160eef0",
+      "self_digest_valid": true,
+      "tensor_dtype": "BF16",
+      "tensor_values": 27781427952
+    },
+    "checkpoint_receipt": {
+      "bytes": 412,
+      "file_sha256": "378011c8f0c8908d156aaf5dffa4d8a9ffe68b10373dbd4e0eecf14a5155e934",
+      "path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoint_receipts/step-001000.json",
+      "receipt_sha256": "bae4b7215a6b9ebd38461555a2de02dfe822013222280ee0ca6498ad27e892b7",
+      "self_digest_valid": true
+    },
+    "checkpoint_seal": {
+      "bytes": 59972,
+      "file_sha256": "b639cd04c1a4d1ee9b7a461808af3cfb77a91d71d841f6de83106fc4d3b7e48c",
+      "inventory": {
+        "files": 33,
+        "model_shard_bytes": 109431964048,
+        "model_shards": 8,
+        "optimizer_shard_bytes": 215175386408,
+        "optimizer_shards": 8,
+        "total_bytes": 324627486795,
+        "world_size": 8
+      },
+      "optimizer_step": 1000,
+      "path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoint-seals-v1/step-1000.json",
+      "receipt_sha256": "685af3a1a85bee98d4fa26994f968ec7315107157ea0a4b99a500b7b2e030359",
+      "self_digest_valid": true
+    },
+    "staged_serving_payload": {
+      "model_pt_files": 0,
+      "path": "/models/chris-q38-t3k32-s1000-v1",
+      "safetensors_files": 19,
+      "tensor_dtype": "BF16"
+    }
+  }
+}
