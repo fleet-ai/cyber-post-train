@@ -212,7 +212,7 @@ def test_recovery_seals_two_empty_reads_and_never_mutates(tmp_path, monkeypatch)
     assert resolution["resolution"] == recovery.RECOVERY_RESOLUTION
     assert resolution["instance_id"] is None
     assert resolution["independent_absence_evidence_sha256"] == evidence["sha256"]
-    monkeypatch.setattr(qualification, "_source_matches_plan", lambda _source: None)
+    monkeypatch.setattr(qualification, "_source_matches_plan", lambda _source, **_kwargs: None)
     closed = qualification.cleanup_plan(plan, root, api_key="fixture")
     assert closed["resolved_task_versions"] == 1
     assert closed["unresolved_task_versions"] == 0

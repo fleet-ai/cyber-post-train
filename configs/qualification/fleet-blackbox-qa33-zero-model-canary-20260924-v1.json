@@ -23,6 +23,7 @@
     "task_version_id": "ae236a07-128d-4556-ba2b-25a248818497"
   },
   "future_cpu_canary_contract": {
+    "authorization_bound_create_journal": true,
     "active_deadline_seconds_maximum": 1800,
     "automatic_create_retry": false,
     "backoff_limit": 0,
@@ -33,13 +34,17 @@
       "fsync_file_and_parent": true,
       "must_precede_create": true
     },
+    "create_journal_ignores_only_an_unterminated_final_tail": true,
     "create_response_must_bind": [
       "job_name",
       "job_uid",
       "job_resource_version",
       "config_map_name",
       "config_map_uid",
-      "config_map_resource_version"
+      "config_map_resource_version",
+      "secret_name",
+      "secret_uid",
+      "secret_resource_version"
     ],
     "exact_name_absence_checks": [
       "before_server_previews",
@@ -52,9 +57,16 @@
       "exact_instance_delete_required": true,
       "owned_instance_absence_required": true
     },
+    "packaged_source": {
+      "code_in_immutable_config_map": true,
+      "exact_file_bytes_attested": true,
+      "merged_source_required": true,
+      "private_plan_in_immutable_secret": true
+    },
     "namespace": "fleet-train-jobs",
     "normalized_server_previews_must_match": true,
     "outer_kubernetes_cleanup": {
+      "cleanup_resumes_from_fsynced_intent_after_local_crash": true,
       "delete_preconditions": [
         "exact_name",
         "exact_uid",
@@ -63,7 +75,7 @@
       "fresh_predelete_readback_must_match_exact_uid": true,
       "foreground_propagation": true,
       "owned_pod_and_workload_absence_required": true,
-      "root_and_config_map_absence_required": true,
+      "root_config_map_and_secret_absence_required": true,
       "zero_gpu_release_receipt_required": true
     },
     "priority_class_name": "c1",
@@ -74,8 +86,14 @@
       "fleet.ai/failure-alerts": "off"
     },
     "server_preview_count": 2,
+    "server_preview_rejects_unreviewed_container_fields": true,
+    "server_preview_live_create_mismatch": "bind_exact_response_uids_release_and_fail",
+    "uncertain_create_stable_observation_seconds_minimum": 10,
     "uncertain_create_response": "reconcile_only_never_retry",
-    "zero_gpu_must_hold_for_all_init_and_regular_containers": true
+    "uncertain_live_preview_mismatch": "explicit_packet_annotated_exact_uid_cleanup",
+    "uncertain_partial_create": "explicit_exact_uid_cleanup_then_final_absence",
+    "zero_gpu_must_hold_for_all_init_regular_and_ephemeral_containers": true,
+    "zero_gpu_resource_claims_forbidden": true
   },
   "inputs": {
     "lineage_census": {
@@ -99,8 +117,16 @@
       "path": "configs/data/fleet-blackbox-qa-candidates-20260924-v1.json"
     },
     "qualification_controller": {
-      "file_sha256": "sha256:580c88906d13822ad566aa76f378f0351a74e3e61f6f59e21cad6d21e340bd53",
+      "file_sha256": "sha256:a4e6060e83c08dc3347fb6f8f87605326f34c39ee49af17b43272570a6ea7591",
       "path": "evals/fleet/task_quality_qualification.py"
+    },
+    "qualification_job_entry": {
+      "file_sha256": "sha256:c396dd0db6415ec2944b8f8e583caed32e0a30377dcde6ac1ddb51c651e2c8b6",
+      "path": "evals/fleet/task_quality_qualification_job_entry.py"
+    },
+    "qualification_job_launcher": {
+      "file_sha256": "sha256:7fe3c96253965ebdb8cb012ab18c05308effba212032310cdac3579eb835dfa3",
+      "path": "evals/fleet/task_quality_qualification_job.py"
     },
     "qualification_requirements": {
       "file_sha256": "sha256:51456f43a871f3fe7f0435a35387180490c38ec086bde65f956698a11a5f5676",
@@ -112,9 +138,8 @@
     "merge_this_reviewed_packet_and_any_launcher_source_to_origin_main",
     "prepare_a_fresh_private_one_task_plan_from_that_exact_merged_source",
     "preserve_merged_source_provenance_inside_the_packaged_cpu_job",
-    "review_and_test_the_narrow_kubernetes_job_launcher",
     "receive_explicit_root_authorization_for_one_canary",
-    "prove_the_exact_job_and_config_map_names_absent",
+    "prove_the_exact_job_config_map_secret_and_owned_pod_identities_absent",
     "obtain_two_identical_server_previews_of_the_exact_bundle",
     "prove_the_server_rendered_root_job_has_failure_alerts_off_c1_and_zero_gpus",
     "arm_uid_bound_outer_cleanup_before_the_single_create"
@@ -178,7 +203,7 @@
       "exploitability"
     ]
   },
-  "sha256": "sha256:9a7a7ac1cf8a7aa53c6e15ac69b572b81148a6ab85423911c13995da07fddaaa",
+  "sha256": "sha256:b889f2db090f964fb9813fddda6f9640eb58c754a53e2320c4ec08e659af0e30",
   "source": {
     "lineage_authority_git_commit": "4235f54749b739bb2ec1af38d113715b1c156914",
     "lineage_authority_git_tree": "43f01376fb2f5e44eedd48b4492c49bd10c9f2e8",

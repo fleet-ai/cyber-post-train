@@ -31,7 +31,6 @@ from typing import Any
 import httpx
 
 from evals.fleet import opencode_self_hosted as self_hosted
-from evals.fleet import rollout_worker
 
 PLAN_SCHEMA = "cyber_task_quality_qualification_plan_v1"
 RUN_INTENT_SCHEMA = "cyber_task_quality_qualification_run_intent_v1"
@@ -42,6 +41,7 @@ ATTEMPTED_CATALOG_SCHEMA = "cyber_task_quality_qualification_attempted_catalog_v
 AGGREGATE_SCHEMA = "cyber_task_quality_qualification_aggregate_receipt_v1"
 CLEANUP_RESOLUTION_SCHEMA = "cyber_task_quality_cleanup_resolution_v1"
 CLEANUP_AGGREGATE_SCHEMA = "cyber_task_quality_cleanup_aggregate_v1"
+PACKAGED_SOURCE_SCHEMA = "cyber_task_quality_packaged_source_attestation_v1"
 INVENTORY_SCHEMA = "fleet_current_production_blackbox_inventory_v1"
 COVERAGE_SCHEMA = "fleet_current_blackbox_training_coverage_v1"
 SPLIT_SCHEMA = "cyber_representative_study_split_v2"
@@ -57,6 +57,20 @@ REQUIRED_CONTRACT = {
 }
 SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+PACKAGED_SOURCE_ENV = "CYBER_TASK_QUALITY_SOURCE_ATTESTATION"
+PACKAGED_RUNTIME_IMAGE = (
+    "ghcr.io/astral-sh/uv:python3.12-bookworm@"
+    "sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+)
+RUNTIME_AUTHORITY = {
+    "multi_app_aggregation_mode": "fractional",
+    "provisioning_route_template": (
+        "/v1/rollout-rewards/{task_key}/versions/{task_version_id}/instances"
+    ),
+    "required_cyber_contract": REQUIRED_CONTRACT,
+    "scoring_mode": "partial",
+    "scoring_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}",
+}
 
 
 class QualificationError(RuntimeError):
@@ -116,9 +130,94 @@ def source_provenance(*, require_merged: bool = True) -> dict[str, Any]:
     }
 
 
-def _source_matches_plan(source: object) -> None:
+def _packaged_source_matches_plan(
+    path: Path,
+    source: dict[str, Any],
+    *,
+    plan_sha256: str | None,
+    exact_task_identity: dict[str, Any] | None,
+) -> None:
+    attestation = _read(path, "packaged source attestation")
+    _sealed(attestation, PACKAGED_SOURCE_SCHEMA, "packaged source attestation")
+    if set(attestation) != {
+        "schema",
+        "plan_sha256",
+        "source",
+        "image",
+        "dependency_pins",
+        "files",
+        "merge_witness",
+        "exact_task_identity",
+        "sha256",
+    }:
+        raise QualificationError("packaged source attestation fields are invalid")
+    if (
+        attestation.get("source") != source
+        or attestation.get("plan_sha256") != plan_sha256
+        or attestation.get("exact_task_identity") != exact_task_identity
+    ):
+        raise QualificationError("packaged source differs from the frozen plan")
+    if attestation.get("image") != PACKAGED_RUNTIME_IMAGE or attestation.get("dependency_pins") != {
+        "httpx": "0.28.1"
+    }:
+        raise QualificationError("packaged source dependency pins are invalid")
+    witness = attestation.get("merge_witness")
+    if (
+        not isinstance(witness, dict)
+        or witness.get("canonical_remote") != "https://github.com/fleet-ai/cyber-post-train.git"
+        or witness.get("source_commit") != source.get("git_commit")
+        or witness.get("is_ancestor") is not True
+        or not isinstance(witness.get("observed_main_commit"), str)
+        or re.fullmatch(r"[0-9a-f]{40}", witness["observed_main_commit"]) is None
+    ):
+        raise QualificationError("packaged source merge witness is invalid")
+    files = attestation.get("files")
+    root = Path(__file__).resolve().parents[2]
+    expected = {
+        "evals/__init__.py": root / "evals/__init__.py",
+        "evals/fleet/__init__.py": root / "evals/fleet/__init__.py",
+        "evals/fleet/task_quality_qualification.py": Path(__file__).resolve(),
+        "evals/fleet/opencode_self_hosted.py": Path(self_hosted.__file__).resolve(),
+        "evals/fleet/task_quality_qualification_job_entry.py": (
+            root / "evals/fleet/task_quality_qualification_job_entry.py"
+        ),
+    }
+    if not isinstance(files, dict) or set(files) != set(expected):
+        raise QualificationError("packaged source file set is incomplete")
+    for relative, observed_path in expected.items():
+        binding = files.get(relative)
+        if (
+            not isinstance(binding, dict)
+            or set(binding) != {"file_sha256"}
+            or observed_path.is_symlink()
+            or not observed_path.is_file()
+            or binding.get("file_sha256") != file_digest(observed_path)
+        ):
+            raise QualificationError("packaged source bytes differ from the attestation")
+    if (
+        source.get("controller_file_sha256")
+        != files["evals/fleet/task_quality_qualification.py"]["file_sha256"]
+    ):
+        raise QualificationError("packaged controller differs from the frozen plan")
+
+
+def _source_matches_plan(
+    source: object,
+    *,
+    plan_sha256: str | None = None,
+    exact_task_identity: dict[str, Any] | None = None,
+) -> None:
     if not isinstance(source, dict) or source.get("merged_to_origin_main") is not True:
         raise QualificationError("qualification plan is not authorized from merged source")
+    packaged = os.environ.get(PACKAGED_SOURCE_ENV)
+    if packaged:
+        _packaged_source_matches_plan(
+            Path(packaged),
+            source,
+            plan_sha256=plan_sha256,
+            exact_task_identity=exact_task_identity,
+        )
+        return
     observed = source_provenance(require_merged=True)
     exact_fields = {"git_commit", "git_tree", "controller_path", "controller_file_sha256"}
     if any(source.get(field) != observed.get(field) for field in exact_fields):
@@ -713,7 +812,7 @@ def _config(binding: dict[str, Any], wave_id: str) -> dict[str, Any]:
         },
         "verifier": binding["verifier"],
         "authority": {
-            **rollout_worker.AUTHORITY,
+            **RUNTIME_AUTHORITY,
             "scoring_payload_mode": self_hosted.RUNTIME_EVIDENCE_ONLY_V3,
         },
         "model": {"session_model": SESSION_MODEL},
@@ -1289,7 +1388,11 @@ def qualify_one(
 
 def execute_plan(plan: dict[str, Any], root: Path, *, api_key: str) -> dict[str, Any]:
     _sealed(plan, PLAN_SCHEMA, "qualification plan")
-    _source_matches_plan(plan.get("source"))
+    _source_matches_plan(
+        plan.get("source"),
+        plan_sha256=plan.get("sha256"),
+        exact_task_identity=plan.get("selection", {}).get("exact_task_identity"),
+    )
     if plan.get("execution", {}).get("external_mutations_authorized") is not True:
         raise QualificationError("qualification plan does not authorize external mutations")
     intent = sealed(
@@ -1686,7 +1789,11 @@ def cleanup_one(
 
 def cleanup_plan(plan: dict[str, Any], root: Path, *, api_key: str) -> dict[str, Any]:
     _sealed(plan, PLAN_SCHEMA, "qualification plan")
-    _source_matches_plan(plan.get("source"))
+    _source_matches_plan(
+        plan.get("source"),
+        plan_sha256=plan.get("sha256"),
+        exact_task_identity=plan.get("selection", {}).get("exact_task_identity"),
+    )
     resolved = 0
     unresolved = 0
     receipt_digests: list[str] = []

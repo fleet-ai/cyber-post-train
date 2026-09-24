@@ -139,12 +139,17 @@ def test_future_contract_is_zero_model_cpu_only_create_once_and_cleanup_bound():
     assert contract["root_metadata_annotations"] == {"fleet.ai/failure-alerts": "off"}
     assert contract["priority_class_name"] == "c1"
     assert contract["gpu_requests"] == contract["gpu_limits"] == 0
-    assert contract["zero_gpu_must_hold_for_all_init_and_regular_containers"] is True
+    assert contract["zero_gpu_must_hold_for_all_init_regular_and_ephemeral_containers"] is True
+    assert contract["zero_gpu_resource_claims_forbidden"] is True
     assert contract["active_deadline_seconds_maximum"] == 1800
     assert contract["backoff_limit"] == 0
     assert contract["restart_policy"] == "Never"
     assert contract["server_preview_count"] == 2
     assert contract["normalized_server_previews_must_match"] is True
+    assert contract["server_preview_rejects_unreviewed_container_fields"] is True
+    assert contract["authorization_bound_create_journal"] is True
+    assert contract["create_journal_ignores_only_an_unterminated_final_tail"] is True
+    assert contract["uncertain_create_stable_observation_seconds_minimum"] == 10
     assert contract["exact_name_absence_checks"] == [
         "before_server_previews",
         "after_server_previews_before_create_intent",
@@ -157,12 +162,33 @@ def test_future_contract_is_zero_model_cpu_only_create_once_and_cleanup_bound():
     assert contract["create_attempts_maximum"] == 1
     assert contract["automatic_create_retry"] is False
     assert contract["uncertain_create_response"] == "reconcile_only_never_retry"
+    assert contract["uncertain_partial_create"] == ("explicit_exact_uid_cleanup_then_final_absence")
+    assert contract["packaged_source"] == {
+        "code_in_immutable_config_map": True,
+        "exact_file_bytes_attested": True,
+        "merged_source_required": True,
+        "private_plan_in_immutable_secret": True,
+    }
+    assert contract["create_response_must_bind"][-3:] == [
+        "secret_name",
+        "secret_uid",
+        "secret_resource_version",
+    ]
     assert contract["outer_kubernetes_cleanup"]["delete_preconditions"] == [
         "exact_name",
         "exact_uid",
         "exact_resource_version",
     ]
     assert contract["outer_kubernetes_cleanup"]["foreground_propagation"] is True
+    assert (
+        contract["outer_kubernetes_cleanup"][
+            "cleanup_resumes_from_fsynced_intent_after_local_crash"
+        ]
+        is True
+    )
+    assert (
+        contract["outer_kubernetes_cleanup"]["root_config_map_and_secret_absence_required"] is True
+    )
     assert (
         contract["outer_kubernetes_cleanup"]["fresh_predelete_readback_must_match_exact_uid"]
         is True
