@@ -1,0 +1,64 @@
+{
+  "classification": "verification-contract-invalid",
+  "cleanup": {
+    "config_map_absent": false,
+    "diagnostic_objects_cleanup_authorized": true,
+    "job_absent": false,
+    "original_reward_objects_retained_pending_release_proof": true,
+    "pod_absent": false,
+    "uid_preconditioned_cleanup_at": null,
+    "workload_absent": false
+  },
+  "config_map": {
+    "name": "chris-q38-m96-signal-a2-leak-a4-code",
+    "uid": "de14ff26-5bae-41ed-99e4-417992ec5ae4"
+  },
+  "execution": {
+    "api_delete_count_before_failure": 0,
+    "api_get_count_before_failure": 8,
+    "exit_code": 1,
+    "failure_class": "http_200_tombstone_misclassified_as_live",
+    "failure_occurred_after_exact_roster_gets_before_any_delete": true,
+    "finished_at": "2026-09-24T06:10:46Z",
+    "restart_count": 0
+  },
+  "job": {
+    "created_at": "2026-09-24T06:10:39Z",
+    "failure_reason": "BackoffLimitExceeded",
+    "name": "chris-q38-m96-signal-a2-leak-a4",
+    "status": "Failed",
+    "uid": "9ed00a12-5afd-45da-966f-2992d6f508ef"
+  },
+  "packet": {
+    "bundle_sha256": "sha256:ff57e5695526aac9fbf47be365625eadcecdd43ab17ddec3a33bf9d0e9a4ce6f",
+    "file_sha256": "sha256:1b47bed653eae88e8451579c8f76a7aea3f55bcbaafe881b467d7e1165595425",
+    "internal_sha256": "sha256:e5fbc19734b4592647493900c6c6cb4026c8e0b6fe046c10014459827a9c0f0d",
+    "server_preview_sha256": "sha256:6179562fd11ca838bca76df338db43b9e53244160bb410d056b8183611f34df3"
+  },
+  "pod": {
+    "image": "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7",
+    "image_id": "ghcr.io/astral-sh/uv@sha256:85d4cb1afa769a7338e095b927bee941cf5ec92266c7424b3f6c0f2748567248",
+    "name": "chris-q38-m96-signal-a2-leak-a4-8xgkn",
+    "uid": "ea6a49dc-1575-45a1-b1f0-9390c4692129"
+  },
+  "private_instance_ids_prompts_traces_rewards_scores_or_credentials_included": false,
+  "release_contract_correction": {
+    "accepted_released_states": [
+      "http_404_absent",
+      "http_200_exact_binding_with_nonempty_terminated_at"
+    ],
+    "live_state": "http_200_exact_binding_with_null_terminated_at",
+    "reason": "Fleet retains terminated instance records as tombstones; HTTP 200 alone does not prove an active environment"
+  },
+  "resources": {
+    "failure_alerts": "off",
+    "gpus": 0,
+    "priority": "c1/q1"
+  },
+  "schema": "cyber_qwen38_miles96_signal_leak_reconcile_terminal_v1",
+  "sha256": "sha256:ed93c5d436fa2f6dc35db8661e0cbedca93bd96a58c667a63f189360607d760f",
+  "workload": {
+    "name": "job-chris-q38-m96-signal-a2-leak-a4-b5d2b",
+    "uid": "f543ac33-04ee-4420-a066-114bf7c55d16"
+  }
+}
