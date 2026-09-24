@@ -1,0 +1,166 @@
+{
+  "schema": "cyber_qwen38_corrected_teacher3k_heldout20_pass4_successor_v1",
+  "status": "proposal_blocked_pending_corrected_corpus_checkpoint_and_integrated_adapter",
+  "launch_authorized": false,
+  "purpose": "Define the fail-closed successor to the Teacher3K heldout20 protocol for one exact base-versus-corrected-teacher-SFT comparison without copying private task content.",
+  "prepared_from_main": "9859a27d09b4fd881dfe04bbf9a1dcf7413083b8",
+  "predecessor_protocol": {
+    "pull_request": "https://github.com/fleet-ai/cyber-post-train/pull/578",
+    "commit": "942b332115a8bfecc48da76d197786ee86280cae",
+    "path": "configs/evaluation/qwen38-teacher3k-fleet-heldout20-pass4-protocol-v2.json",
+    "file_sha256": "sha256:a2a0389494fa1bca26911081c1d5f55d235cc52c74c15dcd0d98355b7a4dd106",
+    "sha256": "sha256:2ac58c3ded7ba5c9bacd27dc3a379c726912a3f0cafc3ee542672de730e1fe0e",
+    "compatibility_gap": "Its valid_checkpoint_corpora contains only the three retired token-spliced manifests, so it cannot admit the corrected corpus until a new lineage receipt and protocol version bind that manifest."
+  },
+  "execution_blueprint": {
+    "pull_request": "https://github.com/fleet-ai/cyber-post-train/pull/587",
+    "commit": "fe26e6483b00a5fc4ac026133009df95801ab81a",
+    "path": "configs/evaluation/qwen38-teacher3k96-step350-heldout20-pass4-successor-v1.json",
+    "file_sha256": "sha256:986af5555a2646e47fa3e20dffeced3bba6f85839528d689aa4207c5868b9280",
+    "sha256": "sha256:0cda7ede5aa5fc62587b36b23a5d14a6a08c0b67805a2f40c89e9b8a0b570ece",
+    "use": "Inherit only its frozen seeds, harness, sampling, zero-GPU source-Job shape, and exact-identity gates. Its retired 96K corpus and step-350 candidate are not inputs to this successor."
+  },
+  "required_runtime_integration": {
+    "campaign_adapter": {
+      "pull_request": "https://github.com/fleet-ai/cyber-post-train/pull/576",
+      "commit": "4849fe357970247bc62df5f12b7770fb97cfbb2c",
+      "path": "evals/fleet/campaign_adapter.py",
+      "file_sha256": "sha256:f57fdd65ced01180f0758f28ffef59da99be132bcb91fb0a544bb0a4087ca412"
+    },
+    "outcome_validity": {
+      "pull_request": "https://github.com/fleet-ai/cyber-post-train/pull/580",
+      "commit": "4bab2b50ccfe5758327e340800a9fd1619a0265c",
+      "path": "evals/fleet/outcome_validity.py",
+      "file_sha256": "sha256:7061c43afb3d54b60659d2c523c2a69253825d7c140660f57bd4c518aec9ba07",
+      "supersession_receipt": {
+        "path": "docs/evidence/qwen38-dev17-pass4-outcome-validity-supersession-20260924.json",
+        "file_sha256": "sha256:b0df1bd89b43fb49b5cc39a26c14810eb6e010bdb5da9fa709eb6bd434d55d57",
+        "sha256": "sha256:6d24eee2d73f6f206d087e8edd36740ad78e095b285120c2ac5178a7753d5f53",
+        "status": "incomplete_pending_predeclared_replacement_attempts"
+      }
+    },
+    "accepted_integration_commit": null
+  },
+  "selection": {
+    "source": "Copy the exact 20 task rows from the predecessor protocol only after a fresh read-only lineage reconciliation proves all are absent from the accepted corrected corpus.",
+    "corrected_corpus_manifest_sha256": null,
+    "lineage_reconciliation_sha256": null,
+    "task_family_count": 20,
+    "source_role_counts": {
+      "dev": 13,
+      "final_test": 7
+    },
+    "pass_k": 4,
+    "planned_valid_rollouts_per_arm": 80
+  },
+  "arms": {
+    "base": {
+      "repo": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "weight_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+      "accepted_evaluation_receipts_sha256": null
+    },
+    "corrected_teacher_sft": {
+      "native_checkpoint_manifest_sha256": null,
+      "bf16_payload_manifest_sha256": null,
+      "export_acceptance_sha256": null,
+      "serving_registration_sha256": null,
+      "live_parity_sha256": null
+    }
+  },
+  "treatment": {
+    "attempt_seeds": [
+      975414717,
+      3965467,
+      807861398,
+      1399333715
+    ],
+    "sampling": {
+      "temperature": 0.6,
+      "top_p": 0.95
+    },
+    "harness": {
+      "name": "opencode",
+      "version": "1.18.27",
+      "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+      "provider_adapter": "@ai-sdk/openai-compatible",
+      "context_management": "opencode_1.18.27_native_compaction_autocontinue_v2",
+      "context_window_size": 262144,
+      "compaction_headroom_tokens": 20000,
+      "max_output_tokens": 32768,
+      "max_model_requests": 600,
+      "timeout_seconds": 28800,
+      "tools_in_order": [
+        "bash",
+        "submit_report"
+      ],
+      "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+      "agent_image": "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92",
+      "proxy_image": "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+    },
+    "job_contract": {
+      "gpus_per_source_job": 0,
+      "priority_class": "c1",
+      "backoff_limit": 0,
+      "reviewed_infrastructure_retries_per_job": 0,
+      "server_double_preview_required": true,
+      "root_metadata_annotations": {
+        "fleet.ai/failure-alerts": "off"
+      },
+      "training_data_eligible": false
+    }
+  },
+  "matched_identity_rule": {
+    "only_allowed_arm_difference": "The exact weight manifest and its directly derived model revision/served identifier.",
+    "must_match": [
+      "tokenizer and chat template",
+      "non-weight serving files, precision, quantization, engine, image, arguments, and topology",
+      "exact task, environment, data, prompt, and verifier versions",
+      "harness image, OpenCode version, ordered tool schemas, context policy, and budgets",
+      "sampling, attempt seeds, concurrency, timeout, outcome classification, and replacement policy"
+    ]
+  },
+  "outcome_policy": {
+    "valid_model_outcomes_are_final": true,
+    "output_limit_and_process_error_are_not_capability_zeros": true,
+    "invalid_cell_replacement": "Preserve the original and reacquire the whole paired base/candidate cell under one score-blind, predeclared immutable successor; never splice asymmetric cells.",
+    "zero_imputation_for_missing_or_invalid_cells": false,
+    "automatic_retry": false
+  },
+  "readiness_gates": [
+    "Bind the accepted corrected corpus manifest and a fresh heldout20 lineage reconciliation in a new immutable protocol version.",
+    "Bind the accepted integrated campaign-adapter and outcome-validity commit; neither open PR alone is an execution authority.",
+    "Bind accepted terminal checkpoint, BF16 export, staging, registration, and live-parity receipts for the corrected arm.",
+    "Reuse historical base rollouts only when every task, harness, route, non-weight serving, seed, budget, and outcome-validity binding is byte-for-byte compatible; otherwise run a fresh matched base arm.",
+    "Freeze the score-blind paired replacement policy and prove every exact output root, database, Job, ConfigMap, and launch claim is absent before create.",
+    "Require both server previews to contain the root annotation fleet.ai/failure-alerts=off before any Job creation."
+  ],
+  "reporting": {
+    "primary_unit": "reviewed task family",
+    "per_task_metric": "pass@4: at least one authoritative success among four valid attempts",
+    "required_strata": [
+      "dev13",
+      "final7"
+    ],
+    "union20": "descriptive_only",
+    "required_outputs": [
+      "exact paired task outcomes",
+      "paired task-level delta and uncertainty over tasks",
+      "invalid and replacement ledger",
+      "reliability and outcome-validity counts by arm"
+    ]
+  },
+  "containment": {
+    "external_evaluations_in_scope": false,
+    "external_benchmark_content_present": false,
+    "private_task_content_present": false,
+    "training_data_eligible": false
+  },
+  "operation": {
+    "jobs_created": 0,
+    "sessions_created": 0,
+    "routes_created_or_mutated": 0,
+    "results_unsealed": false
+  },
+  "sha256": "sha256:f66cbd9c02b3d33e0c8f07153f7af1262fb4971628c35bca673f485f5d8d35d4"
+}

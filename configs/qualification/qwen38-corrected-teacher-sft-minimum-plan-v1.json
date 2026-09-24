@@ -1,0 +1,248 @@
+{
+  "schema": "cyber_qwen38_corrected_teacher_sft_minimum_plan_v1",
+  "status": "proposal_blocked_no_launch",
+  "launch_authorized": false,
+  "prepared_from_main": "9859a27d09b4fd881dfe04bbf9a1dcf7413083b8",
+  "purpose": "Freeze the smallest corrected-teacher-SFT sequence that can test a combined corpus-and-optimizer repair after the valid base-versus-step1000 Fleet comparison is complete.",
+  "scientific_boundary": {
+    "question": "Does one epoch of full-weight SFT on message-aligned, exact-tool-contract stronger-teacher demonstrations improve lineage-heldout Fleet task outcomes over the exact base model?",
+    "confirmed_structural_defect": "The retired dense corpus rendered no formal tools and bare bash/submit_report targets, while the heldout OpenCode path exposes full schemas and fleet_bash/fleet_submit_report to the model.",
+    "causality_boundary": "The schema/name mismatch and its template-token expansion are confirmed structural differences; their individual contribution to capability loss remains a hypothesis unless a separate matched-versus-mismatched ablation is preregistered.",
+    "claim_if_positive": "The combined corrected-corpus and conservative-optimizer treatment improved the frozen Fleet comparison.",
+    "claims_not_supported": [
+      "Attribution between message alignment, tool-contract repair, learning rate, and warmup",
+      "A claim that stronger-teacher SFT generally helps or hurts cyber capability",
+      "Any external-benchmark improvement"
+    ],
+    "checkpoint_selection": "The predeclared terminal one-epoch checkpoint; imitation loss is a health signal only."
+  },
+  "evidence": {
+    "root_cause": {
+      "pull_request": "https://github.com/fleet-ai/cyber-post-train/pull/577",
+      "commit": "feb5827cb1421899c210ab498235108f45e7c11e",
+      "path": "docs/QWEN38_TEACHER3K_STEP1000_ROOT_CAUSE_2026-09-24.md",
+      "file_sha256": "sha256:6824d22821d4f0c0a24c892147f1fa4a15a27a3f7e6b9846820178f7ca9e5cd5"
+    },
+    "corpus_repair": {
+      "pull_request": "https://github.com/fleet-ai/cyber-post-train/pull/584",
+      "commit": "34f41b8f172e30e4e12c22b71bafa365bcf9a31f",
+      "plan": {
+        "path": "configs/data/qwen38-teacher3k-message-aligned-32k-rebuild-v1.plan.json",
+        "file_sha256": "sha256:efececc6c0b7f7805c9f8962fe54cddb5d0726836b8abb71b86ecb1564c25c07",
+        "sha256": "sha256:3c485c229d97daff25ed62cfe9852edfa7a1fc8557728a4dfe93c9216e629cd7",
+        "status": "blocked_pending_exact_source_evidence",
+        "launch_authorized": false
+      },
+      "builder": {
+        "path": "training/message_aligned_teacher_corpus.py",
+        "file_sha256": "sha256:02eee25e57bdf9c2084ce6790672102e07668168ebf3e4b82038aae4981bad50"
+      }
+    },
+    "weight_audit": {
+      "pull_request": "https://github.com/fleet-ai/cyber-post-train/pull/586",
+      "commit": "96e33180edc1464a4fc8b026ff19c57e812da674",
+      "success_receipt": {
+        "path": "docs/evidence/qwen38-study/2026-09-24-q38-step1000-weight-drift-a2-success.json",
+        "file_sha256": "sha256:dfd53451be3b0b83972a212c6f9b4cfa8132a0f648b6dd87752bdd7ab6846101",
+        "sha256": "sha256:5ee87e410a22518d9896d747af66ceb39c4267c192e25633f60a859374de4a0e"
+      },
+      "lineage_receipt": {
+        "path": "docs/evidence/qwen38-study/2026-09-24-q38-step1000-weight-lineage-reconciliation.json",
+        "file_sha256": "sha256:38deea769253dc506dcd397ce5735d3a78cc3ed636031c21ea09c8c76d71447a",
+        "sha256": "sha256:4bfcacedf0b4ef218fc61f73b169e6176f4260e8d88af66a3aee3fc5bc3d074c"
+      },
+      "interpretation": "The old optimizer changed the intended model and the accepted step1000 export was served; this rules out a no-op or wrong-weight explanation but makes no quality claim."
+    },
+    "heldout_successor": {
+      "path": "configs/evaluation/qwen38-corrected-teacher3k-heldout20-pass4-successor-v1.json",
+      "file_sha256": "sha256:652e6620ad66e2f42fbeed1071c1ac36636b1436e27049b45c58f16505305700",
+      "sha256": "sha256:f66cbd9c02b3d33e0c8f07153f7af1262fb4971628c35bca673f485f5d8d35d4"
+    }
+  },
+  "fixed_inputs": {
+    "model": {
+      "repo": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "lock_path": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+      "lock_file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+      "base_weight_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+      "tokenizer_manifest_sha256": "sha256:3938a9a8172f2738fed1be44efc11e2562059269d50d3721213f44802b53b4e1",
+      "chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
+    },
+    "trainer_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "tool_contract": {
+      "opencode_version": "1.18.27",
+      "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+      "source_tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+      "model_facing_tool_definitions_sha256": "sha256:585574ec1a459141a2e79f4945d140864876224ebef1260be65f06c6d237610f",
+      "required_model_facing_names": [
+        "fleet_bash",
+        "fleet_submit_report"
+      ]
+    },
+    "training_shape": {
+      "method": "full_weight_fsdp_bf16",
+      "max_length": 32768,
+      "context_tokens": 8192,
+      "global_window_batch": 8,
+      "microbatch_per_gpu": 1,
+      "nodes": 1,
+      "gpus_per_node": 8,
+      "seed": 20260920,
+      "epochs": 1,
+      "validation_mode": "task_outcomes_only"
+    }
+  },
+  "phases": {
+    "corpus_canary": {
+      "compute": "zero_gpu_full_create_once_materialization_and_readback",
+      "status": "blocked",
+      "pr584_blockers": [
+        {
+          "id": "exact-family-role-roster",
+          "required_evidence": "A sealed exact identity-to-family-role roster for all historical selected task versions, derived from reviewed application/task-family lineage and the trusted role anchor."
+        },
+        {
+          "id": "successful-report-call-binding",
+          "required_evidence": "Version-2 success evidence that retains the exact successful submit-report call ID and all existing model/task/version/transcript/verifier/route/outcome bindings."
+        },
+        {
+          "id": "exact-opencode-model-tool-contract",
+          "required_evidence": "An accepted sealed provider-transform contract and sanitized request capture proving Qwen received the exact model-facing tool definitions."
+        },
+        {
+          "id": "private-source-readback",
+          "required_evidence": "A read-only rehash proving the private normalized source and successor success-evidence files still exist at their bound digests."
+        }
+      ],
+      "additional_admission_requirement": {
+        "reason": "The scientific protocol requires distribution/concentration and explicit per-source and per-family supervised-token caps applied before packing; PR584 does not yet emit this complete evidence.",
+        "unique_supervised_target_tokens": null,
+        "source_count": null,
+        "task_family_count": null,
+        "per_task_token_concentration": null,
+        "per_session_token_concentration": null,
+        "per_teacher_token_concentration": null,
+        "per_source_token_cap": null,
+        "per_family_token_cap": null,
+        "admission_receipt_sha256": null
+      },
+      "acceptance": [
+        "Every row starts at the pinned chat-template system anchor and repeats the original system, task, and exact formal tool schemas.",
+        "Every retained tool call/result pair and assistant message is complete; raw token splicing and inherited success after a lost report are rejected.",
+        "Every eligible target appears exactly once, copied context and tool observations have zero loss, and readback matches written row digests.",
+        "Every reviewed dev/final family alias is excluded before packing and the resulting exact counts and digests are recorded rather than inherited from the retired corpus.",
+        "The sealed manifest includes the concentration and cap fields above with no unresolved null."
+      ],
+      "accepted_manifest_sha256": null,
+      "accepted_train_parquet_sha256": null,
+      "accepted_rows": null
+    },
+    "optimizer_canary": {
+      "depends_on": "accepted corpus_canary",
+      "status": "blocked_pending_corpus_and_versioned_runtime",
+      "reference_config": {
+        "path": "configs/runs/qwen38-teacher3k-32k-full-b8-lr1e6-v3.json",
+        "file_sha256": "sha256:dddb9f3f60ed99dc434394e1f3f180148b54710ad31349c332e32c74a09db5ce",
+        "use": "Structural LR=1e-6 reference only; its corpus, identity, schedule, and runtime are not reusable."
+      },
+      "runtime_pattern": {
+        "path": "training/sft_runtime_32k_matched_v1.py",
+        "file_sha256": "sha256:5c2fd322305e280902c7f6a805dd12fddd6062b2721109d77b5afb5f5c72d96c",
+        "gap": "The current wrapper is hard-coded to historical identities, zero warmup, and rejects pause/recovery. A new versioned successor must bind the corrected manifest, formulas, and exact rendered optimizer fields."
+      },
+      "proposed_optimizer": {
+        "family": "AdamW",
+        "adam_betas": [
+          0.9,
+          0.999
+        ],
+        "weight_decay": 0.01,
+        "max_grad_norm": 1.0,
+        "scheduler": "constant_with_warmup",
+        "peak_learning_rate": 0.000001,
+        "offload_after_step": false
+      },
+      "formulas": {
+        "full_epoch_steps": "S=ceil(accepted_corpus_rows/8)",
+        "warmup_steps": "W=ceil(0.05*S)",
+        "canary_pause_step": "C=max(W+1,ceil(0.10*S)); require C<S",
+        "checkpoint_interval": "C"
+      },
+      "execution_rule": "Compile the full one-epoch horizon first and pause at C; the canary is a prefix of the meaningful run, not an independently scheduled short experiment.",
+      "acceptance": [
+        "Exact corpus, model, tokenizer, runtime, optimizer, schedule, seed, topology, and supervised-token accounting match the sealed plan.",
+        "Loss, raw and clipped gradient norms, update norms, and learning-rate telemetry are finite with no overflow, restart, or deterministic input mismatch.",
+        "The learning-rate trace completes warmup and executes sustained peak-LR updates before the pause.",
+        "The forced native checkpoint is complete and sealed; full-weight text-model parameters changed without missing, unexpected, non-finite, or newly all-zero tensors.",
+        "An exact reload performs zero optimizer steps, reproduces the checkpoint identity, and is accepted before resume."
+      ],
+      "accepted_runtime_commit": null,
+      "accepted_run_config_sha256": null,
+      "accepted_pause_checkpoint_sha256": null,
+      "accepted_reload_receipt_sha256": null
+    },
+    "meaningful_run": {
+      "depends_on": "accepted optimizer_canary reload",
+      "duration": "Resume the exact paused checkpoint through optimizer step S, completing exactly one epoch and one exposure of every corrected target.",
+      "scientific_changes_from_canary": [],
+      "allowed_operational_changes": [
+        "new create-once recovery run, output, and W&B identities",
+        "omission of pause_after_step",
+        "exact recovery manifest and receipt bindings"
+      ],
+      "stop_rule": "Stop only for a predeclared operational defect such as non-finite state, restart, identity mismatch, missing progress, or idle-bound failure; do not stop or select on a favorable loss fluctuation.",
+      "terminal_requirements": [
+        "exactly S accepted optimizer steps and complete supervised-token accounting",
+        "sealed terminal native checkpoint and recovery state",
+        "accepted BF16 export with tensor inspection",
+        "accepted staging, registration, and live-parity receipts before scored evaluation"
+      ],
+      "accepted_terminal_checkpoint_sha256": null,
+      "accepted_bf16_payload_manifest_sha256": null
+    },
+    "matched_heldout_evaluation": {
+      "depends_on": "accepted meaningful_run artifacts and successor protocol",
+      "config_path": "configs/evaluation/qwen38-corrected-teacher3k-heldout20-pass4-successor-v1.json",
+      "config_file_sha256": "sha256:652e6620ad66e2f42fbeed1071c1ac36636b1436e27049b45c58f16505305700",
+      "config_sha256": "sha256:f66cbd9c02b3d33e0c8f07153f7af1262fb4971628c35bca673f485f5d8d35d4",
+      "decision_rule": "Report the frozen base-versus-corrected comparison whether positive or negative. Do not launch a random recipe sweep in response; any attribution study is a separately preregistered experiment.",
+      "external_evaluations": "excluded"
+    }
+  },
+  "fixed_vs_changed": {
+    "fixed_from_the_diagnosed_dense_run": [
+      "base model revision, tokenizer, and chat template",
+      "full-weight BF16 FSDP method and one-node eight-GPU topology",
+      "32K maximum length, 8K copied-context budget, global batch 8, and seed 20260920",
+      "verified-success teacher eligibility, task-family split authority, one target per epoch, and one-epoch duration",
+      "trainer image and normal c1 admission"
+    ],
+    "intentionally_changed": [
+      "message-aligned windows with repeated system/task/formal tool schemas and exact fleet-prefixed model-facing tool calls",
+      "fresh alias-complete heldout-family exclusion and explicit concentration/cap evidence",
+      "peak LR 1e-6 instead of 3e-6 and 5% warmup instead of zero warmup",
+      "explicit AdamW, weight decay, clipping, planned pause/reload, and terminal selection contracts"
+    ],
+    "optional_future_attribution_arm": "Only if attribution becomes scientifically necessary, preregister a matched exact-schema versus historical-mismatch comparison with every other corpus and optimizer field fixed; it is not part of this minimum sequence."
+  },
+  "operation": {
+    "corpus_materializations_created": 0,
+    "kubernetes_jobs_created": 0,
+    "kubernetes_rayjobs_created": 0,
+    "gpu_allocations_created": 0,
+    "serving_routes_created_or_mutated": 0,
+    "evaluation_sessions_created": 0,
+    "results_unsealed": false
+  },
+  "safety": {
+    "every_future_root_job_or_rayjob_annotation": {
+      "fleet.ai/failure-alerts": "off"
+    },
+    "request_failureAlerts": false,
+    "server_preview_required_before_create": true,
+    "credentials_or_private_task_content_present": false,
+    "external_benchmark_inputs_or_results_present": false
+  },
+  "sha256": "sha256:6277e8a3fe4117b80e9b9858cd88db8c90a8928b1eb956893d6d230edfd462f0"
+}
