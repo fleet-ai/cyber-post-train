@@ -1,0 +1,46 @@
+{
+  "cleanup": {
+    "config_map_absent": true,
+    "job_absent": true,
+    "pods_absent": true,
+    "resource_release_confirmed": true,
+    "workloads_absent": true
+  },
+  "config_map": {
+    "name": "chris-q38-m96-bind-probe-a2-code",
+    "uid": "1f59df28-0bc0-4913-b01a-98f5059f8746"
+  },
+  "failure": {
+    "error_class": "PermissionError",
+    "phase": "candidate_inventory",
+    "reason": "candidate_presence_check_was_not_sanitized"
+  },
+  "job": {
+    "exit_code": 1,
+    "name": "chris-q38-m96-bind-probe-a2",
+    "restart_count": 0,
+    "status": "Failed",
+    "uid": "7e23d8a6-3875-4b7c-a9c3-dcfa552d36f1"
+  },
+  "observed_at": "2026-09-24T05:04:00Z",
+  "packet_sha256": "sha256:4c67a6bb9991d4c45420497d16a12fb7afc95c24cccfc1e1591061d8104a081e",
+  "pod": {
+    "uid": "31641e98-507c-4607-b383-a79b7a131d97"
+  },
+  "raw_weights_prompts_traces_flags_answers_scores_or_credentials_included": false,
+  "resources": {
+    "failure_alerts": "off",
+    "gpus": 0,
+    "priority": "c1/q1"
+  },
+  "retry_policy": {
+    "a2_retired": true,
+    "automatic_retry": false
+  },
+  "schema": "cyber_qwen38_miles96_binding_probe_terminal_v1",
+  "server_preview_sha256": "sha256:bfae92a816802681ffb949e00517039aca9c965210170d4442592cb6e2f06fac",
+  "sha256": "sha256:65d4924ef9bdbcae5d96c883f7129d6394033b92bb7b2520920fcdd3d9fa14b9",
+  "workload": {
+    "uid": "f4124e3e-2a35-490d-bd66-a3ccd0be3ffb"
+  }
+}

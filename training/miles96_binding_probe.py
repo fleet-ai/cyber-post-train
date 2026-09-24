@@ -11,6 +11,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +21,7 @@ RECEIPT_SCHEMA = "cyber_qwen38_miles96_binding_probe_receipt_v1"
 LOG_PREFIX = "CYBER_MILES96_BINDING_PROBE="
 CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 NAMESPACE = "fleet-train-jobs"
-JOB_NAME = "chris-q38-m96-bind-probe-a2"
+JOB_NAME = "chris-q38-m96-bind-probe-a3"
 CONFIG_MAP_NAME = JOB_NAME + "-code"
 IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:"
@@ -33,21 +35,27 @@ PAIRED_CANDIDATES = tuple(
 )
 
 
-DRIVER = r'''from __future__ import annotations
-
-import hashlib
-import json
-import os
-import time
-from pathlib import Path
-
-from training import miles96_mechanics_canary as mechanics
-from training.miles96_binding_probe import (
-    HF_SOURCE, LOG_PREFIX, MEGATRON_SOURCE, PAIRED_CANDIDATES, RECEIPT_SCHEMA,
-)
+DRIVER = "from training.miles96_binding_probe import runtime_main;runtime_main()\n"
 
 
-def aggregate(root: Path, records: list[dict]) -> dict:
+def _sha(data: str) -> str:
+    return "sha256:" + hashlib.sha256(data.encode()).hexdigest()
+
+
+def digest(value: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
+
+
+def _safe(callable_) -> dict[str, Any]:
+    try:
+        return {"status": "valid", **callable_()}
+    except Exception as exc:
+        return {"status": "invalid", "error_class": type(exc).__name__}
+
+
+def _aggregate(root: Path, records: list[dict[str, Any]], mechanics: Any) -> dict[str, Any]:
     body = {"root": str(root), "files": records}
     return {
         "root": str(root),
@@ -57,71 +65,69 @@ def aggregate(root: Path, records: list[dict]) -> dict:
     }
 
 
-def hf_source() -> dict:
-    root = Path(HF_SOURCE)
-    if root.is_symlink() or not root.is_dir() or not (root / "config.json").is_file():
-        raise ValueError("HF source is absent or unsafe")
-    mechanics._hf_index(root)
-    return aggregate(
-        root,
-        mechanics._all_file_records(root, exclude_complete_model_markers=False),
-    )
-
-
-def megatron_source() -> dict:
-    root = Path(MEGATRON_SOURCE)
-    tracker = root / "latest_checkpointed_iteration.txt"
-    if (
-        root.is_symlink()
-        or not root.is_dir()
-        or tracker.is_symlink()
-        or not tracker.is_file()
-        or tracker.read_text().strip() != "release"
-    ):
-        raise ValueError("Megatron source is absent or unsafe")
-    result = aggregate(
-        root,
-        mechanics._all_file_records(root, exclude_complete_model_markers=False),
-    )
-    return {**result, "iteration": "release"}
-
-
-def safe(callable_) -> dict:
+def _paired_candidate(root: Path, mechanics: Any) -> dict[str, Any]:
     try:
-        return {"status": "valid", **callable_()}
-    except Exception as exc:
-        return {"status": "invalid", "error_class": type(exc).__name__}
+        root.lstat()
+    except FileNotFoundError:
+        return {"root": str(root), "status": "absent"}
+    except OSError as exc:
+        return {"root": str(root), "status": "inaccessible", "error_class": type(exc).__name__}
+    observed = _safe(lambda: mechanics.prepared_model_inventory(root))
+    if observed["status"] != "valid":
+        return {"root": str(root), **observed}
+    return {
+        "root": str(root),
+        "status": "valid",
+        "prepared_model_binding_sha256": observed["sha256"],
+        "hf_file_count": len(observed["hf_files"]),
+        "megatron_file_count": len(observed["megatron_files"]),
+    }
 
 
-def main() -> None:
+def runtime_main() -> None:
+    from training import miles96_mechanics_canary as mechanics
+
     if os.getuid() != 1000 or os.getgid() != 100:
         raise ValueError("probe identity drift")
-    if os.environ.get("CUDA_VISIBLE_DEVICES") != "" or os.environ.get(
-        "NVIDIA_VISIBLE_DEVICES"
-    ) != "none":
+    if (
+        os.environ.get("CUDA_VISIBLE_DEVICES") != ""
+        or os.environ.get("NVIDIA_VISIBLE_DEVICES") != "none"
+    ):
         raise ValueError("probe has a visible GPU")
-    hf, megatron = safe(hf_source), safe(megatron_source)
-    candidates = []
-    for value in PAIRED_CANDIDATES:
-        root = Path(value)
-        if not root.exists() and not root.is_symlink():
-            candidates.append({"root": value, "status": "absent"})
-            continue
-        observed = safe(lambda root=root: mechanics.prepared_model_inventory(root))
-        if observed.get("status") == "valid":
-            candidates.append(
-                {
-                    "root": value,
-                    "status": "valid",
-                    "prepared_model_binding_sha256": observed["sha256"],
-                    "hf_file_count": len(observed["hf_files"]),
-                    "megatron_file_count": len(observed["megatron_files"]),
-                }
-            )
-        else:
-            candidates.append({"root": value, **observed})
+
+    def hf_source() -> dict[str, Any]:
+        root = Path(HF_SOURCE)
+        if root.is_symlink() or not root.is_dir() or not (root / "config.json").is_file():
+            raise ValueError("HF source is absent or unsafe")
+        mechanics._hf_index(root)
+        return _aggregate(
+            root,
+            mechanics._all_file_records(root, exclude_complete_model_markers=False),
+            mechanics,
+        )
+
+    def megatron_source() -> dict[str, Any]:
+        root = Path(MEGATRON_SOURCE)
+        tracker = root / "latest_checkpointed_iteration.txt"
+        if (
+            root.is_symlink()
+            or not root.is_dir()
+            or tracker.is_symlink()
+            or not tracker.is_file()
+            or tracker.read_text().strip() != "release"
+        ):
+            raise ValueError("Megatron source is absent or unsafe")
+        result = _aggregate(
+            root,
+            mechanics._all_file_records(root, exclude_complete_model_markers=False),
+            mechanics,
+        )
+        return {**result, "iteration": "release"}
+
+    hf, megatron = _safe(hf_source), _safe(megatron_source)
+    candidates = [_paired_candidate(Path(value), mechanics) for value in PAIRED_CANDIDATES]
     same_device = False
-    if hf.get("status") == megatron.get("status") == "valid":
+    if hf["status"] == megatron["status"] == "valid":
         same_device = Path(HF_SOURCE).stat().st_dev == Path(MEGATRON_SOURCE).stat().st_dev
     valid = [row for row in candidates if row["status"] == "valid"]
     body = {
@@ -136,21 +142,6 @@ def main() -> None:
     }
     receipt = {**body, "sha256": "sha256:" + mechanics.digest(body)}
     print(LOG_PREFIX + json.dumps(receipt, sort_keys=True, separators=(",", ":")), flush=True)
-
-
-if __name__ == "__main__":
-    main()
-'''
-
-
-def _sha(data: str) -> str:
-    return "sha256:" + hashlib.sha256(data.encode()).hexdigest()
-
-
-def digest(value: Any) -> str:
-    return hashlib.sha256(
-        json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
-    ).hexdigest()
 
 
 def build_packet() -> dict[str, Any]:

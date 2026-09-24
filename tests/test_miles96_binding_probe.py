@@ -33,12 +33,14 @@ def test_packet_is_inert_zero_gpu_read_only_and_alert_off() -> None:
         for container in pod.get("initContainers", []) + pod["containers"]
         for values in container.get("resources", {}).values()
     )
-    assert next(v for v in pod["volumes"] if v["name"] == "sfs")[
-        "persistentVolumeClaim"
-    ]["readOnly"] is True
-    assert next(
-        m for m in pod["containers"][0]["volumeMounts"] if m["name"] == "sfs"
-    )["readOnly"] is True
+    assert (
+        next(v for v in pod["volumes"] if v["name"] == "sfs")["persistentVolumeClaim"]["readOnly"]
+        is True
+    )
+    assert (
+        next(m for m in pod["containers"][0]["volumeMounts"] if m["name"] == "sfs")["readOnly"]
+        is True
+    )
 
 
 def test_packet_embeds_exact_current_probe_sources() -> None:
@@ -73,6 +75,28 @@ def test_embedded_probe_imports_in_an_isolated_interpreter(tmp_path: Path) -> No
     assert result.stdout.strip() == probe.JOB_NAME
 
 
+def test_inaccessible_candidate_is_sanitized(monkeypatch) -> None:
+    root = Path("/mnt/sfs/jobs/inaccessible")
+
+    def denied(self: Path):
+        if self == root:
+            raise PermissionError("private path")
+        return original_lstat(self)
+
+    class Mechanics:
+        @staticmethod
+        def prepared_model_inventory(_root: Path) -> dict:
+            raise AssertionError("inventory must not run for an inaccessible path")
+
+    original_lstat = Path.lstat
+    monkeypatch.setattr(Path, "lstat", denied)
+    assert probe._paired_candidate(root, Mechanics) == {
+        "root": str(root),
+        "status": "inaccessible",
+        "error_class": "PermissionError",
+    }
+
+
 def test_task_authority_candidate_is_self_digesting_and_private_free() -> None:
     path = (
         Path(__file__).parents[1]
@@ -81,7 +105,9 @@ def test_task_authority_candidate_is_self_digesting_and_private_free() -> None:
     value = json.loads(path.read_text())
     body = {key: item for key, item in value.items() if key != "sha256"}
     assert value["sha256"] == "sha256:" + mechanics.digest(body)
-    authority = {key: item for key, item in value["authority"].items() if key != "authority_receipt_sha256"}
+    authority = {
+        key: item for key, item in value["authority"].items() if key != "authority_receipt_sha256"
+    }
     assert value["authority"]["authority_receipt_sha256"] == (
         "sha256:" + mechanics.digest(authority)
     )
