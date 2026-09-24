@@ -162,11 +162,24 @@ def compatible_messages(record: dict) -> tuple[list[dict], dict[str, int]]:
     return visible, dict(counts)
 
 
-def encode_record(messages: list[dict], tokenizer: Any, helper) -> tuple[list[int], list[dict]]:
-    """Use the pinned ALL_ASSISTANT_MESSAGES policy, retaining complete turns."""
+def encode_record(
+    messages: list[dict], tokenizer: Any, helper, *, tools: list[dict] | None = None
+) -> tuple[list[int], list[dict]]:
+    """Use the pinned ALL_ASSISTANT_MESSAGES policy, retaining complete turns.
+
+    ``tools`` belongs in the repeated system/task anchor.  Older qualified
+    corpora intentionally omitted it, so ``None`` preserves their exact
+    rendering.  New corpus schemas can bind the model-facing tool contract
+    without repeating that schema before every message chunk.
+    """
     try:
+        tool_anchor = [] if tools is None else tools
         anchor = tokenizer.apply_chat_template(
-            messages[:2], tokenize=True, add_generation_prompt=False, return_dict=False, tools=[]
+            messages[:2],
+            tokenize=True,
+            add_generation_prompt=False,
+            return_dict=False,
+            tools=tool_anchor,
         )
         chunks = []
         ordinal = 0

@@ -1,0 +1,108 @@
+{
+  "schema": "cyber_message_aligned_teacher_corpus_rebuild_plan_v1",
+  "status": "blocked_pending_exact_source_evidence",
+  "purpose": "Replace token-spliced teacher3k windows with windows rebuilt from complete source messages and the exact OpenCode model-facing tool contract.",
+  "planned_request_schema": "cyber_message_aligned_teacher_corpus_request_v1",
+  "planned_algorithm": "anchored_complete_message_rounds_with_exact_tool_contract_v1",
+  "source_corpus_evidence": {
+    "normalized_records_file_sha256": "sha256:6056955f6b35fcf88d99afac6ce3d446002c7b62ed964b66501bccea91a755eb",
+    "legacy_success_evidence_file_sha256": "sha256:67f2c26967d818e233157760cf7cc4be7d48ef37710c9a81bc7d11f5a931eab7",
+    "selected_source_sessions": 2886,
+    "selected_task_keys": 496,
+    "selected_task_versions": 1176,
+    "legacy_lifecycle_prefix_salvages": 149,
+    "legacy_lifecycle_prefix_dropped_messages": 13295,
+    "legacy_lifecycle_prefix_dropped_assistant_responses": 5878,
+    "task_level_qa_certification": "not claimed by broad-v1; do not infer it in this repair"
+  },
+  "retired_derived_corpora": [
+    {
+      "path": "configs/data/qwen38-teacher3k-32k-v1.manifest.json",
+      "file_sha256": "sha256:ebcf6677e51adb22f73602c210281a3f4a847c257155da6ed48cd1c6cba9f3c8",
+      "manifest_sha256": "sha256:a8d08609991d7960cdcdab826bd07c3216bfcd3aa8f6fb33ab7a5fd29648d6f5",
+      "train_parquet_sha256": "sha256:bf245db073fcd5a39ff6f90f6fc322710a3694408845bc27bfb6d9eaa6c41e0c"
+    },
+    {
+      "path": "configs/data/qwen38-teacher3k-64k-v1.manifest.json",
+      "file_sha256": "sha256:26f432c04fcd2ead2a77f56dacfbbcacc43e128f761c8f1a786a35479d927023",
+      "manifest_sha256": "sha256:377720bd39a7dcb2f5c0dfd152fc9f955d4726f3f13c358dd57cac18bc84a2ae",
+      "train_parquet_sha256": "sha256:2ff865659cc0ed6a21efff3c6cf75999470a2d9bbbc86940425f45f728f73168"
+    },
+    {
+      "path": "configs/data/qwen38-teacher3k-96k-v1.manifest.json",
+      "file_sha256": "sha256:5e36347d72d93efad2518d5246155d762b941b8fea6c5d0422512ac18809553b",
+      "manifest_sha256": "sha256:8297f035f4c5b0446578cfa46897733273286f76e55d486c9598452e5585a479",
+      "train_parquet_sha256": "sha256:d292e4cd9c7ec0e45a63274fa7b7bdb1be18509b1a512b09eb9180e050357824"
+    }
+  ],
+  "immutable_bindings": {
+    "model_lock": {
+      "path": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+      "file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+      "repo": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+    },
+    "native_helper_sha256": "sha256:55c15b660067749febda00d4fb1c2110ff436717bbd4b73bf66055a73d0b87d5",
+    "trusted_family_role_anchor": {
+      "root_id": "fleet-blackbox-current-study-20260914-v2",
+      "sha256": "sha256:48350b8fc23143abe297db3b2364590c72d564553ebb4e9a349fa06ec246a26b"
+    },
+    "source_mcp_tool_catalog": {
+      "path": "configs/data/qwen38-rl-filtered-canary-tool-catalog-v1.json",
+      "file_sha256": "sha256:e4a3c4fb5b5c34cdaf64ec568eb31fcc0d55a63cc0a134808db348c65d7b6858",
+      "logical_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+    },
+    "opencode": {
+      "version": "1.18.27",
+      "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+      "mcp_server_name": "fleet",
+      "required_model_facing_tool_names": [
+        "fleet_bash",
+        "fleet_submit_report"
+      ],
+      "derived_model_facing_tool_definitions_sha256": "sha256:585574ec1a459141a2e79f4945d140864876224ebef1260be65f06c6d237610f"
+    }
+  },
+  "planned_materialization": {
+    "max_length": 32768,
+    "context_tokens": 8192,
+    "destination": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher3k-message-aligned-32k-v1/data-v1",
+    "create_once": true,
+    "token_splicing": false,
+    "repeat_on_every_window": [
+      "original_system_message",
+      "original_task_message",
+      "exact_model_facing_tool_schemas"
+    ],
+    "target_coverage": "every fitting assistant response exactly once with its source target digest",
+    "source_selection_parity": "preserve the broad-v1 eligibility, authoritative-success, task-richness, provenance, trajectory-deduplication, and whole-source window-deduplication gates",
+    "lifecycle_salvage_policy": "retain only when the exact evidence-bound successful report call and its result remain in the complete prefix",
+    "heldout_policy": "reject every exact identity whose reviewed family group is dev or final_test, including aliases"
+  },
+  "blocking_evidence": [
+    {
+      "id": "exact-family-role-roster",
+      "needed": "A sealed exact identity-to-family-role roster for all 1176 historical selected task versions, derived from reviewed application/task-family lineage and the trusted role anchor.",
+      "why": "The old builder compared task keys, so a differently named version of a held-out family could enter training. Current main has reviewed lineage for only the current high-quality inventory, not every historical selected identity."
+    },
+    {
+      "id": "successful-report-call-binding",
+      "needed": "Version-2 evidence that preserves every broad-v1 model/task/version/transcript/verifier/route/outcome binding and adds the exact successful submit-report call ID retained in normalized messages.",
+      "why": "The old evidence proves whole-session success but cannot prove that a salvaged prefix kept the successful report."
+    },
+    {
+      "id": "exact-opencode-model-tool-contract",
+      "needed": "An accepted sealed contract plus sanitized model-request capture binding the deterministic OpenCode tool-definition digest above to the exact Qwen provider adapter and proving the captured tools equal the contract.",
+      "why": "This repair derives the logical fleet_bash and fleet_submit_report schemas exactly from the current bare MCP catalog, but current main has no accepted provider-transform contract or captured request proving that those definitions reached Qwen unchanged."
+    },
+    {
+      "id": "private-source-readback",
+      "needed": "Read-only rehash proving the private normalized source and successor success-evidence files still exist at the exact digests above before create-once materialization.",
+      "why": "Repository manifests bind their old digests but cannot prove current private-file presence."
+    }
+  ],
+  "launch_authorized": false,
+  "private_data_materialized": false,
+  "gpu_jobs_submitted": 0,
+  "sha256": "sha256:3c485c229d97daff25ed62cfe9852edfa7a1fc8557728a4dfe93c9216e629cd7"
+}
