@@ -256,12 +256,35 @@
       "run_names": [
         "chris-q38-t3k262-can-v1-e208afe9", "chris-q38-t3k262-can-v2-5d72cb07", "chris-q38-t3k262-can-v3-bb3c42b4", "chris-q38-t3k262-can-v4-b7a54616", "chris-q38-t3k262-can-v5-4a1c0e94", "chris-q38-t3k262-can-v6-438fcf54", "chris-q38-t3k262-can-v7-bc18f683", "chris-q38-t3k262-can-v8-3919e0ac", "chris-q38-t3k262-can-v9-0154095e", "chris-q38-t3k262-can-v10-aec33804", "chris-q38-t3k262-can-v11-73fa80d4", "chris-q38-t3k262-can-v12-a421f0a3", "chris-q38-t3k262-full-v13-e5a9b2a8", "chris-q38-t3k262-resume-v14-b91e5d53"
       ],
-      "terminal_state": "v1-v11_FAILED; v12_controller_SUCCEEDED_without_sanitized_science_receipt; v13-v14_FAILED",
-      "checkpoint": null,
+      "evidence_observed_at": "2026-09-24",
+      "terminal_state": "v1-v11_failed_without_SFS_proof_of_a_completed_update; v12_completed_one_mechanics_update_and_native_checkpoint; v13_failed_after_progress_step12_with_sealed_exported_step10; v14_exactly_restored_step10_then_OOMed_attempting_step11",
+      "optimizer_steps": "v12=1; v13_progress=12_with_durable_step10; v14=no_post_resume_update",
+      "checkpoint": "/mnt/sfs/jobs/chris-q38-t3k262-full-v13/checkpoints/global_step_10",
+      "export": "/mnt/sfs/jobs/chris-q38-t3k262-full-v13/hf-export-step10-v1",
       "disposition": "failed_or_partial",
-      "confidence": "medium",
-      "scientific_comparability": "not_comparable_no_accepted_terminal_checkpoint",
-      "evidence": ["jobs-api:https://api.ft.flt.build/v1/runs (read-only observation 2026-09-19)"]
+      "confidence": "high",
+      "scientific_comparability": "mechanics_only_no_GPU_reload_serving_binding_or_capability_evaluation",
+      "four_node_hypothesis": {
+        "status": "not_qualified_or_launchable",
+        "exact_parent": "chris-q38-t3k262-can-v12-a421f0a3",
+        "only_recipe_deltas": {
+          "nodes": {"from": 8, "to": 4},
+          "batch_size": {"from": 64, "to": 32},
+          "max_steps": {"from": 2, "to": 4}
+        },
+        "unchanged_memory_controls": {
+          "layer_checkpoint_group_size": 1,
+          "gdn_chunk_tokens": 512,
+          "lm_head_chunk_tokens": 1024,
+          "mlp_chunk_tokens": 1024,
+          "rmsnorm_chunk_tokens": 1024
+        },
+        "blocker": "current main cannot express or execute the historical long-context controls; port and test the exact mechanics or explicitly support a reviewed immutable historical runtime before preparing a request"
+      },
+      "evidence": [
+        "docs/evidence/qwen38-study/2026-09-24-qwen38-teacher3k-262k-history.md",
+        "git:519da7040ef93ecbd606281fed997a221edc620a:docs/QWEN38_TWO_NODE_SFT.md"
+      ]
     },
     {
       "id": "q38-teacher3k-two-node-v1-v2",

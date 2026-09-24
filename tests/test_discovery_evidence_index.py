@@ -53,6 +53,11 @@ def test_index_does_not_promote_controller_success_to_scientific_acceptance():
     value = json.loads(INDEX.read_text())
 
     assert all(item["disposition"] != "accepted_checkpoint" for item in value["rl_attempts"])
+    teacher3k_262k = next(
+        item for item in value["sft_attempts"] if item["id"] == "q38-teacher3k-262k-lineage"
+    )
+    assert teacher3k_262k["disposition"] == "failed_or_partial"
+    assert teacher3k_262k["scientific_comparability"].startswith("mechanics_only")
     assert not any(
         item["scientific_comparability"].startswith("matched")
         for item in value["webexploitbench_evaluations"]
@@ -76,3 +81,26 @@ def test_index_ids_are_unique_within_each_evidence_class():
     ):
         ids = [item["id"] for item in value[key]]
         assert len(ids) == len(set(ids)), key
+
+
+def test_teacher3k_262k_four_node_hypothesis_changes_only_topology_batch_and_steps():
+    value = json.loads(INDEX.read_text())
+    lineage = next(
+        item for item in value["sft_attempts"] if item["id"] == "q38-teacher3k-262k-lineage"
+    )
+    hypothesis = lineage["four_node_hypothesis"]
+
+    assert hypothesis["status"] == "not_qualified_or_launchable"
+    assert hypothesis["exact_parent"] == "chris-q38-t3k262-can-v12-a421f0a3"
+    assert hypothesis["only_recipe_deltas"] == {
+        "nodes": {"from": 8, "to": 4},
+        "batch_size": {"from": 64, "to": 32},
+        "max_steps": {"from": 2, "to": 4},
+    }
+    assert hypothesis["unchanged_memory_controls"] == {
+        "layer_checkpoint_group_size": 1,
+        "gdn_chunk_tokens": 512,
+        "lm_head_chunk_tokens": 1024,
+        "mlp_chunk_tokens": 1024,
+        "rmsnorm_chunk_tokens": 1024,
+    }
