@@ -1,12 +1,13 @@
 {
   "classification": "infrastructure-invalid",
   "cleanup": {
-    "config_map_absent": false,
+    "config_map_absent": true,
     "diagnostic_objects_cleanup_authorized": true,
-    "job_absent": false,
+    "job_absent": true,
     "original_reward_objects_retained_pending_release_proof": true,
-    "pod_absent": false,
-    "workload_absent": false
+    "pod_absent": true,
+    "uid_preconditioned_cleanup_at": "2026-09-24T06:01:12Z",
+    "workload_absent": true
   },
   "config_map": {
     "name": "chris-q38-m96-signal-a2-leak-a2-code",
@@ -46,7 +47,7 @@
     "priority": "c1/q1"
   },
   "schema": "cyber_qwen38_miles96_signal_leak_reconcile_terminal_v1",
-  "sha256": "sha256:72cd02dbd84fdd2e551cb036bbcd2eb5941494ef1db81bc2246cc2792aae3e0a",
+  "sha256": "sha256:2a620cab092f10374a7f81eb4884b1a9d374691cb03608e9f344ddba7d5390c3",
   "workload": {
     "name": "job-chris-q38-m96-signal-a2-leak-a2-dc0ff",
     "uid": "5834f4fd-a492-4f7b-9e00-58f5e817a6ac"
