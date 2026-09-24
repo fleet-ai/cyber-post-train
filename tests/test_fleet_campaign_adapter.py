@@ -359,6 +359,18 @@ def test_wave_control_digest_binds_all_three_creator_modules() -> None:
     assert adapter._control_source_sha256() == expected  # noqa: SLF001
 
 
+def test_strict_profile_requires_its_exact_authorized_file_bytes(tmp_path: Path) -> None:
+    binding = _wave_binding(tmp_path)
+    profile_path = _strict_profile(tmp_path, binding, _wave_plan(binding))
+    authorized_digest = _profile_file_sha256(profile_path)
+    expected = json.loads(profile_path.read_text())
+    assert adapter._strict_profile(profile_path, authorized_digest) == expected  # noqa: SLF001
+
+    profile_path.write_bytes(profile_path.read_bytes() + b"\n")
+    with pytest.raises(adapter.AdapterError, match="differs from its authorization"):
+        adapter._strict_profile(profile_path, authorized_digest)  # noqa: SLF001
+
+
 def test_strict_wave_rejects_partial_binding_and_arbitrary_packet_set(tmp_path: Path) -> None:
     binding = _wave_binding(tmp_path)
     one_group = next(iter(binding["groups"].values()))
