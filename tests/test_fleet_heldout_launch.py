@@ -14,6 +14,7 @@ import pytest
 import yaml
 
 from evals.fleet import heldout_launch as launch
+from scripts import prepare_qwen38_fleet_seed44_two_arm_packets as packet_renderer
 
 NAMESPACE = "fleet-train-jobs"
 JOB_NAME = "chris-heldout-base-a1"
@@ -71,6 +72,7 @@ class FakeCluster:
         self.postgres_label_in_create: str | None = None
         self.drop_postgres_contract_in_create = False
         self.add_postgres_contract_in_create = False
+        self.priority_in_create: str | None = None
         self.created: dict[str, Any] | None = None
 
     def list(
@@ -136,6 +138,8 @@ class FakeCluster:
         if create and self.add_postgres_contract_in_create:
             labels[launch.POSTGRES_CLIENT_LABEL] = launch.POSTGRES_CLIENT_LABEL_VALUE
             environment.append({"name": launch.ROLLOUT_DATABASE_ENV, "value": "injected"})
+        if create and self.priority_in_create is not None:
+            job["spec"]["template"]["spec"]["priorityClassName"] = self.priority_in_create
         if self.inject_gpu is not None:
             resources = job["spec"]["template"]["spec"]["containers"][0].setdefault("resources", {})
             resources.setdefault("requests", {})[self.inject_gpu] = "1"
@@ -239,7 +243,15 @@ def _packet(tmp_path: Path) -> Path:
         "kind": "ConfigMap",
         "metadata": {"name": CONFIG_MAP_NAME, "namespace": NAMESPACE},
         "immutable": True,
-        "data": {"config.json": config_text, "heldout.json": config_text, "run.sh": "true\n"},
+        "data": {
+            **{
+                name: path.read_text(encoding="utf-8")
+                for name, path in packet_renderer.SOURCE_FILES.items()
+            },
+            "config.json": config_text,
+            "heldout.json": config_text,
+            "task-set.json": json.dumps(task_set, sort_keys=True) + "\n",
+        },
     }
     job = {
         "apiVersion": "batch/v1",
@@ -264,6 +276,7 @@ def _packet(tmp_path: Path) -> Path:
                             "name": "evaluator",
                             "env": [
                                 {"name": "EVAL_CONFIG_NAME", "value": "heldout.json"},
+                                {"name": "EVAL_TASK_SET_NAME", "value": "task-set.json"},
                                 {"name": "EVAL_OUTPUT", "value": OUTPUT_ROOT},
                                 {"name": "EVAL_DATABASE", "value": DATABASE},
                             ],
@@ -360,6 +373,39 @@ def _reseal_packet(packet: Path, raw: dict[str, Any]) -> None:
     _write_json(packet, raw)
 
 
+def _retarget_task_set(packet: Path, task_set_name: str) -> None:
+    raw = json.loads(packet.read_text())
+    old_task_set = packet.parent / raw["files"]["task_set"]["path"]
+    new_task_set = packet.parent / task_set_name
+    old_task_set.rename(new_task_set)
+    config_path = packet.parent / raw["files"]["evaluation_config"]["path"]
+    config = json.loads(config_path.read_text())
+    config["task_set"] = task_set_name
+    _write_json(config_path, config)
+    config_text = json.dumps(config, sort_keys=True, separators=(",", ":"))
+    config_map_path = packet.parent / raw["files"]["config_map"]["path"]
+    config_map = yaml.safe_load(config_map_path.read_text())
+    config_map["data"].update(
+        {
+            "config.json": config_text,
+            "heldout.json": config_text,
+        }
+    )
+    config_map_path.write_text(yaml.safe_dump(config_map), encoding="utf-8")
+    job_path = packet.parent / raw["files"]["job"]["path"]
+    job = yaml.safe_load(job_path.read_text())
+    environment = job["spec"]["template"]["spec"]["containers"][0]["env"]
+    next(item for item in environment if item["name"] == "EVAL_TASK_SET_NAME")["value"] = (
+        task_set_name
+    )
+    job_path.write_text(yaml.safe_dump(job), encoding="utf-8")
+    raw["files"]["evaluation_config"]["sha256"] = _sha(config_path)
+    raw["files"]["task_set"] = {"path": task_set_name, "sha256": _sha(new_task_set)}
+    raw["files"]["config_map"]["sha256"] = _sha(config_map_path)
+    raw["files"]["job"]["sha256"] = _sha(job_path)
+    _reseal_packet(packet, raw)
+
+
 def _enable_rollout_database(packet: Path) -> None:
     raw = json.loads(packet.read_text())
     job_path = packet.parent / raw["files"]["job"]["path"]
@@ -402,6 +448,163 @@ def test_non_database_job_is_unaffected_by_postgres_client_label_gate(tmp_path):
     package = launch.build_package(_packet(tmp_path))
 
     assert launch.require_postgres_client_label(package.job, label="test Job") is False
+
+
+@pytest.mark.parametrize("task_set_name", ["dev13.json", "final7.json"])
+def test_rendered_bundle_installs_configured_task_set_basename(tmp_path, task_set_name):
+    synthetic_packet = _packet(tmp_path)
+    _retarget_task_set(synthetic_packet, task_set_name)
+    raw = json.loads(synthetic_packet.read_text())
+    protocol_path = tmp_path / raw["files"]["comparison_protocol"]["path"]
+    arm = {
+        "job_name": JOB_NAME,
+        "config_map_name": CONFIG_MAP_NAME,
+        "output_root": OUTPUT_ROOT,
+        "database": DATABASE,
+        "model_revision": "base-revision",
+    }
+    prepare_kwargs = {
+        "arm_id": "base",
+        "arm": arm,
+        "config_path": tmp_path / raw["files"]["evaluation_config"]["path"],
+        "config": json.loads((tmp_path / raw["files"]["evaluation_config"]["path"]).read_text()),
+        "task_set_path": tmp_path / raw["files"]["task_set"]["path"],
+        "split_path": tmp_path / raw["files"]["split_manifest"]["path"],
+        "protocol_path": protocol_path,
+        "protocol": json.loads(protocol_path.read_text()),
+        "checkpoint_path": tmp_path / raw["files"]["checkpoint_provenance"]["path"],
+        "proof_path": tmp_path / raw["files"]["serving_route_proof"]["path"],
+        "ledger_path": tmp_path / raw["files"]["evaluation_ledger"]["path"],
+    }
+    missing_jobs = {
+        name: path for name, path in packet_renderer.SOURCE_FILES.items() if name != "jobs.py"
+    }
+    with pytest.raises(ValueError, match="jobs.py"):
+        packet_renderer._prepare_arm(  # noqa: SLF001
+            tmp_path / "missing-jobs", source_files=missing_jobs, **prepare_kwargs
+        )
+    rendered = tmp_path / "rendered"
+    packet_renderer._prepare_arm(rendered, **prepare_kwargs)  # noqa: SLF001
+
+    package = launch.build_package(rendered / "LAUNCH_PACKET.json")
+    environment = launch._container_environment(  # noqa: SLF001
+        package.job["spec"]["template"]["spec"]["containers"][0]
+    )
+    script = package.config_map["data"]["run.sh"]
+
+    assert package.evaluation_config["task_set"] == task_set_name
+    assert environment["EVAL_TASK_SET_NAME"] == task_set_name
+    assert "model_artifact_v2.py" in package.config_map["data"]
+    assert "model_artifact_v3.py" in package.config_map["data"]
+    assert '"$root/configs/evaluation/$EVAL_TASK_SET_NAME"' in script
+    assert "qwen38-fresh75-fleet-dev17-task-set-v1.json" not in script
+
+
+def test_rendered_bundle_rejects_legacy_hardcoded_task_set_install(tmp_path):
+    packet = _packet(tmp_path)
+    raw = json.loads(packet.read_text())
+    config_map_path = packet.parent / raw["files"]["config_map"]["path"]
+    config_map = yaml.safe_load(config_map_path.read_text())
+    config_map["data"]["run.sh"] = (
+        "install -m 0644 /bootstrap/task-set.json "
+        '"$root/configs/evaluation/old-hardcoded-task-set.json"\n'
+    )
+    config_map_path.write_text(yaml.safe_dump(config_map), encoding="utf-8")
+    raw["files"]["config_map"]["sha256"] = _sha(config_map_path)
+    _reseal_packet(packet, raw)
+
+    with pytest.raises(launch.HeldoutLaunchError, match="task set is invalid"):
+        launch.build_package(packet)
+
+
+def test_rendered_bundle_rejects_dynamic_install_token_only_in_comment(tmp_path):
+    packet = _packet(tmp_path)
+    raw = json.loads(packet.read_text())
+    config_map_path = packet.parent / raw["files"]["config_map"]["path"]
+    config_map = yaml.safe_load(config_map_path.read_text())
+    dynamic = '"$root/configs/evaluation/$EVAL_TASK_SET_NAME"'
+    config_map["data"]["run.sh"] = (
+        config_map["data"]["run.sh"].replace(
+            dynamic, '"$root/configs/evaluation/old-hardcoded-task-set.json"'
+        )
+        + f"\n# {dynamic}\n"
+    )
+    config_map_path.write_text(yaml.safe_dump(config_map), encoding="utf-8")
+    raw["files"]["config_map"]["sha256"] = _sha(config_map_path)
+    _reseal_packet(packet, raw)
+
+    with pytest.raises(launch.HeldoutLaunchError, match="task set is invalid"):
+        launch.build_package(packet)
+
+
+def test_rendered_bundle_rejects_missing_bootstrap_dependency(tmp_path):
+    packet = _packet(tmp_path)
+    raw = json.loads(packet.read_text())
+    config_map_path = packet.parent / raw["files"]["config_map"]["path"]
+    config_map = yaml.safe_load(config_map_path.read_text())
+    config_map["data"].pop("jobs.py")
+    config_map_path.write_text(yaml.safe_dump(config_map), encoding="utf-8")
+    raw["files"]["config_map"]["sha256"] = _sha(config_map_path)
+    _reseal_packet(packet, raw)
+
+    with pytest.raises(launch.HeldoutLaunchError, match="task set is invalid"):
+        launch.build_package(packet)
+
+
+def test_rendered_bundle_rejects_task_set_path_traversal(tmp_path):
+    packet = _packet(tmp_path)
+    raw = json.loads(packet.read_text())
+    config_path = packet.parent / raw["files"]["evaluation_config"]["path"]
+    config = json.loads(config_path.read_text())
+    config["task_set"] = "../task-set.json"
+    _write_json(config_path, config)
+    config_text = json.dumps(config, sort_keys=True, separators=(",", ":"))
+    config_map_path = packet.parent / raw["files"]["config_map"]["path"]
+    config_map = yaml.safe_load(config_map_path.read_text())
+    config_map["data"].update({"config.json": config_text, "heldout.json": config_text})
+    config_map_path.write_text(yaml.safe_dump(config_map), encoding="utf-8")
+    job_path = packet.parent / raw["files"]["job"]["path"]
+    job = yaml.safe_load(job_path.read_text())
+    environment = job["spec"]["template"]["spec"]["containers"][0]["env"]
+    next(item for item in environment if item["name"] == "EVAL_TASK_SET_NAME")["value"] = (
+        "../task-set.json"
+    )
+    job_path.write_text(yaml.safe_dump(job), encoding="utf-8")
+    raw["files"]["evaluation_config"]["sha256"] = _sha(config_path)
+    raw["files"]["config_map"]["sha256"] = _sha(config_map_path)
+    raw["files"]["job"]["sha256"] = _sha(job_path)
+    _reseal_packet(packet, raw)
+
+    with pytest.raises(launch.HeldoutLaunchError, match="task set is invalid"):
+        launch.build_package(packet)
+
+
+def test_rendered_bundle_rejects_task_set_payload_mismatch(tmp_path):
+    packet = _packet(tmp_path)
+    raw = json.loads(packet.read_text())
+    config_map_path = packet.parent / raw["files"]["config_map"]["path"]
+    config_map = yaml.safe_load(config_map_path.read_text())
+    config_map["data"]["task-set.json"] = "{}\n"
+    config_map_path.write_text(yaml.safe_dump(config_map), encoding="utf-8")
+    raw["files"]["config_map"]["sha256"] = _sha(config_map_path)
+    _reseal_packet(packet, raw)
+
+    with pytest.raises(launch.HeldoutLaunchError, match="task set is invalid"):
+        launch.build_package(packet)
+
+
+def test_rendered_bundle_rejects_task_set_line_ending_mismatch(tmp_path):
+    packet = _packet(tmp_path)
+    raw = json.loads(packet.read_text())
+    config_map_path = packet.parent / raw["files"]["config_map"]["path"]
+    config_map = yaml.safe_load(config_map_path.read_text())
+    config_map["data"]["task-set.json"] = config_map["data"]["task-set.json"].replace("\n", "\r\n")
+    config_map_path.write_text(yaml.safe_dump(config_map), encoding="utf-8")
+    raw["files"]["config_map"]["sha256"] = _sha(config_map_path)
+    _reseal_packet(packet, raw)
+
+    with pytest.raises(launch.HeldoutLaunchError, match="task set is invalid"):
+        launch.build_package(packet)
 
 
 def test_stale_postgres_client_label_on_non_database_job_fails_render(tmp_path):
@@ -490,6 +693,7 @@ def test_create_response_must_retain_database_client_label(tmp_path):
     assert cluster.create_calls == 1
     assert [json.loads(line)["state"] for line in journal.read_text().splitlines()] == [
         "KUBECTL_CREATE_INTENT_DO_NOT_RETRY",
+        "KUBERNETES_CREATE_RESPONSE_UIDS",
         "KUBECTL_CREATE_RESPONSE_UNCERTAIN_DO_NOT_RETRY",
     ]
 
@@ -510,6 +714,24 @@ def test_create_response_must_retain_database_dependency_contract(tmp_path, muta
 
     assert cluster.preview_calls == 2
     assert cluster.create_calls == 1
+
+
+def test_create_response_must_retain_c1_priority(tmp_path):
+    packet = _packet(tmp_path)
+    cluster, database = FakeCluster(), FakeDatabase()
+    cluster.priority_in_create = "system-cluster-critical"
+    journal = tmp_path / "intent.jsonl"
+
+    with pytest.raises(launch.HeldoutLaunchError, match="priority differs"):
+        _launch(packet, cluster, database, journal)
+
+    assert cluster.preview_calls == 2
+    assert cluster.create_calls == 1
+    assert [json.loads(line)["state"] for line in journal.read_text().splitlines()] == [
+        "KUBECTL_CREATE_INTENT_DO_NOT_RETRY",
+        "KUBERNETES_CREATE_RESPONSE_UIDS",
+        "KUBECTL_CREATE_RESPONSE_UNCERTAIN_DO_NOT_RETRY",
+    ]
 
 
 def test_existing_job_stops_before_server_preview_or_create(tmp_path):
@@ -753,6 +975,31 @@ def test_workload_binding_requires_the_created_job_uid_not_only_a_matching_name(
     assert not launch._workload_binds_created_job(workload, JOB_NAME, JOB_UID)  # noqa: SLF001
 
 
+def test_terminal_pod_requires_controller_reference_to_exact_job_uid(tmp_path):
+    package = launch.build_package(_packet(tmp_path))
+    cluster = FakeCluster()
+    cluster.inventories["pods"]["items"] = [
+        {
+            "metadata": {
+                "name": JOB_NAME + "-replacement",
+                "uid": POD_UID,
+                "labels": {"job-name": JOB_NAME},
+                "ownerReferences": [
+                    {
+                        "apiVersion": "batch/v1",
+                        "kind": "Job",
+                        "name": JOB_NAME,
+                        "uid": CONFIG_MAP_UID,
+                        "controller": True,
+                    }
+                ],
+            }
+        }
+    ]
+    with pytest.raises(launch.HeldoutLaunchError, match="exact Job UID"):
+        launch._owned_pods_for_job(cluster, package.packet, JOB_UID)  # noqa: SLF001
+
+
 def test_current_fresh75_selection_contract_remains_compatible():
     selection = json.loads(
         (ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json").read_text()
@@ -761,12 +1008,14 @@ def test_current_fresh75_selection_contract_remains_compatible():
     split_manifest = json.loads(split_path.read_text())
     packet = launch.LaunchPacket(
         path=ROOT / "synthetic-packet.json",
+        packet_sha256="sha256:" + "f" * 64,
         namespace=NAMESPACE,
         job_name=JOB_NAME,
         config_map_name=CONFIG_MAP_NAME,
         output_root=OUTPUT_ROOT,
         database=DATABASE,
         files={},
+        file_bytes={},
         file_sha256={"split_manifest": selection["split_manifest"]["file_sha256"]},
         identity={"split_manifest_sha256": selection["split_manifest"]["object_sha256"]},
         identity_sha256="sha256:" + "0" * 64,
@@ -817,11 +1066,96 @@ def test_successful_two_preview_gate_writes_intent_and_creates_once_at_most_once
     lines = [json.loads(line) for line in journal.read_text().splitlines()]
     assert [line["state"] for line in lines] == [
         "KUBECTL_CREATE_INTENT_DO_NOT_RETRY",
+        "KUBERNETES_CREATE_RESPONSE_UIDS",
         "KUBECTL_CREATE_RESPONSE",
     ]
     with pytest.raises(launch.HeldoutLaunchError, match="journal already exists"):
         _launch(packet, cluster, database, journal)
     assert cluster.create_calls == 1
+
+
+def test_prebuilt_package_is_the_exact_bundle_created_after_source_files_change(tmp_path):
+    packet = _packet(tmp_path)
+    package = launch.build_package(packet)
+    original_job = json.loads(json.dumps(package.job))
+    packet.unlink()
+    package.packet.files["job"].write_text("changed after validation\n", encoding="utf-8")
+    cluster, database = FakeCluster(), FakeDatabase()
+    launch.launch_package_once(
+        package,
+        cluster=cluster,
+        database=database,
+        journal=tmp_path / "intent.jsonl",
+        output_exists=lambda _: False,
+    )
+    created_job = next(item for item in cluster.created["items"] if item["kind"] == "Job")
+    assert package.job == original_job
+    assert launch._contains(created_job["spec"], original_job["spec"])  # noqa: SLF001
+
+
+def test_create_response_journal_append_failure_is_not_swallowed(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    packet = _packet(tmp_path)
+    cluster, database = FakeCluster(), FakeDatabase()
+    journal = tmp_path / "intent.jsonl"
+    real_open = launch.os.open
+
+    def fail_append(path, flags, *args):
+        if Path(path) == journal and flags & launch.os.O_APPEND:
+            raise OSError("injected append failure")
+        return real_open(path, flags, *args)
+
+    monkeypatch.setattr(launch.os, "open", fail_append)
+    with pytest.raises(launch.HeldoutLaunchError, match="durably append"):
+        _launch(packet, cluster, database, journal)
+    assert cluster.create_calls == 1
+
+
+def test_uid_append_failure_keeps_returned_uids_in_uncertain_record(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    packet = _packet(tmp_path)
+    cluster, database = FakeCluster(), FakeDatabase()
+    journal = tmp_path / "intent.jsonl"
+    real_open = launch.os.open
+    append_calls = 0
+
+    def fail_first_append(path, flags, *args):
+        nonlocal append_calls
+        if Path(path) == journal and flags & launch.os.O_APPEND:
+            append_calls += 1
+            if append_calls == 1:
+                raise OSError("injected first append failure")
+        return real_open(path, flags, *args)
+
+    monkeypatch.setattr(launch.os, "open", fail_first_append)
+    with pytest.raises(launch.HeldoutLaunchError, match="durably append"):
+        _launch(packet, cluster, database, journal)
+    lines = [json.loads(line) for line in journal.read_text().splitlines()]
+    assert lines[-1] == {
+        "state": "KUBECTL_CREATE_RESPONSE_UNCERTAIN_DO_NOT_RETRY",
+        "observed_exact_names": {"job": False, "config_map": False},
+        "returned_job_uid": JOB_UID,
+        "returned_config_map_uid": CONFIG_MAP_UID,
+    }
+
+
+def test_returned_uids_are_durable_before_later_response_validation(tmp_path):
+    packet = _packet(tmp_path)
+    _enable_rollout_database(packet)
+    cluster, database = FakeCluster(), FakeDatabase()
+    cluster.drop_postgres_contract_in_create = True
+    journal = tmp_path / "intent.jsonl"
+    with pytest.raises(launch.HeldoutLaunchError):
+        _launch(packet, cluster, database, journal)
+    lines = [json.loads(line) for line in journal.read_text().splitlines()]
+    assert lines[1] == {
+        "state": "KUBERNETES_CREATE_RESPONSE_UIDS",
+        "job_uid": JOB_UID,
+        "config_map_uid": CONFIG_MAP_UID,
+    }
+    assert lines[-1]["state"] == "KUBECTL_CREATE_RESPONSE_UNCERTAIN_DO_NOT_RETRY"
 
 
 def test_uncertain_create_is_observed_but_never_retried(tmp_path):
@@ -856,6 +1190,15 @@ def test_terminal_collection_is_score_blind_and_never_retries_or_scores(tmp_path
                 "name": JOB_NAME + "-abc",
                 "uid": POD_UID,
                 "labels": {"job-name": JOB_NAME},
+                "ownerReferences": [
+                    {
+                        "apiVersion": "batch/v1",
+                        "kind": "Job",
+                        "name": JOB_NAME,
+                        "uid": JOB_UID,
+                        "controller": True,
+                    }
+                ],
             },
             "status": {"phase": "Succeeded"},
         }

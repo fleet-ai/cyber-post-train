@@ -57,12 +57,14 @@ SOURCE_FILES = {
     "exact_pass4_universe.py": ROOT / "evals/fleet/exact_pass4_universe.py",
     "fixed_proxy.py": ROOT / "evals/fleet/fixed_proxy.py",
     "model_artifact.py": ROOT / "evals/fleet/model_artifact.py",
+    "model_artifact_v2.py": ROOT / "evals/fleet/model_artifact_v2.py",
+    "model_artifact_v3.py": ROOT / "evals/fleet/model_artifact_v3.py",
     "opencode_self_hosted.py": ROOT / "evals/fleet/opencode_self_hosted.py",
     "rollout_campaign.py": ROOT / "evals/fleet/rollout_campaign.py",
     "rollout_ledger.py": ROOT / "evals/fleet/rollout_ledger.py",
     "rollout_postgres.py": ROOT / "evals/fleet/rollout_postgres.py",
     "rollout_worker.py": ROOT / "evals/fleet/rollout_worker.py",
-    "run.sh": ROOT / "evals/fleet/scripts/run_qwen38_dev17_single_arm_v1.sh",
+    "run.sh": ROOT / "evals/fleet/scripts/run_qwen38_dev17_single_arm_v3.sh",
 }
 
 
@@ -442,7 +444,7 @@ def _live_parity(
     return value
 
 
-def _job(arm: dict[str, Any], config_name: str) -> dict[str, Any]:
+def _job(arm: dict[str, Any], config_name: str, task_set_name: str) -> dict[str, Any]:
     experiment = arm["job_name"]
     return {
         "apiVersion": "batch/v1",
@@ -529,6 +531,7 @@ def _job(arm: dict[str, Any], config_name: str) -> dict[str, Any]:
                                 {"name": "DOCKER_TLS_CERTDIR", "value": ""},
                                 {"name": "DOCKER_BIND_ROOT", "value": "/docker-bind"},
                                 {"name": "EVAL_CONFIG_NAME", "value": config_name},
+                                {"name": "EVAL_TASK_SET_NAME", "value": task_set_name},
                                 {"name": "EVAL_OUTPUT", "value": arm["output_root"]},
                                 {"name": "EVAL_DATABASE", "value": arm["database"]},
                                 {
@@ -628,6 +631,20 @@ def _prepare_arm(
             f"{arm_id} local SFS model requires a staged artifact binding before render"
         )
     actual_source_files = source_files or SOURCE_FILES
+    run_script = actual_source_files.get("run.sh")
+    if run_script is None:
+        raise ValueError(f"{arm_id} run script is not staged")
+    run_text = run_script.read_text(encoding="utf-8")
+    generated = {
+        "config.json",
+        "task-set.json",
+        "model-artifact.json",
+        "model-artifact-acceptance.json",
+    }
+    required_runtime = heldout_launch._bootstrap_dependencies(run_text) - generated  # noqa: SLF001
+    missing_runtime = required_runtime - set(actual_source_files)
+    if missing_runtime:
+        raise ValueError(f"{arm_id} runtime dependencies are not staged: {sorted(missing_runtime)}")
     if artifact_binding is not None:
         artifact = _read_json(checkpoint_path, f"{arm_id} model artifact packet")
         schema = artifact.get("schema")
@@ -638,8 +655,9 @@ def _prepare_arm(
             required.update({"model_artifact_v2.py", "model_artifact_v3.py"})
         elif schema != "cyber_fleet_eval_model_artifact_packet_v1":
             raise ValueError(f"{arm_id} model artifact packet schema is unsupported")
-        if not required.issubset(actual_source_files) or (
-            required and actual_source_files.get("run.sh") == SOURCE_FILES["run.sh"]
+        if (
+            not required.issubset(actual_source_files)
+            or "/bootstrap/model-artifact.json" not in run_text
         ):
             raise ValueError(f"{arm_id} artifact validator/runtime files are not staged")
     directory.mkdir(mode=0o700)
@@ -693,7 +711,14 @@ def _prepare_arm(
         "immutable": True,
         "data": data,
     }
-    job = _job(arm, config_name)
+    task_set_name = config.get("task_set")
+    if (
+        not isinstance(task_set_name, str)
+        or not task_set_name
+        or Path(task_set_name).name != task_set_name
+    ):
+        raise ValueError(f"{arm_id} evaluation config task set must be a basename")
+    job = _job(arm, config_name, task_set_name)
     files["config_map"].write_text(yaml.safe_dump(config_map, sort_keys=False), encoding="utf-8")
     files["job"].write_text(yaml.safe_dump(job, sort_keys=False), encoding="utf-8")
     file_digests = {

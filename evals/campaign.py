@@ -10,6 +10,7 @@ import os
 import re
 import subprocess
 import tempfile
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -80,12 +81,45 @@ def digest(value: object) -> str:
 
 
 def _write_once(path: Path, value: dict[str, Any]) -> None:
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(descriptor, "wb") as stream:
-        stream.write(canonical(value) + b"\n")
-        stream.flush()
-        os.fsync(stream.fileno())
+    missing: list[Path] = []
+    current = path.parent
+    while not current.exists():
+        if current.is_symlink():
+            raise CampaignError("invalid_campaign_state_directory")
+        missing.append(current)
+        current = current.parent
+    if current.is_symlink() or not current.is_dir():
+        raise CampaignError("invalid_campaign_state_directory")
+    for directory in reversed(missing):
+        try:
+            os.mkdir(directory, 0o700)
+        except FileExistsError:
+            if directory.is_symlink() or not directory.is_dir():
+                raise CampaignError("invalid_campaign_state_directory") from None
+        parent = os.open(directory.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(parent)
+        finally:
+            os.close(parent)
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+    )
+    temporary = Path(temporary_name)
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(canonical(value) + b"\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.link(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        with suppress(FileNotFoundError):
+            os.unlink(temporary)
 
 
 def _read(path: Path) -> dict[str, Any]:
@@ -685,7 +719,7 @@ def _run_driver(
     invoke(action)
 
 
-def step(state: Path, *, execute: bool = False) -> dict[str, Any]:
+def step(state: Path, *, execute: bool = False, fail_fast: bool = False) -> dict[str, Any]:
     """Advance every independent target once; one failure never stops siblings."""
     plan = load_plan(state)
     registry = Path(plan["registry_path"])
@@ -698,7 +732,15 @@ def step(state: Path, *, execute: bool = False) -> dict[str, Any]:
     )
     launch_limit = 1 if canary_hold else plan["scheduler"]["max_launches_per_step"]
     for target in plan["targets"]:
-        _state, next_action = _target_status(state, target)
+        target_state, next_action = _target_status(state, target)
+        if fail_fast and target_state.endswith("_launch_uncertain"):
+            errors.append(
+                {
+                    "experiment_key": target["experiment_key"],
+                    "error": "CampaignLaunchUncertain",
+                }
+            )
+            break
         if next_action == "none":
             continue
         phase, action = next_action.split("_", 1)
@@ -715,6 +757,8 @@ def step(state: Path, *, execute: bool = False) -> dict[str, Any]:
                     launches += 1
         except Exception as exc:
             errors.append({"experiment_key": target["experiment_key"], "error": type(exc).__name__})
+            if fail_fast:
+                break
     return {"advanced": advanced, "errors": errors, **status(state)}
 
 
@@ -730,6 +774,7 @@ def main(argv: list[str] | None = None) -> None:
     step_parser = subparsers.add_parser("step")
     step_parser.add_argument("directory", type=Path)
     step_parser.add_argument("--execute", action="store_true")
+    step_parser.add_argument("--fail-fast", action="store_true")
     record_parser = subparsers.add_parser("record")
     record_parser.add_argument("directory", type=Path)
     record_parser.add_argument("--experiment-key", required=True)
@@ -742,7 +787,7 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "status":
         result = status(args.directory)
     elif args.command == "step":
-        result = step(args.directory, execute=args.execute)
+        result = step(args.directory, execute=args.execute, fail_fast=args.fail_fast)
     else:
         result = record(
             args.directory,

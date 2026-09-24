@@ -49,6 +49,7 @@ DATABASE_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,62}")
 KUBERNETES_UID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 ENV_PREFIX = re.compile(r"(?:[A-Za-z_][A-Za-z0-9_]*)?")
+CANONICAL_RUN_SCRIPT = Path(__file__).parent / "scripts/run_qwen38_dev17_single_arm_v3.sh"
 SUPPORTED_SPLIT_SCHEMAS = {
     "cyber_representative_study_split_v2",
     "cyber_parameterized_task_family_split_v1",
@@ -132,16 +133,28 @@ class Database(Protocol):
 
     def summary(self, database: str) -> dict[str, Any]: ...
 
+    def cell_status(
+        self,
+        database: str,
+        *,
+        task_version_id: str,
+        model_id: str,
+        model_revision: str,
+        attempt: int,
+    ) -> dict[str, Any]: ...
+
 
 @dataclass(frozen=True)
 class LaunchPacket:
     path: Path
+    packet_sha256: str
     namespace: str
     job_name: str
     config_map_name: str
     output_root: str
     database: str
     files: dict[str, Path]
+    file_bytes: dict[str, bytes]
     file_sha256: dict[str, str]
     identity: dict[str, Any]
     identity_sha256: str
@@ -181,27 +194,23 @@ def _canonical_digest(value: Any) -> str:
     return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
-def _file_sha256(path: Path) -> str:
-    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def _require_mapping(value: Any, label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise HeldoutLaunchError(f"{label} must be a mapping")
     return value
 
 
-def _load_json(path: Path, label: str) -> dict[str, Any]:
+def _load_json_bytes(raw: bytes, label: str) -> dict[str, Any]:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        value = json.loads(raw)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise HeldoutLaunchError(f"{label} is not readable JSON") from exc
     return _require_mapping(value, label)
 
 
-def _load_manifest(path: Path, label: str) -> dict[str, Any]:
+def _load_manifest_bytes(raw: bytes, label: str) -> dict[str, Any]:
     try:
-        value = yaml.safe_load(path.read_text(encoding="utf-8"))
+        value = yaml.safe_load(raw)
     except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
         raise HeldoutLaunchError(f"{label} is not readable YAML") from exc
     return _require_mapping(value, label)
@@ -252,11 +261,14 @@ def _validate_output_root(value: Any) -> str:
     return value
 
 
-def _packet_file_entries(value: Any, root: Path) -> tuple[dict[str, Path], dict[str, str]]:
+def _packet_file_entries(
+    value: Any, root: Path
+) -> tuple[dict[str, Path], dict[str, bytes], dict[str, str]]:
     entries = _require_mapping(value, "packet files")
     if set(entries) != ALL_FILES:
         raise HeldoutLaunchError("launch packet file set is incomplete or has unknown entries")
     paths: dict[str, Path] = {}
+    contents: dict[str, bytes] = {}
     digests: dict[str, str] = {}
     for name in sorted(ALL_FILES):
         entry = _require_mapping(entries[name], f"packet file {name}")
@@ -265,12 +277,16 @@ def _packet_file_entries(value: Any, root: Path) -> tuple[dict[str, Path], dict[
             raise HeldoutLaunchError(f"packet file {name} fields are invalid")
         path = _safe_packet_file(root, entry["path"], name)
         paths[name] = path
+        try:
+            contents[name] = path.read_bytes()
+        except OSError as exc:
+            raise HeldoutLaunchError(f"packet file {name} is not readable") from exc
         if name in SEALED_FILES:
             digest = _require_digest(entry["sha256"], f"packet file {name}")
-            if _file_sha256(path) != digest:
+            if "sha256:" + hashlib.sha256(contents[name]).hexdigest() != digest:
                 raise HeldoutLaunchError(f"packet file {name} bytes differ from its digest")
             digests[name] = digest
-    return paths, digests
+    return paths, contents, digests
 
 
 def _validate_identity(identity: Any, packet: LaunchPacket) -> None:
@@ -335,7 +351,12 @@ def load_packet(path: Path) -> LaunchPacket:
     if path.is_symlink() or not path.is_file():
         raise HeldoutLaunchError("launch packet must be a regular file")
     packet_path = path.resolve()
-    raw = _load_json(packet_path, "launch packet")
+    try:
+        packet_bytes = packet_path.read_bytes()
+        raw_value = json.loads(packet_bytes)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HeldoutLaunchError("launch packet is not readable JSON") from exc
+    raw = _require_mapping(raw_value, "launch packet")
     expected = {
         "schema",
         "namespace",
@@ -357,7 +378,7 @@ def load_packet(path: Path) -> LaunchPacket:
     if not isinstance(database, str) or DATABASE_NAME.fullmatch(database) is None:
         raise HeldoutLaunchError("database name is invalid")
     output_root = _validate_output_root(raw["output_root"])
-    files, file_sha256 = _packet_file_entries(raw["files"], packet_path.parent)
+    files, file_bytes, file_sha256 = _packet_file_entries(raw["files"], packet_path.parent)
     identity = _require_mapping(raw["evaluation_identity"], "evaluation_identity")
     identity_sha256 = _require_digest(
         raw["evaluation_identity_sha256"], "evaluation_identity_sha256"
@@ -366,12 +387,14 @@ def load_packet(path: Path) -> LaunchPacket:
         raise HeldoutLaunchError("evaluation identity digest differs from packet")
     packet = LaunchPacket(
         path=packet_path,
+        packet_sha256="sha256:" + hashlib.sha256(packet_bytes).hexdigest(),
         namespace=NAMESPACE,
         job_name=job_name,
         config_map_name=config_map_name,
         output_root=output_root,
         database=database,
         files=files,
+        file_bytes=file_bytes,
         file_sha256=file_sha256,
         identity=identity,
         identity_sha256=identity_sha256,
@@ -398,6 +421,14 @@ def _container_environment(container: dict[str, Any]) -> dict[str, str]:
         else:
             result[name] = "<valueFrom>"
     return result
+
+
+def _bootstrap_dependencies(script: str) -> set[str]:
+    dependencies = set(re.findall(r"/bootstrap/([A-Za-z0-9][A-Za-z0-9_.-]*)", script))
+    if '"/bootstrap/$name"' in script:
+        for block in re.findall(r"for\s+name\s+in\s+(.*?);\s*do", script, flags=re.DOTALL):
+            dependencies.update(re.findall(r"\b[A-Za-z0-9_.-]+\.py\b", block))
+    return dependencies
 
 
 def _metadata(value: dict[str, Any], label: str) -> dict[str, Any]:
@@ -710,11 +741,13 @@ def _validate_comparison_protocol(
 def build_package(packet_path: Path) -> Package:
     """Open and cross-bind all packet bytes before live duplicate checks."""
     packet = load_packet(packet_path)
-    config = _load_json(packet.files["evaluation_config"], "evaluation config")
-    task_selection = _load_json(packet.files["task_set"], "task selection")
-    split_manifest = _load_json(packet.files["split_manifest"], "representative split manifest")
-    comparison_protocol = _load_json(
-        packet.files["comparison_protocol"], "matched comparison protocol"
+    config = _load_json_bytes(packet.file_bytes["evaluation_config"], "evaluation config")
+    task_selection = _load_json_bytes(packet.file_bytes["task_set"], "task selection")
+    split_manifest = _load_json_bytes(
+        packet.file_bytes["split_manifest"], "representative split manifest"
+    )
+    comparison_protocol = _load_json_bytes(
+        packet.file_bytes["comparison_protocol"], "matched comparison protocol"
     )
     split_index = _split_index(split_manifest, packet.identity["split_manifest_sha256"])
     _selection_role, selected_tasks = _selection_index(
@@ -723,8 +756,8 @@ def build_package(packet_path: Path) -> Package:
         packet=packet,
     )
     _validate_comparison_protocol(comparison_protocol, packet=packet, config=config)
-    config_map = _load_manifest(packet.files["config_map"], "ConfigMap manifest")
-    job = _load_manifest(packet.files["job"], "Job manifest")
+    config_map = _load_manifest_bytes(packet.file_bytes["config_map"], "ConfigMap manifest")
+    job = _load_manifest_bytes(packet.file_bytes["job"], "Job manifest")
     if config_map.get("apiVersion") != "v1" or config_map.get("kind") != "ConfigMap":
         raise HeldoutLaunchError("packet ConfigMap manifest is invalid")
     if job.get("apiVersion") != "batch/v1" or job.get("kind") != "Job":
@@ -798,7 +831,24 @@ def build_package(packet_path: Path) -> Package:
     if config.get("training_data_eligible") is not False:
         raise HeldoutLaunchError("held-out evaluator config must be training-data ineligible")
     task_set = config.get("task_set")
-    if not isinstance(task_set, str) or not task_set:
+    run_script = data.get("run.sh")
+    optional_artifacts = {"model-artifact.json", "model-artifact-acceptance.json"}
+    dependencies = _bootstrap_dependencies(run_script) if isinstance(run_script, str) else set()
+    required_dependencies = dependencies - optional_artifacts
+    artifact_dependencies = optional_artifacts & set(data)
+    if (
+        not isinstance(task_set, str)
+        or not task_set
+        or Path(task_set).name != task_set
+        or environment.get("EVAL_TASK_SET_NAME") != task_set
+        or not isinstance(data.get("task-set.json"), str)
+        or data["task-set.json"].encode("utf-8") != packet.file_bytes["task_set"]
+        or not isinstance(run_script, str)
+        or run_script != CANONICAL_RUN_SCRIPT.read_text(encoding="utf-8")
+        or '"$root/configs/evaluation/$EVAL_TASK_SET_NAME"' not in run_script
+        or not required_dependencies.issubset(data)
+        or artifact_dependencies not in (set(), optional_artifacts)
+    ):
         raise HeldoutLaunchError("evaluation config task set is invalid")
     configured_task_set = (packet.files["evaluation_config"].parent / task_set).resolve()
     if configured_task_set != packet.files["task_set"]:
@@ -1021,6 +1071,26 @@ def _workload_binds_created_job(item: dict[str, Any], job_name: str, job_uid: st
     return False
 
 
+def _pod_binds_created_job(item: dict[str, Any], job_name: str, job_uid: str) -> bool:
+    """Require the terminal Pod's controller reference to bind the exact Job UID."""
+    metadata = _metadata(item, "Pod")
+    owners = metadata.get("ownerReferences")
+    if not isinstance(owners, list):
+        return False
+    for owner in owners:
+        if not isinstance(owner, dict):
+            raise HeldoutLaunchError("Pod owner reference is invalid")
+        if (
+            owner.get("apiVersion") == "batch/v1"
+            and owner.get("kind") == "Job"
+            and owner.get("name") == job_name
+            and owner.get("uid") == job_uid
+            and owner.get("controller") is True
+        ):
+            return True
+    return False
+
+
 def _scoped_items(
     cluster: Cluster,
     resource: str,
@@ -1082,6 +1152,15 @@ def _owned_pods(cluster: Cluster, packet: LaunchPacket) -> list[dict[str, Any]]:
     )
     if any(not _owner_matches(item, packet.job_name) for item in pods):
         raise HeldoutLaunchError("scoped Pod read returned an object not owned by the Job")
+    return pods
+
+
+def _owned_pods_for_job(
+    cluster: Cluster, packet: LaunchPacket, job_uid: str
+) -> list[dict[str, Any]]:
+    pods = _owned_pods(cluster, packet)
+    if any(not _pod_binds_created_job(item, packet.job_name, job_uid) for item in pods):
+        raise HeldoutLaunchError("scoped Pod read is not controlled by the exact Job UID")
     return pods
 
 
@@ -1170,7 +1249,7 @@ def duplicate_census(
         raise HeldoutLaunchError(
             "held-out evaluator database already exists; reconcile, never replay"
         )
-    ledger = _load_json(packet.files["evaluation_ledger"], "evaluation ledger")
+    ledger = _load_json_bytes(packet.file_bytes["evaluation_ledger"], "evaluation ledger")
     if _ledger_contains_identity(ledger, packet.identity_sha256):
         raise HeldoutLaunchError("evaluation ledger already contains this complete identity")
     return {
@@ -1294,6 +1373,19 @@ def _validate_server_preview(response: dict[str, Any], package: Package) -> str:
     return _canonical_digest({"job": stable_job, "config_map": stable_config_map})
 
 
+def preview_package(package: Package, *, cluster: Cluster) -> str:
+    """Return one stable digest after two identical server-side dry-runs."""
+    first = _validate_server_preview(
+        cluster.server_dry_run(package.packet.namespace, package.bundle), package
+    )
+    second = _validate_server_preview(
+        cluster.server_dry_run(package.packet.namespace, package.bundle), package
+    )
+    if first != second:
+        raise HeldoutLaunchError("server dry-run changed across identical previews")
+    return first
+
+
 def _write_new_record(path: Path, value: dict[str, Any]) -> None:
     if path.is_symlink() or path.exists():
         raise HeldoutLaunchError("create journal already exists; reconcile, never retry")
@@ -1324,8 +1416,8 @@ def _append_record(path: Path, value: dict[str, Any]) -> None:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n"
     try:
         descriptor = os.open(path, os.O_WRONLY | os.O_APPEND)
-    except OSError:
-        return
+    except OSError as exc:
+        raise HeldoutLaunchError("could not durably append create evidence") from exc
     with os.fdopen(descriptor, "a", encoding="utf-8") as handle:
         handle.write(encoded)
         handle.flush()
@@ -1353,40 +1445,32 @@ def _created_name_observation(cluster: Cluster, packet: LaunchPacket) -> dict[st
     return observed
 
 
-def launch_once(
-    packet_path: Path,
+def launch_package_once(
+    package: Package,
     *,
     cluster: Cluster,
     database: Database,
     journal: Path,
     output_exists: Callable[[str], bool] = _output_exists,
 ) -> dict[str, Any]:
-    """Preview and create exactly one immutable CPU evaluator bundle.
+    """Preview and create one already validated immutable CPU evaluator bundle.
 
     This function has one mutation boundary: ``cluster.create_once``.  It is
     deliberately never retried, including when its response is uncertain.
     """
     if journal.exists() or journal.is_symlink():
         raise HeldoutLaunchError("create journal already exists; reconcile, never retry")
-    package = build_package(packet_path)
     first_census = duplicate_census(
         package, cluster=cluster, database=database, output_exists=output_exists
     )
-    first_preview = _validate_server_preview(
-        cluster.server_dry_run(package.packet.namespace, package.bundle), package
-    )
-    second_preview = _validate_server_preview(
-        cluster.server_dry_run(package.packet.namespace, package.bundle), package
-    )
-    if first_preview != second_preview:
-        raise HeldoutLaunchError("server dry-run changed across identical previews")
+    first_preview = preview_package(package, cluster=cluster)
     final_census = duplicate_census(
         package, cluster=cluster, database=database, output_exists=output_exists
     )
     intent = {
         "schema": "cyber_fleet_heldout_create_intent_v1",
         "state": "KUBECTL_CREATE_INTENT_DO_NOT_RETRY",
-        "packet_sha256": _file_sha256(package.packet.path),
+        "packet_sha256": package.packet.packet_sha256,
         "evaluation_identity_sha256": package.packet.identity_sha256,
         "comparison_protocol_sha256": package.packet.identity["comparison_protocol_sha256"],
         "protocol_id": package.packet.identity["protocol_id"],
@@ -1401,6 +1485,8 @@ def launch_once(
         "final_duplicate_census": final_census,
     }
     _write_new_record(journal, intent)
+    uid: str | None = None
+    config_map_uid: str | None = None
     try:
         created = cluster.create_once(package.packet.namespace, package.bundle)
         job = _response_object(
@@ -1419,6 +1505,23 @@ def launch_once(
             name=package.packet.config_map_name,
             label="create response",
         )
+        uid = _metadata(job, "created Job").get("uid")
+        config_map_uid = _metadata(config_map, "created ConfigMap").get("uid")
+        if (
+            not isinstance(uid, str)
+            or KUBERNETES_UID.fullmatch(uid) is None
+            or not isinstance(config_map_uid, str)
+            or KUBERNETES_UID.fullmatch(config_map_uid) is None
+        ):
+            raise HeldoutLaunchError("create response lacks exact Job or ConfigMap UID")
+        _append_record(
+            journal,
+            {
+                "state": "KUBERNETES_CREATE_RESPONSE_UIDS",
+                "job_uid": uid,
+                "config_map_uid": config_map_uid,
+            },
+        )
         expected_reads_postgres = require_postgres_client_label(
             package.job, label="sealed packet Job"
         )
@@ -1428,31 +1531,36 @@ def launch_once(
                 "created Job changed the rollout PostgreSQL dependency contract"
             )
         annotations = _metadata(job, "created Job").get("annotations")
-        uid = _metadata(job, "created Job").get("uid")
-        config_map_uid = _metadata(config_map, "created ConfigMap").get("uid")
         if (
             not isinstance(annotations, dict)
             or annotations.get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
-            or not isinstance(uid, str)
-            or KUBERNETES_UID.fullmatch(uid) is None
-            or not isinstance(config_map_uid, str)
-            or KUBERNETES_UID.fullmatch(config_map_uid) is None
         ):
-            raise HeldoutLaunchError("create response lacks exact root alert annotation or UID")
+            raise HeldoutLaunchError("create response lacks exact root alert annotation")
         created_spec = job.get("spec")
         created_template = created_spec.get("template") if isinstance(created_spec, dict) else None
         created_pod = created_template.get("spec") if isinstance(created_template, dict) else None
         if not isinstance(created_pod, dict):
             raise HeldoutLaunchError("created Job Pod template is invalid")
+        if created_pod.get("priorityClassName") != "c1":
+            raise HeldoutLaunchError("created Job priority differs from sealed c1 policy")
         _assert_cpu_only(created_pod)
     except Exception as exc:
         observed = _created_name_observation(cluster, package.packet)
+        uncertain = {
+            "state": "KUBECTL_CREATE_RESPONSE_UNCERTAIN_DO_NOT_RETRY",
+            "observed_exact_names": observed,
+        }
+        if (
+            isinstance(uid, str)
+            and KUBERNETES_UID.fullmatch(uid) is not None
+            and isinstance(config_map_uid, str)
+            and KUBERNETES_UID.fullmatch(config_map_uid) is not None
+        ):
+            uncertain["returned_job_uid"] = uid
+            uncertain["returned_config_map_uid"] = config_map_uid
         _append_record(
             journal,
-            {
-                "state": "KUBECTL_CREATE_RESPONSE_UNCERTAIN_DO_NOT_RETRY",
-                "observed_exact_names": observed,
-            },
+            uncertain,
         )
         if isinstance(exc, HeldoutLaunchError):
             raise
@@ -1471,6 +1579,24 @@ def launch_once(
     }
     _append_record(journal, {"state": "KUBECTL_CREATE_RESPONSE", **result})
     return result
+
+
+def launch_once(
+    packet_path: Path,
+    *,
+    cluster: Cluster,
+    database: Database,
+    journal: Path,
+    output_exists: Callable[[str], bool] = _output_exists,
+) -> dict[str, Any]:
+    """Build once, then use the in-memory package through the sole create boundary."""
+    return launch_package_once(
+        build_package(packet_path),
+        cluster=cluster,
+        database=database,
+        journal=journal,
+        output_exists=output_exists,
+    )
 
 
 def _terminal_condition(job: dict[str, Any]) -> str:
@@ -1677,7 +1803,7 @@ def collect_terminal(
         for item in workloads
     ):
         raise HeldoutLaunchError("scoped Workload read differs from the created Job")
-    pods = _owned_pods(cluster, packet)
+    pods = _owned_pods_for_job(cluster, packet, job_uid)
     try:
         database_exists = database.exists(packet.database)
         if database_exists:
@@ -1886,37 +2012,63 @@ class PostgresDatabase:
         except Exception:
             raise HeldoutLaunchError("database duplicate check failed") from None
 
+    def _database_dsn(self, database: str) -> str:
+        if not isinstance(database, str) or DATABASE_NAME.fullmatch(database) is None:
+            raise HeldoutLaunchError("database name is invalid")
+        original = urlsplit(self._dsn())
+        if (
+            original.scheme not in {"postgres", "postgresql"}
+            or not original.netloc
+            or original.fragment
+        ):
+            raise HeldoutLaunchError("database environment is not a supported PostgreSQL URI")
+        if {key.casefold() for key, _ in parse_qsl(original.query, keep_blank_values=True)} & {
+            "database",
+            "dbname",
+        }:
+            raise HeldoutLaunchError(
+                "database environment must select its database only by URI path"
+            )
+        return urlunsplit(
+            (
+                original.scheme,
+                original.netloc,
+                "/" + quote(database, safe=""),
+                original.query,
+                "",
+            )
+        )
+
     def summary(self, database: str) -> dict[str, Any]:
         try:
             from evals.fleet import rollout_postgres
 
-            if not isinstance(database, str) or DATABASE_NAME.fullmatch(database) is None:
-                raise HeldoutLaunchError("database name is invalid")
-            original = urlsplit(self._dsn())
-            if (
-                original.scheme not in {"postgres", "postgresql"}
-                or not original.netloc
-                or original.fragment
-            ):
-                raise HeldoutLaunchError("database environment is not a supported PostgreSQL URI")
-            query_keys = {
-                key.casefold() for key, _ in parse_qsl(original.query, keep_blank_values=True)
-            }
-            if query_keys & {"database", "dbname"}:
-                raise HeldoutLaunchError(
-                    "database environment must select its database only by URI path"
-                )
-            dsn = urlunsplit(
-                (
-                    original.scheme,
-                    original.netloc,
-                    "/" + quote(database, safe=""),
-                    original.query,
-                    "",
-                )
-            )
-            return rollout_postgres.summary(dsn)
+            return rollout_postgres.summary(self._database_dsn(database))
         except HeldoutLaunchError:
             raise
         except Exception:
             raise HeldoutLaunchError("score-blind database summary failed") from None
+
+    def cell_status(
+        self,
+        database: str,
+        *,
+        task_version_id: str,
+        model_id: str,
+        model_revision: str,
+        attempt: int,
+    ) -> dict[str, Any]:
+        try:
+            from evals.fleet import rollout_postgres
+
+            return rollout_postgres.cell_status(
+                self._database_dsn(database),
+                task_version_id=task_version_id,
+                model_id=model_id,
+                model_revision=model_revision,
+                attempt=attempt,
+            )
+        except HeldoutLaunchError:
+            raise
+        except Exception:
+            raise HeldoutLaunchError("score-blind cell status failed") from None

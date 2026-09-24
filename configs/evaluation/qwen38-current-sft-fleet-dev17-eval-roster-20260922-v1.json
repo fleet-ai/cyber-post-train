@@ -26,8 +26,8 @@
   },
   "frozen_comparison": {
     "protocol_path": "configs/evaluation/qwen38-fleet-dev17-seed43-matched-protocol-v1.json",
-    "protocol_file_sha256": "sha256:12ff102e82a848d760587ef0af4848e7b288ca4f5e0acfe248cd60dfe0dd17aa",
-    "protocol_sha256": "sha256:85334a48a36c126a1134ab2e0ba6211e2fce5de06c4fce6bbcef5304ab9b4f4a",
+    "protocol_file_sha256": "sha256:c1dbc4cec68f9747e3f57374cbbd01b90c2339562f39c292b8e981cd8d429d55",
+    "protocol_sha256": "sha256:b11b6c21fdd69516e0d3312b8ba3995447251aa6c370b03a738106589179a33f",
     "task_set_path": "configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json",
     "task_set_file_sha256": "sha256:79c834e739246da29aca9513965ecfc7032f8df7744eb2245ce0303aba1b97c5",
     "selection_sha256": "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
@@ -352,5 +352,5 @@
     "evaluation_sessions_created": 0,
     "webapp_writes": 0
   },
-  "sha256": "4ea5fbe53e29f1979f4fa395b04bb81137775cb00b2546272be3226b3c20cf22"
+  "sha256": "65bce79bfda9b4841fa7b7f2779ed66c412eb04f00c4aa9f22730df77c908792"
 }

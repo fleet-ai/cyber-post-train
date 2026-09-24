@@ -189,7 +189,7 @@
     "comparison_mode": "reuse_accepted_base_only_if_candidate_parity_proves_exact_match",
     "concurrency_per_arm": 8,
     "fallback_rule": "If candidate export, staged payload, serving, exact binding roster, or live parity cannot be proven identical outside the allowed checkpoint fields, do not reuse the historical control; freeze a new matched base and candidate pair.",
-    "file_sha256": "sha256:12ff102e82a848d760587ef0af4848e7b288ca4f5e0acfe248cd60dfe0dd17aa",
+    "file_sha256": "sha256:c1dbc4cec68f9747e3f57374cbbd01b90c2339562f39c292b8e981cd8d429d55",
     "images": {
       "agent": "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92",
       "proxy": "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
@@ -230,7 +230,7 @@
       "task_set_file_sha256": "sha256:79c834e739246da29aca9513965ecfc7032f8df7744eb2245ce0303aba1b97c5",
       "task_set_path": "configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json"
     },
-    "sha256": "sha256:85334a48a36c126a1134ab2e0ba6211e2fce5de06c4fce6bbcef5304ab9b4f4a",
+    "sha256": "sha256:b11b6c21fdd69516e0d3312b8ba3995447251aa6c370b03a738106589179a33f",
     "training_data_eligible": false,
     "treatment": {
       "compaction_headroom_tokens": 20000,
@@ -503,6 +503,6 @@
     "intended_intervention": "model_weights_only",
     "question": "How does the exact Teacher3K 32K step-700 checkpoint change the immutable Fleet dev17 seed-43 pass@1 result relative to the accepted Qwen3.8 base control when task, runtime seed, verifier, harness, sampling, retry treatment, and serving contract are unchanged?"
   },
-  "sha256": "1f3129b2c23c675202c5ff876bc755c2281e98f98b9ab7acb836ee99f63b2fec",
+  "sha256": "4f4c71f5e480c47d65cec4fe1e7ce67b7e2d9406053fc5de7b931b639d10ba13",
   "status": "blocked_not_launchable"
 }

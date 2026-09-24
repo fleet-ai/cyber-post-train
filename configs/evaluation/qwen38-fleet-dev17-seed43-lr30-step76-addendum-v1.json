@@ -47,7 +47,7 @@
   "evaluation": {
     "config": "configs/evaluation/qwen38-lr30-step76-fleet-dev17-opencode-seed43-pass1-v1.json",
     "config_file_sha256": "sha256:5d394e534d94200d4941984d3e45a8aaafc180cb5814fd3751bdaa1ad567cd26",
-    "evaluation_plan_sha256": "sha256:cddb3c2d03b24914e21101cdf66de720423d5332fcbe92ae04d69b4a98a2af0c",
+    "evaluation_plan_sha256": "sha256:404bc227e01d0b659b46b2d9b58fdd0ade4564c6d28be4c6b8c34fdf6addf3b4",
     "job_manifest": "evals/fleet/cluster/qwen38-lr30-step76-dev17-opencode-seed43-pass1-v1-job.yaml",
     "job_name": "chris-q38-dev17-s43-lr30s76-p1-v1",
     "config_map_name": "chris-q38-dev17-s43-lr30s76-code-v1",
@@ -66,5 +66,5 @@
     "evaluator_memory_request": "32Gi",
     "uncertain_create_must_not_be_replayed": true
   },
-  "sha256": "415eafabd2663dc8b97c0dfc5016d41522ccdc7c9a143b32a8fc0c33960899e6"
+  "sha256": "5dcc96baae0aec41557b5dc567ac13c299f3063aa96b32f051709a70bd2f627b"
 }

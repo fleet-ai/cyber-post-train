@@ -5,18 +5,32 @@ does not grant permission to launch a job. It applies only after the exact
 campaign owner has reviewed the private evidence and approved the specific
 create-once action.
 
-The central rule is simple: **never generate a second model trajectory when a
-stored trajectory already exists.** Repeating generation after seeing which
-cells had infrastructure trouble can bias a comparison, even if nobody reads a
-score.
+The central rule for one frozen cell is simple: **never overwrite or retry its
+model trajectory when a stored trajectory already exists.** Repeating the same
+cell after seeing which cells had infrastructure trouble can bias a comparison,
+even if nobody reads a score.
+
+## Outcome-validity correction (2026-09-24)
+
+Stored-session reconciliation preserves what happened; it does not turn an
+invalid lifecycle into a capability outcome. Under the current scientific
+protocol, only exit zero plus a normal OpenCode completion may enter a pass@k
+denominator. An `output_limit` or `process_error` attempt remains held even when
+its session was stored and scored. Legacy reconcilers may preserve such a row
+as database evidence, but every maintained aggregate must reject its lifecycle.
+
+To finish a matched pass@k study, keep the original held row and use a new,
+predeclared replacement seed for the same task in **both** arms. Freeze that
+paired replacement before execution and without reading either score. This is
+a new comparison cell, not a retry or overwrite of the original cell.
 
 ## Find the rule by symptom
 
 | Sanitized symptom | Safe path |
 | --- | --- |
-| `output_limit` with a stored session | Reconcile its existing score or run one scoring-only recovery; never regenerate. |
-| `process_error` with a stored session | Reconcile its existing score or run one scoring-only recovery; never regenerate. |
-| `output_limit` or `process_error` without a completed stored session | Manual terminal review; never regenerate. |
+| `output_limit` with a stored session | Preserve or reconcile the existing record only; keep it held outside capability metrics. |
+| `process_error` with a stored session | Preserve or reconcile the existing record only; keep it infrastructure-invalid outside capability metrics. |
+| `output_limit` or `process_error` without a completed stored session | Preserve the terminal evidence and keep the cell held. |
 | `post_claim.connecterror` with no generation artifact anywhere | One rollout retry after exact absence proof. |
 | `post_claim.operationalerror` with no generation artifact anywhere | One rollout retry after exact absence proof. |
 | `post_claim.fleetrequesterror` with an exact source-bound provisioning `POST`/`504`, the complete pre-model file set, and no local or authoritative session | One private-roster rollout retry after two identical observations; this does not make the failure-code class generally retryable. |
@@ -37,9 +51,10 @@ score.
    manifest, and scoring-intent record. Run at most one retry with the exact
    original task, model, harness, seed, budgets, and route.
 
-An output limit or agent-process error never authorizes another rollout. Use the
-stored session path if its immutable session exists; otherwise leave the cell
-in manual terminal review.
+An output limit or agent-process error never authorizes a retry of that same
+cell. Use the stored session path only to preserve its immutable evidence;
+otherwise leave the cell in manual terminal review. A complete matched study
+may use the separately predeclared, score-blind paired replacement rule above.
 
 The failure-code prefix is not authoritative evidence of how far execution
 progressed. In particular, a row recorded as
@@ -133,9 +148,10 @@ This fence does not approve a retry, authorize a launch, or replace the private
 review and apply receipts. It prevents a reviewed worker from silently acting
 on database state that no longer matches those frozen receipts.
 
-The comparison is usable only when each complete arm independently reaches
-17 accepted cells. Never splice cells from an older campaign or a different
-arm. The final eight tasks remain sealed.
+The comparison is usable only when every task has the predeclared number of
+paired, normally completed outcomes in both arms. A database `accepted` state
+is insufficient by itself. Never splice cells from an older campaign or a
+different arm. The final eight tasks remain sealed.
 
 ## When the controller dies after the session was stored
 
@@ -242,10 +258,16 @@ publish the complete private directory with one atomic no-replace rename. A
 validation failure must leave the final path absent. Preserve an older partial
 root as incident evidence; never delete it, overwrite it, or reuse its identity.
 
-## Seed-44 Base narrow repair
+## Seed-44 Base narrow repair (historical; not capability-valid)
 
-The seed-44 Base controller left one partial but scientifically usable arm: ten
-accepted cells, five `output_limit` cells with completed stored and
+The procedure below records the historical repair design. Its five
+`output_limit` sessions may be preserved, but they cannot satisfy the current
+pass@k outcome-validity gate. Do not use this repair to claim a complete
+capability comparison; use a predeclared paired replacement design instead.
+
+The seed-44 Base controller left one operationally recoverable but
+scientifically incomplete arm: ten accepted cells, five `output_limit` cells
+with completed stored and
 authoritatively scored sessions, and two cells whose exact source attempt ended
 at the provisioning `POST` with HTTP 504 before any session, trace, or scoring
 artifact existed. Preserve the ten accepted cells. Atomically accept the five
@@ -272,8 +294,8 @@ Docker-in-Docker data directory, so it must verify the
 exact harness archive and build-receipt digests, load that archive, and pull the
 immutable proxy image before running the normal image preflight or claiming a
 cell. A node-level Docker cache cannot satisfy this gate.
-The comparison becomes complete
-only after the immutable lineage receipt proves exactly 17 accepted cells:
-original ten, reconciled five, and generation-2 rerolls for the two proven
-pre-session failures. Never infer object absence until the live command has
-asserted the expected Kubernetes context and namespace.
+The legacy database repair would reach 17 accepted rows: original ten,
+reconciled five, and generation-2 rerolls for two proven pre-session failures.
+That database state is not a scientifically complete comparison because the
+five reconciled output-limit rows are held. Never infer object absence until
+the live command has asserted the expected Kubernetes context and namespace.

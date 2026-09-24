@@ -19,7 +19,10 @@ task/runtime/verifier bindings, ready inference routes and staged Linux/amd64
 Docker images, including the release label and actual OpenCode version. The
 execution host checks its images again before claims. Its offline startup check
 uses the actual controller UID, an explicitly set HOME and a private mounted
-directory; `--version` alone misses startup permission errors. Build the agent with
+directory. It starts the pinned binary once and directly creates and removes a
+private probe file in every OpenCode state/config/cache/data directory. This catches
+permission errors without using `opencode db path`, whose full application-runtime
+startup latency is unrelated to image or HOME validity. Build the agent with
 `evals/fleet/Dockerfile.opencode` and freeze its resulting digest. Preflight
 creates no challenge or scored session. Init writes only
 an empty dedicated PostgreSQL database; it is not a migration/reset command.
@@ -88,6 +91,88 @@ comparison protocol seals the common harness, sampling, evaluator-image, and
 retry treatment for every arm. This makes new larger train/development/final-
 test splits safe to introduce without silently changing the held-out family set
 or treatment used by a baseline-versus-checkpoint comparison.
+
+## Resumable pass@4 campaign adapter
+
+`evals.fleet.campaign_adapter` connects these sealed source Jobs to the generic
+`evals.campaign` controller. The campaign still has one independent cell for
+each model, task and attempt. A small bindings file may group several task cells
+that share one model and seed onto one CPU source Job. One declared leader cell
+creates that Job; the other cells reuse its immutable Job UID. This preserves
+per-task failure isolation without creating duplicate Jobs.
+
+The bindings file is immutable JSON. Historical small campaigns used
+`cyber_fleet_campaign_bindings_v1`; it remains readable as evidence but the
+maintained adapter will not execute it. A scaled create wave uses
+`cyber_fleet_campaign_bindings_v2`, which contains:
+
+- today's UTC rollout census: exact receipt digest, already-used count and the
+  fixed daily cap of 500;
+- each source packet's relative path and SHA-256 digest;
+- the leader and complete cell list for each source Job;
+- each campaign cell's exact task version, model alias/revision and source
+  attempt.
+
+Before creation, the adapter recompiles the plan with the evaluator code sealed
+inside the source packet, requires an exact cell match, checks the Fleet account
+and live serving route, runs the existing duplicate census, and relies on the
+existing double server dry-run. The source launcher still performs its own
+fresh checks immediately before its one create request. The server-rendered
+root Job must contain `fleet.ai/failure-alerts: "off"`, request no GPUs, use
+priority `c1`, have no retry, and have a bounded deadline.
+
+Daily capacity is reserved under the generic campaign's canonical local state
+directory while holding a file lock. The gate counts the frozen already-used
+census plus every persistent reservation. Version 1 reserves one source group
+at a time. Version 2 is the strict matched-study path: it requires exactly 16
+source groups and 160 campaign cells, derives the packet-set identity from all
+16 packet digests, and binds the exact campaign, adapter, and source-launcher
+code. Before any version 2 source Job can be created, `reserve-wave` loads that
+exact campaign plan and atomically publishes one durable record covering every
+source group and campaign cell. Each later group launch adopts that exact
+record; partial coverage cannot create anything. An exact replay is idempotent, while a changed binding,
+overlapping reservation, or total above 500 fails closed. Use the first
+authoritative census for that UTC day on the controller host and never replace
+it with a later corroborating census.
+
+Every reservation and adapter action also requires one fixed sibling
+`strict-wave-profile.json`. Its self-digested bytes bind the exact v2 bindings,
+campaign plan, reservation id, derived 16-packet set, 16-group/160-cell shape,
+and hashes of the controller, adapter, and launcher source. The reviewed launch
+authorization separately pins this profile's raw file digest and the clean
+source commit. The controller passes that exact raw digest to `reserve-wave`
+and exports it as `CYBER_FLEET_STRICT_PROFILE_FILE_SHA256` for every campaign
+action; the adapter hashes the profile bytes once before parsing them. This
+acyclic binding prevents a caller from replacing the plan, profile, bindings,
+and packet set together or downgrading the run to the legacy v1 path.
+
+The scaled creator is deliberately small: reserve the complete wave once, then
+run the generic campaign step with `--execute --fail-fast` only after every
+cell has an accepted preview. The frozen plan fixes launch order, the v2 binding
+fixes the plan digest and complete packet set, and every create uses the exact
+bytes validated before its final duplicate checks. The creator contains no
+cleanup or delete command. Monitoring and any later UID-bound cleanup remain a
+separately reviewed operation.
+
+Terminal observation is score-blind. The adapter binds the Job UID, reuses the
+existing terminal collector, and reads only one exact PostgreSQL cell's state
+and receipt digest. Cells become accepted independently. An accepted worker
+receipt already proves the Fleet instance was closed, its containers were
+removed, and the authoritative session was preserved; the adapter exposes that
+cleanup fact without exposing the score or any rollout content. A failed cell
+does not stop sibling cells, and neither rollout nor score creation is replayed
+after an uncertain launch intent.
+
+The four driver commands use this shape (add the corresponding prior-receipt
+argument for `ready`, `launch`, or `observe`):
+
+```sh
+python -m evals.fleet.campaign_adapter preview rollout \
+  {packet} {receipt} --bindings /absolute/bindings.json --context fleet-prod
+```
+
+The score phase is only a local evidence-binding phase: the Fleet worker has
+already run the exact task verifier. It never launches another rollout or judge.
 
 Each route requires `model` (one alias above), `served_id`, `task_versions`,
 `endpoint_origin: https://inference.flt.build`, and these expected projections:

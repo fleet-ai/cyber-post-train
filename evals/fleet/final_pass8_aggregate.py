@@ -2174,6 +2174,14 @@ def validate_gate(
             local_row.get("agent_termination"),
         ) != expected_lifecycle:
             raise FinalAggregateError("accepted local result lifecycle differs")
+        if (
+            type(local_row.get("agent_exit_code")) is not int
+            or local_row.get("agent_exit_code") != 0
+            or local_row.get("agent_termination") != "completed"
+        ):
+            raise FinalAggregateError(
+                "accepted Fleet cell is held or infrastructure-invalid, not a capability outcome"
+            )
         accepted_receipts[cell["cell_id"]] = (
             _validate_worker_accepted_receipt(replica, cell, local_row)
             if reconciliation is None

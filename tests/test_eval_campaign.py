@@ -336,6 +336,40 @@ def test_fleet_preview_requires_root_alert_opt_out(tmp_path: Path):
     assert result["counts"] == {"rollout_pending": 16}
 
 
+def test_fail_fast_stops_after_first_driver_error(tmp_path: Path):
+    script = tmp_path / "driver.py"
+    script.write_text(DRIVER)
+    state = _prepare(tmp_path, _config(script, bad_alert=True))
+    result = step(state, fail_fast=True)
+    assert result["advanced"] == 0
+    assert len(result["errors"]) == 1
+    assert result["counts"] == {"rollout_pending": 16}
+
+
+def test_fail_fast_stops_on_persisted_uncertain_intent_before_later_targets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    script = tmp_path / "driver.py"
+    script.write_text(DRIVER)
+    state = _prepare(tmp_path, _config(script))
+    plan = campaign.load_plan(state)
+    first = plan["targets"][0]["experiment_key"]
+    campaign._write_once(  # noqa: SLF001
+        state / "targets" / first / "rollout" / "launch-intent.json",
+        {"state": "persisted_create_intent"},
+    )
+    attempted: list[str] = []
+    monkeypatch.setattr(
+        campaign,
+        "_run_driver",
+        lambda *_args, **_kwargs: attempted.append("unexpected"),
+    )
+    result = step(state, execute=True, fail_fast=True)
+    assert attempted == []
+    assert result["errors"] == [{"experiment_key": first, "error": "CampaignLaunchUncertain"}]
+    assert result["counts"] == {"rollout_launch_uncertain": 1, "rollout_pending": 15}
+
+
 def test_capacity_deferral_precedes_claim_and_launch_intent(tmp_path: Path):
     script = tmp_path / "driver.py"
     script.write_text(DRIVER)

@@ -220,20 +220,20 @@ def test_package_binds_exact_cpu_job_and_source(packet_path: Path) -> None:
     assert package.packet.value["source"]["git_tree"] == SOURCE_TREE
     assert package.packet.value["operation"] == {
         "campaign_id": "q38-base-train50-actions-p4-v1",
-        "plan_sha256": ("sha256:fb0d54ecca6bb5a8942016dbf339e7b51c902ec39458eb610b4d1eae2585154f"),
+        "plan_sha256": ("sha256:22ee8eef7949c1db748a4cc025a50e04b4ce3ebaebed11096d3b5d99a77c8277"),
         "planned_cell_universe_sha256": (
-            "sha256:a031182c01783b316dfa1190c8104fcc24fe738cbdf63d0a411942a0891c7f6c"
+            "sha256:a0d70673b46efd09eec8283c87ce699aa56515a5e441013ad0243add5c84f10f"
         ),
         "operation_authorization_sha256": (
-            "sha256:1597d141b236a9f8fea16e92bf0b4a4f9b16045677931bf72bb5ca26618e4684"
+            "sha256:1a1a0e21c76aeb3fd00c5583e5a3eb5fc1ea86b48a19641b76fb35eb5733a67e"
         ),
         "collection_packet_sha256": (
-            "sha256:d164781e9d704611c35637a23a61976bab0372906cfd65ee2ccd014a9d1caeba"
+            "sha256:f59989dc54d6b92503df5e37f19fa9f258a604c7644cdc2e887ceac5b174373b"
         ),
         "planned_cells": 200,
         "private_root": "/mnt/sfs/jobs",
-        "operation_root": ("/mnt/sfs/jobs/q38-base-train50-actions-p4-v1-fb0d54ecca6b"),
-        "database": "q38_base_train50_actions_p4_v2_fb0d54ec",
+        "operation_root": ("/mnt/sfs/jobs/q38-base-train50-actions-p4-v1-22ee8eef7949"),
+        "database": "q38_base_train50_actions_p4_v2_22ee8eef",
         "route": "base",
         "worker_id": "base-v2",
     }
@@ -321,13 +321,13 @@ def test_terminal_cleanup_uses_exact_uids_and_proves_release(
     assert cluster.deletes == [
         (
             "jobs.batch",
-            "chris-q38-base-train50-p4-v2-fb0d54ec",
+            "chris-q38-base-train50-p4-v2-22ee8eef",
             JOB_UID,
             JOB_RESOURCE_VERSION,
         ),
         (
             "configmaps",
-            "chris-q38-base-train50-p4-v2-fb0d54ec-code",
+            "chris-q38-base-train50-p4-v2-22ee8eef-code",
             CONFIG_MAP_UID,
             CONFIG_MAP_RESOURCE_VERSION,
         ),
@@ -438,19 +438,19 @@ def test_cleanup_resumes_same_uid_after_lost_delete_response(
     assert cluster.deletes == [
         (
             "jobs.batch",
-            "chris-q38-base-train50-p4-v2-fb0d54ec",
+            "chris-q38-base-train50-p4-v2-22ee8eef",
             JOB_UID,
             JOB_RESOURCE_VERSION,
         ),
         (
             "jobs.batch",
-            "chris-q38-base-train50-p4-v2-fb0d54ec",
+            "chris-q38-base-train50-p4-v2-22ee8eef",
             JOB_UID,
             JOB_RESOURCE_VERSION,
         ),
         (
             "configmaps",
-            "chris-q38-base-train50-p4-v2-fb0d54ec-code",
+            "chris-q38-base-train50-p4-v2-22ee8eef-code",
             CONFIG_MAP_UID,
             CONFIG_MAP_RESOURCE_VERSION,
         ),
@@ -571,7 +571,7 @@ def test_job_entry_orders_preflight_before_create_and_emits_only_aggregate(
         config=str(CAMPAIGN / "eval-config.json"),
         authorization=str(CAMPAIGN / "operation-authorization.json"),
         private_root=str(tmp_path),
-        database="q38_base_train50_actions_p4_v2_fb0d54ec",
+        database="q38_base_train50_actions_p4_v2_22ee8eef",
         harness_tar=str(harness),
         harness_tar_sha256=harness_sha,
         harness_receipt=str(tmp_path / "BUILD.json"),
@@ -620,7 +620,7 @@ def test_kubectl_cleanup_uses_raw_uid_and_resource_version_preconditions(
     cluster.delete_uid(
         "jobs.batch",
         job.NAMESPACE,
-        "chris-q38-base-train50-p4-v2-fb0d54ec",
+        "chris-q38-base-train50-p4-v2-22ee8eef",
         JOB_UID,
         JOB_RESOURCE_VERSION,
         confirmed_live=True,
@@ -629,7 +629,7 @@ def test_kubectl_cleanup_uses_raw_uid_and_resource_version_preconditions(
     assert arguments[-5:] == [
         "delete",
         "--raw",
-        ("/apis/batch/v1/namespaces/fleet-train-jobs/jobs/chris-q38-base-train50-p4-v2-fb0d54ec"),
+        ("/apis/batch/v1/namespaces/fleet-train-jobs/jobs/chris-q38-base-train50-p4-v2-22ee8eef"),
         "-f",
         "-",
     ]
@@ -657,7 +657,7 @@ def test_kubectl_cleanup_rejects_delete_dry_run_semantics(
         cluster.delete_uid(
             "jobs.batch",
             job.NAMESPACE,
-            "chris-q38-base-train50-p4-v2-fb0d54ec",
+            "chris-q38-base-train50-p4-v2-22ee8eef",
             JOB_UID,
             JOB_RESOURCE_VERSION,
             confirmed_live=False,
