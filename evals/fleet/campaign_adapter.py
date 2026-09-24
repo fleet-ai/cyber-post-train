@@ -25,16 +25,16 @@ from typing import Any
 import httpx
 
 from evals import campaign
-from evals.fleet import evaluate, heldout_launch, outcome_validity
+from evals.fleet import daily_rollout_ledger, evaluate, heldout_launch, outcome_validity
 from evals.fleet import opencode_self_hosted as harness
 
 SCHEMA = "cyber_fleet_campaign_bindings_v1"
 WAVE_BINDING_SCHEMA = "cyber_fleet_campaign_bindings_v2"
 STRICT_PROFILE_SCHEMA = "cyber_fleet_strict_wave_profile_v1"
-BUDGET_SCHEMA = "cyber_fleet_daily_rollout_budget_v1"
-RESERVATION_SCHEMA = "cyber_fleet_daily_rollout_reservation_v1"
-WAVE_RESERVATION_SCHEMA = "cyber_fleet_daily_rollout_wave_reservation_v1"
-BUDGET_ROOT = campaign.CANONICAL_REGISTRY / "fleet-daily-rollouts-v1"
+BUDGET_SCHEMA = daily_rollout_ledger.BUDGET_SCHEMA
+RESERVATION_SCHEMA = daily_rollout_ledger.LEGACY_RESERVATION_SCHEMA
+WAVE_RESERVATION_SCHEMA = daily_rollout_ledger.WAVE_RESERVATION_SCHEMA
+BUDGET_ROOT = daily_rollout_ledger.ROOT
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{1,127}")
 _SHA = re.compile(r"sha256:[0-9a-f]{64}")
 WAVE_GROUP_COUNT = 16
@@ -67,6 +67,8 @@ def _control_source_sha256() -> str:
             + hashlib.sha256(Path(campaign.__file__).read_bytes()).hexdigest(),
             "evals/fleet/campaign_adapter.py": "sha256:"
             + hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            "evals/fleet/daily_rollout_ledger.py": "sha256:"
+            + hashlib.sha256(Path(daily_rollout_ledger.__file__).read_bytes()).hexdigest(),
             "evals/fleet/heldout_launch.py": "sha256:"
             + hashlib.sha256(Path(heldout_launch.__file__).read_bytes()).hexdigest(),
         }
@@ -237,90 +239,11 @@ def _write_once(path: Path, value: dict[str, Any]) -> None:
 def _reservation_index(
     reservations: Path, *, date_utc: str
 ) -> tuple[int, dict[tuple[str, str], dict[str, Any]], dict[str, dict[str, Any]]]:
-    total = 0
-    covered: dict[tuple[str, str], dict[str, Any]] = {}
-    waves: dict[str, dict[str, Any]] = {}
-    for path in reservations.glob("*.json"):
-        row = _read(path)
-        unsigned = {key: value for key, value in row.items() if key != "sha256"}
-        if row.get("sha256") != _digest(unsigned):
-            raise AdapterError("Fleet daily rollout reservation is invalid")
-        schema = row.get("schema")
-        if schema == RESERVATION_SCHEMA:
-            if set(row) != {
-                "schema",
-                "date_utc",
-                "group_id",
-                "count",
-                "packet_sha256",
-                "bindings_sha256",
-                "sha256",
-            }:
-                raise AdapterError("Fleet daily rollout reservation is invalid")
-            groups = [
-                {
-                    "group_id": row.get("group_id"),
-                    "count": row.get("count"),
-                    "packet_sha256": row.get("packet_sha256"),
-                }
-            ]
-        elif schema == WAVE_RESERVATION_SCHEMA:
-            if set(row) != {
-                "schema",
-                "date_utc",
-                "cap",
-                "count",
-                "reservation_id",
-                "packet_set_sha256",
-                "groups",
-                "bindings_sha256",
-                "sha256",
-            }:
-                raise AdapterError("Fleet daily rollout wave reservation is invalid")
-            _validate_digest(row.get("packet_set_sha256"), "wave packet set")
-            groups = row.get("groups")
-            if (
-                row.get("cap") != 500
-                or not isinstance(row.get("reservation_id"), str)
-                or _ID.fullmatch(row["reservation_id"]) is None
-                or not isinstance(groups, list)
-                or not groups
-            ):
-                raise AdapterError("Fleet daily rollout wave reservation is invalid")
-        else:
-            raise AdapterError("Fleet daily rollout reservation schema is invalid")
-        bindings_sha256 = _validate_digest(row.get("bindings_sha256"), "reservation bindings")
-        if schema == WAVE_RESERVATION_SCHEMA:
-            if bindings_sha256 in waves:
-                raise AdapterError("Fleet binding has more than one wave reservation")
-            waves[bindings_sha256] = row
-        if (
-            type(row.get("count")) is not int
-            or not 1 <= row["count"] <= 500
-            or row.get("date_utc") != date_utc
-        ):
-            raise AdapterError("Fleet daily rollout reservation is invalid")
-        group_total = 0
-        for group in groups:
-            if (
-                not isinstance(group, dict)
-                or set(group) != {"group_id", "count", "packet_sha256"}
-                or not isinstance(group["group_id"], str)
-                or _ID.fullmatch(group["group_id"]) is None
-                or type(group["count"]) is not int
-                or not 1 <= group["count"] <= 500
-            ):
-                raise AdapterError("Fleet daily rollout reservation group is invalid")
-            _validate_digest(group["packet_sha256"], "reservation packet")
-            key = (bindings_sha256, group["group_id"])
-            if key in covered:
-                raise AdapterError("Fleet daily rollout reservation group is duplicated")
-            covered[key] = group
-            group_total += group["count"]
-        if group_total != row["count"]:
-            raise AdapterError("Fleet daily rollout reservation count differs from its groups")
-        total += row["count"]
-    return total, covered, waves
+    try:
+        index = daily_rollout_ledger.reservation_index(reservations, date_utc=date_utc)
+    except daily_rollout_ledger.LedgerError as exc:
+        raise AdapterError(str(exc)) from exc
+    return index.total, index.covered, index.waves
 
 
 def reserve_wave(
@@ -475,7 +398,12 @@ def _validate_bindings(value: dict[str, Any]) -> dict[str, Any]:
         datetime.strptime(budget["date_utc"], "%Y-%m-%d")
     except (TypeError, ValueError) as exc:
         raise AdapterError("Fleet daily budget date is invalid") from exc
-    if budget["cap"] != 500 or type(budget["used"]) is not int or not 0 <= budget["used"] <= 500:
+    if (
+        type(budget["cap"]) is not int
+        or budget["cap"] != 500
+        or type(budget["used"]) is not int
+        or not 0 <= budget["used"] <= 500
+    ):
         raise AdapterError("Fleet daily budget must bind the 500-rollout limit")
     _validate_digest(budget["census_receipt_sha256"], "budget census receipt")
     if schema == WAVE_BINDING_SCHEMA:

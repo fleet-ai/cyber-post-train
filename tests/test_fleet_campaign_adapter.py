@@ -352,6 +352,10 @@ def test_wave_control_digest_binds_all_three_creator_modules() -> None:
             + adapter.hashlib.sha256(Path(adapter.campaign.__file__).read_bytes()).hexdigest(),
             "evals/fleet/campaign_adapter.py": "sha256:"
             + adapter.hashlib.sha256(Path(adapter.__file__).read_bytes()).hexdigest(),
+            "evals/fleet/daily_rollout_ledger.py": "sha256:"
+            + adapter.hashlib.sha256(
+                Path(adapter.daily_rollout_ledger.__file__).read_bytes()
+            ).hexdigest(),
             "evals/fleet/heldout_launch.py": "sha256:"
             + adapter.hashlib.sha256(Path(heldout_launch.__file__).read_bytes()).hexdigest(),
         }
@@ -567,6 +571,48 @@ def test_wave_reservation_over_cap_writes_no_reservation(tmp_path: Path) -> None
     assert not list(reservations.glob("*.json"))
 
 
+def test_wave_writer_counts_qa_reservation_without_adopting_it_as_a_wave(
+    tmp_path: Path,
+) -> None:
+    binding = _wave_binding(tmp_path, used=340)
+    root = tmp_path / "budget"
+    day = root / binding["budget"]["date_utc"]
+    baseline = {"schema": adapter.BUDGET_SCHEMA, **binding["budget"]}
+    baseline = {**baseline, "sha256": adapter._digest(baseline)}  # noqa: SLF001
+    adapter._write_once(day / "baseline.json", baseline)  # noqa: SLF001
+    cell = "sha256:" + "9" * 64
+    qa = {
+        "schema": adapter.daily_rollout_ledger.QA_RESERVATION_SCHEMA,
+        "date_utc": binding["budget"]["date_utc"],
+        "cap": 500,
+        "count": 1,
+        "plan_sha256": "sha256:" + "a" * 64,
+        "packet_sha256": "sha256:" + "b" * 64,
+        "authorization_sha256": "sha256:" + "c" * 64,
+        "cell_universe_sha256": cell,
+    }
+    qa = {**qa, "sha256": adapter._digest(qa)}  # noqa: SLF001
+    adapter._write_once(  # noqa: SLF001
+        day / "reservations" / f"qa-{cell[7:]}.json", qa
+    )
+    total, _covered, waves = adapter._reservation_index(  # noqa: SLF001
+        day / "reservations", date_utc=binding["budget"]["date_utc"]
+    )
+    assert total == 1 and waves == {}
+    with pytest.raises(adapter.CapacityUnavailable):
+        adapter.reserve_wave(
+            binding,
+            _wave_plan(binding),
+            (profile := _strict_profile(tmp_path, binding, _wave_plan(binding))),
+            _profile_file_sha256(profile),
+            binding["wave"]["reservation_id"],
+            expected_sessions=160,
+            packet_set_sha256=binding["wave"]["packet_set_sha256"],
+            root=root,
+        )
+    assert not list((day / "reservations").glob("wave-*.json"))
+
+
 def test_wave_reservation_conflict_and_partial_overlap_fail_closed(tmp_path: Path) -> None:
     binding = _wave_binding(tmp_path)
     root = tmp_path / "budget"
@@ -712,13 +758,15 @@ def test_wave_bound_budget_rejects_forged_partial_coverage(tmp_path: Path) -> No
         )
 
 
-@pytest.mark.parametrize("defect", ["cap", "partition"])
+@pytest.mark.parametrize("defect", ["cap", "cap_float", "partition"])
 def test_wave_reservation_validates_full_binding_before_state_write(
     tmp_path: Path, defect: str
 ) -> None:
     binding = _wave_binding(tmp_path)
     if defect == "cap":
         binding["budget"]["cap"] = 600
+    elif defect == "cap_float":
+        binding["budget"]["cap"] = 500.0
     else:
         binding["groups"]["group-00"]["cells"] = binding["groups"]["group-00"]["cells"][1:]
     binding["sha256"] = adapter._digest(  # noqa: SLF001

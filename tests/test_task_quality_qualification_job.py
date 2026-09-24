@@ -7,12 +7,14 @@ import json
 import os
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from evals.fleet import rollout_worker
+from evals import campaign
+from evals.fleet import daily_rollout_ledger, rollout_worker, task_quality_reservation
 from evals.fleet import task_quality_qualification as qualification
 from evals.fleet import task_quality_qualification_job as job
 from evals.fleet import task_quality_qualification_job_entry as entry
@@ -27,6 +29,7 @@ CONFIG_UID = "22222222-2222-4222-8222-222222222222"
 SECRET_UID = "33333333-3333-4333-8333-333333333333"
 POD_UID = "44444444-4444-4444-8444-444444444444"
 WORKLOAD_UID = "55555555-5555-4555-8555-555555555555"
+REAL_LOAD_DAILY_RESERVATION = job.load_daily_reservation
 
 
 def _source() -> dict[str, Any]:
@@ -54,12 +57,17 @@ def _plan() -> dict[str, Any]:
                 "exact_task_identity": {
                     "task_key": candidate["task_key"],
                     "task_version_id": candidate["task_version_id"],
-                }
+                },
+                "requested_limit": 1,
+                "selected_task_versions": 1,
             },
             "execution": {
                 "concurrency": 1,
                 "model_calls": 0,
                 "external_mutations_authorized": True,
+                "mutating_request_attempts": 1,
+                "automatic_retry": False,
+                "ambiguous_mutation_replay": False,
             },
             "tasks": [
                 {
@@ -112,6 +120,21 @@ def packet(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     )
     assert result["external_mutations"] == 0
     return Path(result["packet"])
+
+
+@pytest.fixture(autouse=True)
+def _daily_reservation_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        job,
+        "load_daily_reservation",
+        lambda *_args, **_kwargs: {
+            "sha256": "sha256:" + "6" * 64,
+            "reservation_sha256": "sha256:" + "7" * 64,
+            "date_utc": "2026-09-24",
+            "count": 1,
+            "cell_universe_sha256": "sha256:" + "8" * 64,
+        },
+    )
 
 
 class FakeCluster:
@@ -306,6 +329,22 @@ def test_package_is_cpu_only_alert_suppressed_and_keeps_plan_private(packet: Pat
     job._assert_zero_accelerators(root["spec"]["template"]["spec"])  # noqa: SLF001
     assert "plan.json" not in package.config_map["data"]
     assert "plan.json" in package.secret["data"]
+    assert package.packet.value["source"]["launch_control_files"] == {
+        relative: {"file_sha256": job.file_sha256(path)}
+        for relative, path in job.LAUNCH_CONTROL_FILES.items()
+    }
+
+
+def test_packet_rejects_daily_reservation_control_byte_drift(
+    packet: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    changed = tmp_path / "changed-reservation.py"
+    changed.write_text("# changed\n", encoding="utf-8")
+    controls = dict(job.LAUNCH_CONTROL_FILES)
+    controls["evals/fleet/task_quality_reservation.py"] = changed
+    monkeypatch.setattr(job, "LAUNCH_CONTROL_FILES", controls)
+    with pytest.raises(job.QualificationJobError, match="launcher bytes changed"):
+        job.load_packet(packet)
 
 
 @pytest.mark.parametrize("ttl", [None, 3599, 3601])
@@ -370,6 +409,7 @@ def test_server_preview_cannot_inject_private_plan_readers(
         job.launch_once(
             packet,
             authorization_path=_authorization(packet, tmp_path),
+            reservation_receipt_path=tmp_path / "reservation.json",
             repo_root=ROOT,
             cluster=cluster,
             journal=tmp_path / "create.jsonl",
@@ -422,6 +462,7 @@ def test_launch_orders_two_previews_absence_intent_and_one_create(
     result = job.launch_once(
         packet,
         authorization_path=_authorization(packet, tmp_path),
+        reservation_receipt_path=tmp_path / "reservation.json",
         repo_root=ROOT,
         cluster=cluster,
         journal=journal,
@@ -433,7 +474,126 @@ def test_launch_orders_two_previews_absence_intent_and_one_create(
     assert result["secret_uid"] == SECRET_UID
     rows = [json.loads(line) for line in journal.read_text().splitlines()]
     assert rows[0]["state"] == "KUBERNETES_CREATE_INTENT_DO_NOT_RETRY"
+    assert rows[0]["reservation_receipt_sha256"] == "sha256:" + "6" * 64
+    assert rows[0]["reservation_sha256"] == "sha256:" + "7" * 64
+    assert rows[0]["reservation_count"] == 1
+    assert rows[0]["reservation_date_utc"] == "2026-09-24"
+    assert rows[0]["reservation_cell_universe_sha256"] == "sha256:" + "8" * 64
     assert rows[1]["state"] == "KUBERNETES_CREATE_RESPONSE"
+
+
+def test_real_daily_reservation_is_revalidated_before_create(
+    packet: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    date_utc = datetime.now(UTC).date().isoformat()
+    root = tmp_path / "budget"
+    day = root / date_utc
+    (day / "reservations").mkdir(parents=True)
+    (day / ".lock").touch()
+    baseline = {
+        "schema": daily_rollout_ledger.BUDGET_SCHEMA,
+        "date_utc": date_utc,
+        "cap": 500,
+        "used": 0,
+        "census_receipt_sha256": "sha256:" + "8" * 64,
+    }
+    baseline["sha256"] = daily_rollout_ledger.digest(baseline)
+    (day / "baseline.json").write_bytes(campaign.canonical(baseline) + b"\n")
+    authorization = _authorization(packet, tmp_path)
+    receipt = tmp_path / "reservation.json"
+    task_quality_reservation.reserve_qualification_cell(
+        packet,
+        authorization,
+        receipt_path=receipt,
+        root=root,
+        reserve=True,
+    )
+    monkeypatch.setattr(job, "load_daily_reservation", REAL_LOAD_DAILY_RESERVATION)
+    monkeypatch.setattr(job, "merge_witness", lambda *_args, **_kwargs: _source_witness())
+    cluster = FakeCluster()
+    journal = tmp_path / "create.jsonl"
+    job.launch_once(
+        packet,
+        authorization_path=authorization,
+        reservation_receipt_path=receipt,
+        reservation_root=root,
+        repo_root=ROOT,
+        cluster=cluster,
+        journal=journal,
+    )
+    assert cluster.creates == 1
+    intent = json.loads(journal.read_text().splitlines()[0])
+    persisted = json.loads(receipt.read_text())
+    assert intent["reservation_receipt_sha256"] == persisted["sha256"]
+    assert intent["reservation_sha256"] == persisted["reservation_sha256"]
+
+
+def test_invalid_daily_reservation_blocks_before_source_refresh_or_cluster(
+    packet: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cluster = FakeCluster()
+    monkeypatch.setattr(
+        job,
+        "load_daily_reservation",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            job.QualificationJobError("daily Fleet capacity reservation is invalid")
+        ),
+    )
+    monkeypatch.setattr(
+        job,
+        "merge_witness",
+        lambda *_args, **_kwargs: pytest.fail("source refresh reached after reservation failure"),
+    )
+    journal = tmp_path / "create.jsonl"
+    with pytest.raises(job.QualificationJobError, match="capacity reservation"):
+        job.launch_once(
+            packet,
+            authorization_path=_authorization(packet, tmp_path),
+            reservation_receipt_path=tmp_path / "missing-reservation.json",
+            repo_root=ROOT,
+            cluster=cluster,
+            journal=journal,
+        )
+    assert cluster.events == []
+    assert cluster.previews == cluster.creates == 0
+    assert not journal.exists()
+
+
+def test_daily_reservation_rollover_after_previews_blocks_create(
+    packet: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cluster = FakeCluster()
+    calls = 0
+
+    def rollover(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return {
+                "sha256": "sha256:" + "6" * 64,
+                "reservation_sha256": "sha256:" + "7" * 64,
+                "date_utc": "2026-09-24",
+                "count": 1,
+                "cell_universe_sha256": "sha256:" + "8" * 64,
+            }
+        raise job.QualificationJobError("daily Fleet capacity reservation is invalid")
+
+    monkeypatch.setattr(job, "load_daily_reservation", rollover)
+    monkeypatch.setattr(job, "merge_witness", lambda *_args, **_kwargs: _source_witness())
+    journal = tmp_path / "create.jsonl"
+    with pytest.raises(job.QualificationJobError, match="capacity reservation"):
+        job.launch_once(
+            packet,
+            authorization_path=_authorization(packet, tmp_path),
+            reservation_receipt_path=tmp_path / "reservation.json",
+            repo_root=ROOT,
+            cluster=cluster,
+            journal=journal,
+        )
+    assert calls == 2
+    assert cluster.previews == 2
+    assert cluster.creates == 0
+    assert not journal.exists()
 
 
 def test_authorization_cannot_be_reused_with_another_journal(
@@ -445,6 +605,7 @@ def test_authorization_cannot_be_reused_with_another_journal(
         job.launch_once(
             packet,
             authorization_path=_authorization(packet, tmp_path),
+            reservation_receipt_path=tmp_path / "reservation.json",
             repo_root=ROOT,
             cluster=cluster,
             journal=tmp_path / "different.jsonl",
@@ -467,6 +628,7 @@ def test_two_identically_unsafe_previews_cannot_pass(
         job.launch_once(
             packet,
             authorization_path=_authorization(packet, tmp_path),
+            reservation_receipt_path=tmp_path / "reservation.json",
             repo_root=ROOT,
             cluster=cluster,
             journal=tmp_path / "create.jsonl",
@@ -491,6 +653,7 @@ def test_live_create_mutation_after_previews_is_rejected(
         job.launch_once(
             packet,
             authorization_path=_authorization(packet, tmp_path),
+            reservation_receipt_path=tmp_path / "reservation.json",
             repo_root=ROOT,
             cluster=cluster,
             journal=journal,
@@ -540,6 +703,7 @@ def test_live_create_mutation_cleanup_resumes_without_revalidating_preview(
         job.launch_once(
             packet,
             authorization_path=_authorization(packet, tmp_path),
+            reservation_receipt_path=tmp_path / "reservation.json",
             repo_root=ROOT,
             cluster=cluster,
             journal=journal,
@@ -575,6 +739,7 @@ def test_uncertain_create_is_never_retried(
         job.launch_once(
             packet,
             authorization_path=authorization,
+            reservation_receipt_path=tmp_path / "reservation.json",
             repo_root=ROOT,
             cluster=cluster,
             journal=journal,
@@ -584,6 +749,7 @@ def test_uncertain_create_is_never_retried(
         job.launch_once(
             packet,
             authorization_path=authorization,
+            reservation_receipt_path=tmp_path / "reservation.json",
             repo_root=ROOT,
             cluster=cluster,
             journal=journal,
@@ -608,6 +774,7 @@ def test_lost_mutated_create_requires_confirmation_then_releases_exact_uids(
         job.launch_once(
             packet,
             authorization_path=_authorization(packet, tmp_path),
+            reservation_receipt_path=tmp_path / "reservation.json",
             repo_root=ROOT,
             cluster=cluster,
             journal=journal,
@@ -639,6 +806,7 @@ def _uncertain_create(
         job.launch_once(
             packet,
             authorization_path=_authorization(packet, tmp_path),
+            reservation_receipt_path=tmp_path / "reservation.json",
             repo_root=ROOT,
             cluster=cluster,
             journal=journal,
@@ -867,6 +1035,7 @@ def test_cleanup_uses_fresh_resource_versions_and_proves_child_absence(
     job.launch_once(
         packet,
         authorization_path=_authorization(packet, tmp_path),
+        reservation_receipt_path=tmp_path / "reservation.json",
         repo_root=ROOT,
         cluster=cluster,
         journal=journal,
@@ -899,6 +1068,7 @@ def test_cleanup_resumes_after_job_was_deleted_and_local_observer_crashed(
     job.launch_once(
         packet,
         authorization_path=_authorization(packet, tmp_path),
+        reservation_receipt_path=tmp_path / "reservation.json",
         repo_root=ROOT,
         cluster=cluster,
         journal=journal,
@@ -943,6 +1113,7 @@ def test_cleanup_fresh_uid_census_catches_late_owned_child(
     job.launch_once(
         packet,
         authorization_path=_authorization(packet, tmp_path),
+        reservation_receipt_path=tmp_path / "reservation.json",
         repo_root=ROOT,
         cluster=cluster,
         journal=journal,
@@ -994,6 +1165,7 @@ def test_failed_job_is_released_but_reports_possible_external_leak(
     job.launch_once(
         packet,
         authorization_path=_authorization(packet, tmp_path),
+        reservation_receipt_path=tmp_path / "reservation.json",
         repo_root=ROOT,
         cluster=cluster,
         journal=journal,

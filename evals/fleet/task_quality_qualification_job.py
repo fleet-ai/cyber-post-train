@@ -21,6 +21,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Protocol
 from urllib.parse import quote
 
+from evals import campaign
 from evals.fleet import task_quality_qualification as qualification
 from evals.fleet import visible_action_collection_job as proven_rails
 from evals.fleet.evaluate import stable_job_preview
@@ -91,6 +92,13 @@ CANARY_SOURCE_INPUTS = {
     "qualification_controller": "evals/fleet/task_quality_qualification.py",
     "qualification_job_launcher": "evals/fleet/task_quality_qualification_job.py",
     "qualification_job_entry": "evals/fleet/task_quality_qualification_job_entry.py",
+}
+LAUNCH_CONTROL_FILES = {
+    "evals/campaign.py": Path(campaign.__file__),
+    "evals/fleet/daily_rollout_ledger.py": Path(__file__).with_name("daily_rollout_ledger.py"),
+    "evals/fleet/task_quality_reservation.py": Path(__file__).with_name(
+        "task_quality_reservation.py"
+    ),
 }
 
 BOOTSTRAP = r"""set -euo pipefail
@@ -569,6 +577,10 @@ def prepare_packet(
             "git_commit": commit,
             "git_tree": tree,
             "launcher_file_sha256": file_sha256(Path(__file__)),
+            "launch_control_files": {
+                relative: {"file_sha256": file_sha256(path)}
+                for relative, path in LAUNCH_CONTROL_FILES.items()
+            },
             "merge_witness": witness,
             "files": source_entries,
         },
@@ -630,8 +642,20 @@ def load_packet(path: Path) -> Packet:
     if (
         not isinstance(source, dict)
         or set(source)
-        != {"git_commit", "git_tree", "launcher_file_sha256", "merge_witness", "files"}
+        != {
+            "git_commit",
+            "git_tree",
+            "launcher_file_sha256",
+            "launch_control_files",
+            "merge_witness",
+            "files",
+        }
         or source.get("launcher_file_sha256") != file_sha256(Path(__file__))
+        or source.get("launch_control_files")
+        != {
+            relative: {"file_sha256": file_sha256(path)}
+            for relative, path in LAUNCH_CONTROL_FILES.items()
+        }
     ):
         raise QualificationJobError("launcher bytes changed after packet preparation")
     root = path.resolve().parent
@@ -1125,6 +1149,28 @@ def load_authorization(path: Path, package: Package) -> dict[str, Any]:
     return value
 
 
+def load_daily_reservation(
+    receipt_path: Path,
+    packet_path: Path,
+    authorization_path: Path,
+    *,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    """Fail closed unless the one-cell charge still exists in the shared ledger."""
+    from evals.fleet import task_quality_reservation
+
+    try:
+        if root is None:
+            return task_quality_reservation.load_reservation_receipt(
+                receipt_path, packet_path, authorization_path
+            )
+        return task_quality_reservation.load_reservation_receipt(
+            receipt_path, packet_path, authorization_path, root=root
+        )
+    except task_quality_reservation.ReservationError as error:
+        raise QualificationJobError("daily Fleet capacity reservation is invalid") from error
+
+
 def _items(value: dict[str, Any], label: str) -> list[dict[str, Any]]:
     rows = value.get("items")
     if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
@@ -1311,9 +1357,11 @@ def launch_once(
     packet_path: Path,
     *,
     authorization_path: Path,
+    reservation_receipt_path: Path,
     repo_root: Path,
     cluster: Cluster,
     journal: Path,
+    reservation_root: Path | None = None,
     cleanup_timeout_seconds: float = 600,
     monotonic: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
@@ -1322,6 +1370,12 @@ def launch_once(
         raise QualificationJobError("create journal exists or its parent is unavailable")
     package = build_package(packet_path)
     authorization = load_authorization(authorization_path, package)
+    reservation = load_daily_reservation(
+        reservation_receipt_path,
+        packet_path,
+        authorization_path,
+        root=reservation_root,
+    )
     if journal.resolve() != Path(authorization["create_journal_path"]):
         raise QualificationJobError("create journal is not the authorization-bound journal")
     source_commit = package.packet.value["source"]["git_commit"]
@@ -1336,6 +1390,14 @@ def launch_once(
     if first_preview != second_preview:
         raise QualificationJobError("server previews differ")
     final_census = exact_name_census(package, cluster)
+    final_reservation = load_daily_reservation(
+        reservation_receipt_path,
+        packet_path,
+        authorization_path,
+        root=reservation_root,
+    )
+    if final_reservation != reservation:
+        raise QualificationJobError("daily Fleet capacity reservation changed before create")
     intent = sealed(
         {
             "schema": CREATE_INTENT_SCHEMA,
@@ -1343,6 +1405,11 @@ def launch_once(
             "packet_sha256": package.packet.value["sha256"],
             "packet_file_sha256": package.packet.file_sha256,
             "authorization_sha256": authorization["sha256"],
+            "reservation_receipt_sha256": reservation["sha256"],
+            "reservation_sha256": reservation["reservation_sha256"],
+            "reservation_date_utc": reservation["date_utc"],
+            "reservation_count": reservation["count"],
+            "reservation_cell_universe_sha256": reservation["cell_universe_sha256"],
             "plan_sha256": package.packet.value["operation"]["plan_sha256"],
             "context": CONTEXT,
             "namespace": NAMESPACE,
@@ -2244,6 +2311,7 @@ def parse_args() -> argparse.Namespace:
     launch = commands.add_parser("launch")
     launch.add_argument("--packet", type=Path, required=True)
     launch.add_argument("--authorization", type=Path, required=True)
+    launch.add_argument("--reservation-receipt", type=Path, required=True)
     launch.add_argument("--repo-root", type=Path, required=True)
     launch.add_argument("--journal", type=Path, required=True)
     launch.add_argument("--confirm-live-create", action="store_true")
@@ -2285,6 +2353,7 @@ def main() -> None:
             result = launch_once(
                 args.packet,
                 authorization_path=args.authorization,
+                reservation_receipt_path=args.reservation_receipt,
                 repo_root=args.repo_root,
                 cluster=KubectlCluster(),
                 journal=args.journal,

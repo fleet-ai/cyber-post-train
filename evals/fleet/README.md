@@ -135,6 +135,18 @@ overlapping reservation, or total above 500 fails closed. Use the first
 authoritative census for that UTC day on the controller host and never replace
 it with a later corroborating census.
 
+Zero-model task-quality qualification uses the same lock and one shared parser,
+but a distinct one-cell schema; it is never accepted as evidence that a strict
+held-out wave was reserved. Its deterministic record binds the exact task
+version only through a privacy-safe cell digest, plus the sealed plan, packet,
+and root authorization. It charges exactly one session. A crash after durable
+publication is recovered by reopening the same bytes; the record is never
+deleted, replaced, decremented, or carried into another UTC day. The launch
+path revalidates the receipt and canonical record before any source refresh,
+then again after the final preview and census immediately before Kubernetes
+create. Unknown or malformed records stop both writers so independent
+controllers cannot silently overbook the 500-session cap.
+
 Every reservation and adapter action also requires one fixed sibling
 `strict-wave-profile.json`. Its self-digested bytes bind the exact v2 bindings,
 campaign plan, reservation id, derived 16-packet set, 16-group/160-cell shape,
