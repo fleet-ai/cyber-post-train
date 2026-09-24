@@ -2,7 +2,6 @@ import json
 import os
 import uuid
 from datetime import UTC, datetime
-from pathlib import Path
 
 import pytest
 
@@ -54,109 +53,17 @@ def _signal_plan_and_request() -> tuple[dict, dict]:
     return plan, signal.job_request(plan)
 
 
-def _reviewed_artifacts(plan: dict, request: dict) -> tuple[dict, dict, dict, dict, float]:
-    wave = miles_signal_wave.load()
-    live = json.loads(
-        Path(
-            "configs/qualification/qwen38-miles-signal-live-task-receipt-20260924.json"
-        ).read_text()
-    )
-    observed = transition._time(live["observed_at"])
-
-    def sha(value: str) -> str:
-        return "sha256:" + launch.digest(value)
-
-    lanes = []
-    for index, row in enumerate(wave["candidates"]):
-        row_plan = "sha256:" + launch.mechanics.digest(plan) if index == 0 else sha(f"p{index}")
-        row_request = "sha256:" + launch.digest(request) if index == 0 else sha(f"r{index}")
-        lanes.append(
-            {
-                "name": row["identity"]["name"],
-                "plan_sha256": row_plan,
-                "request_sha256": row_request,
-                "optimizer_steps": 0,
-                "checkpoint": False,
-                "authority_config_sha256": wave["sha256"],
-                "live_binding_receipt_sha256": row["live_binding_receipt_sha256"],
-                "preview": {
-                    "request_sha256": row_request,
-                    "receipt_sha256": sha(f"preview{index}"),
-                    "observed_at": transition._stamp(observed),
-                    "root_annotations": {"fleet.ai/failure-alerts": "off"},
-                    "priority_class": "c1",
-                    "queue_priority": "q1",
-                    "backoff_limit": 0,
-                    "nodes": 1,
-                    "gpus_per_node": 8,
-                    "requeue_if_preempted": False,
-                    "optimizer_steps": 0,
-                    "checkpoint": False,
-                },
-                "absence": {
-                    "receipt_sha256": sha(f"absence{index}"),
-                    "observed_at": transition._stamp(observed),
-                    "jobs_api_duplicates": 0,
-                    "kubernetes_duplicates": 0,
-                    "sfs_output_absent": True,
-                },
-                "observer": {
-                    "receipt_sha256": sha(f"observer{index}"),
-                    "armed": True,
-                    "healthy": True,
-                    "uid_bound_release": True,
-                    "delete_drain_supervised": True,
-                    "active_deadline_s": 18_900,
-                },
-            }
-        )
-    evidence = {
-        "adapter": {
-            "commit": "1" * 40,
-            "clean": True,
-            "source_closure_sha256": "sha256:" + launch.mechanics.digest(plan["runtime_sources"]),
-            "runtime_image": request["image"],
-            "tests_receipt_sha256": sha("tests"),
-            "exact_image_preflight_sha256": sha("image"),
-            "sample_indexes": list(range(8)),
-            "max_concurrent_episodes": 2,
-            "optimizer_steps": 0,
-            "checkpoint": False,
-            "live_session_open_tool_schema_gate": True,
-            "tool_catalog_sha256": wave["authorities"]["tool_catalog"]["self_sha256"],
-            "current_binding_source": "live_binding_receipt_sha256",
-            "no_outer_retry_or_replacement": True,
-            "all_slots_terminally_accounted": True,
-            "unique_verifier_execution_ids": True,
-            "exact_cleanup_required": True,
-        },
-        "operator": {
-            "commit": "2" * 40,
-            "clean": True,
-            "tests_receipt_sha256": sha("operator"),
-            "source_manifest": launch.operator_source_manifest(),
-            "source_closure_sha256": "sha256:" + launch.digest(launch.operator_source_manifest()),
-        },
-        "lanes": lanes,
-        "cleanup": {
-            "receipt_sha256": sha("cleanup"),
-            "prompt_removed_after_terminal": True,
-            "private_episode_material_restricted": True,
-            "output_create_once": True,
-        },
+def _stub_review() -> tuple[dict, dict, dict, dict, dict, float]:
+    now = datetime.now(UTC)
+    candidate = {"candidate": True}
+    review = {"sha256": "sha256:" + "1" * 64}
+    live = {"live": True}
+    bundle = {"bundle": True}
+    approved = {
+        "approved_at": transition._stamp(now),
+        "sha256": "sha256:" + "2" * 64,
     }
-    candidate = transition.build_review_candidate(live, evidence, observed_at=observed)
-    review = transition._sealed(
-        {
-            "schema": transition.REVIEW_SCHEMA,
-            "candidate_sha256": candidate["sha256"],
-            "approved": True,
-            "reviewer": "root",
-            "reviewed_at": transition._stamp(observed),
-        }
-    )
-    approved = transition.approve_review_candidate(candidate, review, live, reviewed_at=observed)
-    return approved, candidate, review, live, observed.timestamp()
+    return approved, candidate, review, live, bundle, now.timestamp()
 
 
 def test_signal_active_deadline_covers_four_bounded_serial_waves() -> None:
@@ -175,9 +82,27 @@ def test_mechanics_active_deadline_adds_update_checkpoint_and_export_grace() -> 
     assert launch._maximum_seconds(plan, {"name": plan["identity"]["reload_name"]}) == 7200
 
 
-def test_signal_post_requires_exact_fresh_reviewed_transition() -> None:
+def test_signal_post_requires_exact_fresh_reviewed_transition(monkeypatch) -> None:
     plan, request = _signal_plan_and_request()
-    approved, candidate, review, live, now = _reviewed_artifacts(plan, request)
+    approved, candidate, review, live, bundle, now = _stub_review()
+
+    def approve(*_args, **kwargs):
+        if kwargs["expected_parent_review_sha256"] != review["sha256"]:
+            raise ValueError("wrong parent review pin")
+        return approved
+
+    def validate_live(_receipt, **kwargs):
+        assert kwargs == {
+            "now": datetime.fromtimestamp(now, UTC),
+            "require_fresh": True,
+        }
+        return live
+
+    monkeypatch.setattr(transition, "approve_review_candidate", approve)
+    monkeypatch.setattr(transition, "validate_live_task_receipt", validate_live)
+    monkeypatch.setattr(
+        transition, "validate_post_receipt_bundle", lambda *_args, **_kwargs: bundle
+    )
     assert (
         launch.validate_reviewed_transition(
             plan,
@@ -186,6 +111,9 @@ def test_signal_post_requires_exact_fresh_reviewed_transition() -> None:
             candidate=candidate,
             parent_review=review,
             live_task_receipt=live,
+            post_receipt_bundle=bundle,
+            expected_parent_review_sha256=review["sha256"],
+            expected_reviewed_transition_sha256=approved["sha256"],
             now=now,
         )
         == approved
@@ -198,9 +126,12 @@ def test_signal_post_requires_exact_fresh_reviewed_transition() -> None:
             candidate=candidate,
             parent_review=review,
             live_task_receipt=live,
+            post_receipt_bundle=bundle,
+            expected_parent_review_sha256=review["sha256"],
+            expected_reviewed_transition_sha256=approved["sha256"],
             now=now,
         )
-    with pytest.raises(launch.JobsError, match="stale"):
+    with pytest.raises(launch.JobsError, match="invalid or stale"):
         launch.validate_reviewed_transition(
             plan,
             request,
@@ -208,35 +139,30 @@ def test_signal_post_requires_exact_fresh_reviewed_transition() -> None:
             candidate=candidate,
             parent_review=review,
             live_task_receipt=live,
-            now=now + 301,
-        )
-
-
-def test_signal_post_rejects_transition_for_a_different_request() -> None:
-    plan, request = _signal_plan_and_request()
-    approved, candidate, review, live, now = _reviewed_artifacts(plan, request)
-    request = {**request, "title": request["title"] + " drift"}
-    with pytest.raises(launch.JobsError, match="exact request"):
-        launch.validate_reviewed_transition(
-            plan,
-            request,
-            approved=approved,
-            candidate=candidate,
-            parent_review=review,
-            live_task_receipt=live,
+            post_receipt_bundle=bundle,
+            expected_parent_review_sha256="sha256:" + "0" * 64,
+            expected_reviewed_transition_sha256=approved["sha256"],
             now=now,
         )
 
 
-def test_signal_post_rejects_operator_source_drift(monkeypatch) -> None:
+def test_signal_post_rejects_transition_for_a_different_request(monkeypatch) -> None:
     plan, request = _signal_plan_and_request()
-    approved, candidate, review, live, now = _reviewed_artifacts(plan, request)
+    approved, candidate, review, live, bundle, now = _stub_review()
+    original = request
+
+    def approve(_candidate, _review, _live, _bundle, _plan, checked_request, **_kwargs):
+        if checked_request != original:
+            raise ValueError("different request")
+        return approved
+
+    monkeypatch.setattr(transition, "approve_review_candidate", approve)
+    monkeypatch.setattr(transition, "validate_live_task_receipt", lambda *_args, **_kwargs: live)
     monkeypatch.setattr(
-        launch,
-        "operator_source_manifest",
-        lambda: {"training/miles96_mechanics_launch.py": "sha256:" + "0" * 64},
+        transition, "validate_post_receipt_bundle", lambda *_args, **_kwargs: bundle
     )
-    with pytest.raises(launch.JobsError, match="exact request"):
+    request = {**request, "title": request["title"] + " drift"}
+    with pytest.raises(launch.JobsError, match="invalid or stale"):
         launch.validate_reviewed_transition(
             plan,
             request,
@@ -244,6 +170,32 @@ def test_signal_post_rejects_operator_source_drift(monkeypatch) -> None:
             candidate=candidate,
             parent_review=review,
             live_task_receipt=live,
+            post_receipt_bundle=bundle,
+            expected_parent_review_sha256=review["sha256"],
+            expected_reviewed_transition_sha256=approved["sha256"],
+            now=now,
+        )
+
+
+def test_signal_post_rejects_unpinned_successor(monkeypatch) -> None:
+    plan, request = _signal_plan_and_request()
+    approved, candidate, review, live, bundle, now = _stub_review()
+    monkeypatch.setattr(transition, "approve_review_candidate", lambda *_args, **_kwargs: approved)
+    monkeypatch.setattr(transition, "validate_live_task_receipt", lambda *_args, **_kwargs: live)
+    monkeypatch.setattr(
+        transition, "validate_post_receipt_bundle", lambda *_args, **_kwargs: bundle
+    )
+    with pytest.raises(launch.JobsError, match="predecessor"):
+        launch.validate_reviewed_transition(
+            plan,
+            request,
+            approved=approved,
+            candidate=candidate,
+            parent_review=review,
+            live_task_receipt=live,
+            post_receipt_bundle=bundle,
+            expected_parent_review_sha256=review["sha256"],
+            expected_reviewed_transition_sha256="sha256:" + "0" * 64,
             now=now,
         )
 
@@ -258,6 +210,91 @@ def test_signal_submit_fails_before_preview_without_review(tmp_path) -> None:
     with pytest.raises(launch.JobsError, match="requires"):
         launch.submit_once(plan, request, Client(), tmp_path / "launch")
     assert not (tmp_path / "launch").exists()
+
+
+def test_signal_submit_reuses_prepared_bundle_and_posts_once(monkeypatch, tmp_path) -> None:
+    plan, request = _signal_plan_and_request()
+    directory = tmp_path / "prepared"
+    directory.mkdir()
+    bundle = {
+        "server_preview": {"sha256": "sha256:" + "1" * 64},
+        "fresh_absence": {"sha256": "sha256:" + "2" * 64},
+    }
+    bundle_checks = []
+    transition_checks = []
+
+    def check_bundle(_plan, _request, _bundle, checked_directory, **kwargs):
+        assert checked_directory == directory
+        bundle_checks.append(kwargs.get("expect_post_intent", False))
+        assert (directory / "SUBMISSION.jsonl").exists() is bundle_checks[-1]
+        return bundle
+
+    monkeypatch.setattr(launch, "validate_signal_post_bundle", check_bundle)
+    monkeypatch.setattr(
+        launch,
+        "validate_reviewed_transition",
+        lambda *_args, **kwargs: transition_checks.append(kwargs["now"]) or {"launchable": True},
+    )
+    monkeypatch.setattr(
+        launch,
+        "_prove_sfs_output_absent",
+        lambda *_args, **_kwargs: {"sha256": "sha256:" + "3" * 64},
+    )
+    monkeypatch.setattr(
+        launch,
+        "capacity_gate",
+        lambda *_args, **_kwargs: {"sha256": "sha256:" + "4" * 64},
+    )
+    monkeypatch.setattr(
+        launch,
+        "final_prepost_checks",
+        lambda *_args, **_kwargs: {"sha256": "sha256:" + "5" * 64},
+    )
+    monkeypatch.setattr(
+        launch,
+        "validate_armed_observer",
+        lambda *_args, **_kwargs: {"sha256": "sha256:" + "6" * 64},
+    )
+
+    class Client:
+        calls = []
+
+        def preview(self, _request):
+            raise AssertionError("reviewed signal submit regenerated its preview")
+
+        def request(self, method, path, **kwargs):
+            self.calls.append((method, path, kwargs))
+            return {
+                "name": request["name"] + "-1234abcd",
+                "job_id": str(uuid.UUID("33333333-3333-4333-8333-333333333333")),
+                "run_dir": request["run_dir"],
+                "status": "QUEUED",
+            }
+
+    client = Client()
+    result = launch.submit_once(
+        plan,
+        request,
+        client,
+        directory,
+        now=lambda: 100.0,
+        start_observer=lambda _directory: (_ for _ in ()).throw(
+            AssertionError("reviewed signal submit started a second observer")
+        ),
+        reviewed_transition={"approved": True},
+        transition_candidate={"candidate": True},
+        parent_review={"review": True},
+        live_task_receipt={"live": True},
+        post_receipt_bundle=bundle,
+        expected_parent_review_sha256="sha256:" + "7" * 64,
+        expected_reviewed_transition_sha256="sha256:" + "8" * 64,
+    )
+    assert result["job_id"] == "33333333-3333-4333-8333-333333333333"
+    assert bundle_checks == [False, True]
+    assert transition_checks == [100.0, 100.0]
+    assert client.calls == [("POST", "/v1/runs", {"json": request})]
+    rows = [json.loads(line) for line in (directory / "SUBMISSION.jsonl").read_text().splitlines()]
+    assert [row["state"] for row in rows] == ["POST_INTENT_DO_NOT_RETRY", "POST_RESPONSE"]
 
 
 def test_final_prepost_gate_rechecks_observer_jobs_and_kubernetes(monkeypatch, tmp_path) -> None:

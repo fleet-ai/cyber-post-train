@@ -869,6 +869,7 @@ def validate_signal_post_bundle(
     directory: Path,
     *,
     now: float,
+    expect_post_intent: bool = False,
 ) -> dict[str, Any]:
     """Bind a reviewed lane successor to the exact still-live local receipts."""
     from training import miles96_signal_qualification as signal
@@ -933,7 +934,19 @@ def validate_signal_post_bundle(
         or not 0 <= now - _timestamp(capacity.get("observed_at")) <= CAPACITY_MAX_AGE_SECONDS
     ):
         raise JobsError("reviewed capacity receipt is stale or mismatched")
-    if _paths(directory)["journal"].exists():
+    journal = _paths(directory)["journal"]
+    if expect_post_intent:
+        try:
+            rows = [json.loads(line) for line in journal.read_text().splitlines() if line]
+        except (OSError, ValueError) as exc:
+            raise JobsError("prepared signal launch lacks its exact POST intent") from exc
+        if (
+            len(rows) != 1
+            or rows[0].get("state") != "POST_INTENT_DO_NOT_RETRY"
+            or rows[0].get("request_sha256") != digest(request)
+        ):
+            raise JobsError("prepared signal launch POST intent is ambiguous")
+    elif journal.exists():
         raise JobsError("prepared signal launch already has a POST intent")
     return bundle
 
@@ -1025,12 +1038,23 @@ def validate_reviewed_transition(
     candidate: dict[str, Any] | None,
     parent_review: dict[str, Any] | None,
     live_task_receipt: dict[str, Any] | None,
+    post_receipt_bundle: dict[str, Any] | None,
+    expected_parent_review_sha256: str | None,
+    expected_reviewed_transition_sha256: str | None,
     now: float,
 ) -> dict[str, Any] | None:
     """Require the exact root-reviewed phase-1 transition before any POST."""
     from training import miles96_signal_qualification as signal
 
-    artifacts = (approved, candidate, parent_review, live_task_receipt)
+    artifacts = (
+        approved,
+        candidate,
+        parent_review,
+        live_task_receipt,
+        post_receipt_bundle,
+        expected_parent_review_sha256,
+        expected_reviewed_transition_sha256,
+    )
     if plan.get("schema") != signal.SCHEMA:
         if any(value is not None for value in artifacts):
             raise JobsError("reviewed signal transition cannot authorize a mechanics request")
@@ -1041,37 +1065,40 @@ def validate_reviewed_transition(
     from training import miles_signal_transition as transition
 
     try:
-        reviewed_at = datetime.fromtimestamp(now, UTC)
+        current_time = datetime.fromtimestamp(now, UTC)
+        transition.validate_live_task_receipt(
+            live_task_receipt,
+            now=current_time,
+            require_fresh=True,
+        )
+        approved_at = transition._time(approved["approved_at"])
         expected = transition.approve_review_candidate(
             candidate,
             parent_review,
             live_task_receipt,
-            reviewed_at=reviewed_at,
+            post_receipt_bundle,
+            plan,
+            request,
+            expected_parent_review_sha256=expected_parent_review_sha256,
+            reviewed_at=approved_at,
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise JobsError("reviewed signal transition is invalid or stale") from exc
-    if approved != expected:
-        raise JobsError("reviewed signal transition differs from its exact predecessor")
-
-    evidence = approved["future_bindings"]
-    lanes = evidence["lanes"]
-    matches = [row for row in lanes if row.get("name") == request.get("name")]
-    source_closure = "sha256:" + mechanics.digest(plan["runtime_sources"])
-    operator_sources = operator_source_manifest()
     if (
-        len(matches) != 1
-        or matches[0].get("plan_sha256") != "sha256:" + mechanics.digest(plan)
-        or matches[0].get("request_sha256") != "sha256:" + digest(request)
-        or matches[0].get("authority_config_sha256")
-        != plan["selection_authority"]["authority_config_sha256"]
-        or matches[0].get("live_binding_receipt_sha256")
-        != plan["selection_authority"]["current_binding_sha256"]
-        or evidence["adapter"].get("source_closure_sha256") != source_closure
-        or evidence["adapter"].get("runtime_image") != request.get("image")
-        or evidence["operator"].get("source_manifest") != operator_sources
-        or evidence["operator"].get("source_closure_sha256") != "sha256:" + digest(operator_sources)
+        approved != expected
+        or approved.get("sha256") != expected_reviewed_transition_sha256
+        or parent_review.get("sha256") != expected_parent_review_sha256
     ):
-        raise JobsError("reviewed signal transition does not bind this exact request")
+        raise JobsError("reviewed signal transition differs from its exact predecessor")
+    try:
+        transition.validate_post_receipt_bundle(
+            post_receipt_bundle,
+            plan,
+            request,
+            now=current_time,
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise JobsError("reviewed signal POST receipts are invalid or stale") from exc
     return approved
 
 
@@ -1093,12 +1120,20 @@ def submit_once(
     transition_candidate: dict[str, Any] | None = None,
     parent_review: dict[str, Any] | None = None,
     live_task_receipt: dict[str, Any] | None = None,
+    post_receipt_bundle: dict[str, Any] | None = None,
+    expected_parent_review_sha256: str | None = None,
+    expected_reviewed_transition_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Preview, arm, recheck, journal, and issue exactly one Jobs API POST."""
     plan = _validate_plan(plan)
     if request != _expected_request(plan, request, receipt):
         raise JobsError("request differs from the exact immutable mechanics plan")
     validate_request(request)
+    from training import miles96_signal_qualification as signal
+
+    signal_launch = plan.get("schema") == signal.SCHEMA
+    if signal_launch and post_receipt_bundle is None:
+        raise JobsError("signal qualification requires an exact prepared POST bundle")
     validate_reviewed_transition(
         plan,
         request,
@@ -1106,32 +1141,40 @@ def submit_once(
         candidate=transition_candidate,
         parent_review=parent_review,
         live_task_receipt=live_task_receipt,
+        post_receipt_bundle=post_receipt_bundle,
+        expected_parent_review_sha256=expected_parent_review_sha256,
+        expected_reviewed_transition_sha256=expected_reviewed_transition_sha256,
         now=now(),
     )
     paths = _paths(directory)
-    if directory.exists() and any(directory.iterdir()):
-        raise JobsError("launch evidence directory is not create-once empty")
-    directory.mkdir(parents=True, exist_ok=True)
-    preview_receipt = _live_preview_receipt(plan, request, client, now=now)
-    _write_json_once(paths["plan"], plan)
-    _write_json_once(paths["request"], request)
-    _write_json_once(paths["preview"], preview_receipt)
-    observer = start_observer(directory)
-    try:
-        guard = fresh_absence_checks(
-            plan,
-            request,
-            client,
-            directory,
-            runner=runner,
-            jobs_root=jobs_root,
-            output_absence_receipt=output_absence_receipt,
-            wandb_exists=wandb_exists,
-            now=now,
-        )
-    except Exception:
-        observer.terminate()
-        raise
+    observer: subprocess.Popen[bytes] | None = None
+    if signal_launch:
+        preview_receipt = post_receipt_bundle["server_preview"]
+        guard = post_receipt_bundle["fresh_absence"]
+    else:
+        if directory.exists() and any(directory.iterdir()):
+            raise JobsError("launch evidence directory is not create-once empty")
+        directory.mkdir(parents=True, exist_ok=True)
+        preview_receipt = _live_preview_receipt(plan, request, client, now=now)
+        _write_json_once(paths["plan"], plan)
+        _write_json_once(paths["request"], request)
+        _write_json_once(paths["preview"], preview_receipt)
+        observer = start_observer(directory)
+        try:
+            guard = fresh_absence_checks(
+                plan,
+                request,
+                client,
+                directory,
+                runner=runner,
+                jobs_root=jobs_root,
+                output_absence_receipt=output_absence_receipt,
+                wandb_exists=wandb_exists,
+                now=now,
+            )
+        except Exception:
+            observer.terminate()
+            raise
     try:
         # Revalidate the exact source-bound SFS receipt immediately before the
         # durable create intent.  A runtime create-once guard remains required
@@ -1140,12 +1183,17 @@ def submit_once(
             plan,
             request,
             jobs_root=jobs_root,
-            receipt=output_absence_receipt,
+            receipt=(
+                output_absence_receipt
+                if output_absence_receipt is not None
+                else (post_receipt_bundle or {}).get("sfs_output_absence")
+            ),
             observed_at=now(),
         )
         capacity = capacity_gate(plan, request, reader=capacity_reader, now=now)
     except Exception:
-        observer.terminate()
+        if observer is not None:
+            observer.terminate()
         raise
     try:
         final_gate = final_prepost_checks(
@@ -1157,8 +1205,11 @@ def submit_once(
             now=now,
         )
     except Exception:
-        observer.terminate()
+        if observer is not None:
+            observer.terminate()
         raise
+    if signal_launch:
+        validate_signal_post_bundle(plan, request, post_receipt_bundle, directory, now=now())
     descriptor = os.open(paths["journal"], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "w") as stream:
         stream.write(
@@ -1182,6 +1233,15 @@ def submit_once(
     try:
         # Keep this separate from the duplicate read so a coordinator that
         # exits during that final read cannot leave an unwatched allocation.
+        if signal_launch:
+            validate_signal_post_bundle(
+                plan,
+                request,
+                post_receipt_bundle,
+                directory,
+                now=now(),
+                expect_post_intent=True,
+            )
         validate_armed_observer(plan, request, directory, now=now())
         validate_reviewed_transition(
             plan,
@@ -1190,10 +1250,14 @@ def submit_once(
             candidate=transition_candidate,
             parent_review=parent_review,
             live_task_receipt=live_task_receipt,
+            post_receipt_bundle=post_receipt_bundle,
+            expected_parent_review_sha256=expected_parent_review_sha256,
+            expected_reviewed_transition_sha256=expected_reviewed_transition_sha256,
             now=now(),
         )
     except Exception:
-        observer.terminate()
+        if observer is not None:
+            observer.terminate()
         raise
     response = client.request("POST", "/v1/runs", json=request)
     # Persist the creator-returned identity before interpreting it.  If the
@@ -1229,6 +1293,9 @@ def main() -> None:
     parser.add_argument("--transition-candidate")
     parser.add_argument("--parent-review")
     parser.add_argument("--live-task-receipt")
+    parser.add_argument("--post-receipt-bundle")
+    parser.add_argument("--expected-parent-review-sha256")
+    parser.add_argument("--expected-reviewed-transition-sha256")
     parser.add_argument("--attempt", type=int, default=1)
     args = parser.parse_args()
     plan = _validate_plan(json.loads(Path(args.plan).read_text()))
@@ -1293,6 +1360,9 @@ def main() -> None:
                 args.transition_candidate,
                 args.parent_review,
                 args.live_task_receipt,
+                args.post_receipt_bundle,
+                args.expected_parent_review_sha256,
+                args.expected_reviewed_transition_sha256,
             )
         ):
             parser.error("--prepare-review runs before transition approval")
@@ -1314,13 +1384,19 @@ def main() -> None:
         args.transition_candidate,
         args.parent_review,
         args.live_task_receipt,
+        args.post_receipt_bundle,
     )
-    if any(transition_paths) and not all(transition_paths):
-        parser.error("signal transition requires all four reviewed artifacts")
-    reviewed_transition, transition_candidate, parent_review, live_task_receipt = (
+    transition_inputs = (
+        *transition_paths,
+        args.expected_parent_review_sha256,
+        args.expected_reviewed_transition_sha256,
+    )
+    if any(transition_inputs) and not all(transition_inputs):
+        parser.error("signal transition requires all reviewed artifacts and exact digest pins")
+    reviewed_transition, transition_candidate, parent_review, live_task_receipt, post_bundle = (
         [json.loads(Path(path).read_text()) for path in transition_paths]
-        if all(transition_paths)
-        else [None, None, None, None]
+        if all(transition_inputs)
+        else [None, None, None, None, None]
     )
     token = os.environ.get("FLEET_API_KEY")
     if not token:
@@ -1337,6 +1413,9 @@ def main() -> None:
             transition_candidate=transition_candidate,
             parent_review=parent_review,
             live_task_receipt=live_task_receipt,
+            post_receipt_bundle=post_bundle,
+            expected_parent_review_sha256=args.expected_parent_review_sha256,
+            expected_reviewed_transition_sha256=args.expected_reviewed_transition_sha256,
         )
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))
 

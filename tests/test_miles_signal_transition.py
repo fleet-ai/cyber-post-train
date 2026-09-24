@@ -323,6 +323,20 @@ def test_live_receipt_rejects_environment_version_response_drift(monkeypatch):
         transition.collect_live_task_receipt(client, observed_at=NOW)
 
 
+def test_live_task_receipt_freshness_boundary_is_900_seconds(live_receipt):
+    transition.validate_live_task_receipt(
+        live_receipt,
+        now=NOW + dt.timedelta(seconds=900),
+        require_fresh=True,
+    )
+    with pytest.raises(ValueError, match="stale"):
+        transition.validate_live_task_receipt(
+            live_receipt,
+            now=NOW + dt.timedelta(seconds=901),
+            require_fresh=True,
+        )
+
+
 def test_static_candidate_rebuilds_all_four_lanes_and_stays_unlaunchable(live_receipt):
     candidate = transition.build_review_candidate(live_receipt, _static_evidence(), observed_at=NOW)
     transition.validate_review_candidate(candidate, live_receipt)
