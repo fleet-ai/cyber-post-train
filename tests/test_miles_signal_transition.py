@@ -107,13 +107,52 @@ def _static_evidence():
             "runtime_image": mechanics.IMAGE,
             "image_digest": "sha256:" + mechanics.IMAGE.rsplit("@sha256:", 1)[1],
             "source_closure_sha256": "sha256:" + digest(signal.runtime_source_manifest()),
+            "raw_tool_catalog_sha256": mechanics.RAW_TOOL_CATALOG_SHA256,
+            "openai_tool_catalog_sha256": mechanics.OPENAI_TOOL_CATALOG_SHA256,
+            "tool_transform_source_sha256": "sha256:" + mechanics.FTI_V1_SHA256,
             "checks": {
                 "image_digest_exact": True,
                 "pinned_fti_imports": True,
                 "pinned_miles_sources": True,
                 "zero_update_entrypoint": True,
+                "sealed_raw_tool_catalog_exact": True,
+                "pinned_openai_projection_exact": True,
+                "session_open_exact_catalog_passed": True,
+                "session_open_visible_drift_rejected_and_closed": True,
+                "session_open_plan_drift_rejected_and_closed": True,
+                "session_open_plan_load_error_rejected_and_closed": True,
             },
             "observed_at": transition._stamp(NOW),
+        }
+    )
+    image_execution = transition._sealed(
+        {
+            "schema": transition.IMAGE_PREFLIGHT_EXECUTION_SCHEMA,
+            "status": "passed",
+            "job_name": "chris-q38-m96-image-preflight-test-v1",
+            "namespace": mechanics.NAMESPACE,
+            "kubernetes_context": mechanics.PROD_CONTEXT,
+            "job_uid": "00000000-0000-4000-8000-000000000001",
+            "pod_uid": "00000000-0000-4000-8000-000000000002",
+            "runtime_image": mechanics.IMAGE,
+            "observed_image_id": mechanics.IMAGE,
+            "priority_class": "c1",
+            "queue_priority": "q1",
+            "root_failure_alerts": "off",
+            "backoff_limit": 0,
+            "restart_policy": "Never",
+            "requested_gpus": 0,
+            "pod_restarts": 0,
+            "exit_code": 0,
+            "preview_manifest_sha256": "sha256:" + "a" * 64,
+            "preview_count": 2,
+            "preflight_receipt_sha256": image["sha256"],
+            "cleanup_job_uid": "00000000-0000-4000-8000-000000000001",
+            "job_absent_after_cleanup": True,
+            "pod_absent_after_cleanup": True,
+            "resources_released": True,
+            "observed_at": transition._stamp(NOW),
+            "released_at": transition._stamp(NOW + dt.timedelta(seconds=1)),
         }
     )
     operator_tests = transition._sealed(
@@ -149,6 +188,7 @@ def _static_evidence():
         "source_closure_sha256": "sha256:" + digest(signal.runtime_source_manifest()),
         "tests_receipt_sha256": adapter_tests["sha256"],
         "exact_image_preflight_receipt_sha256": image["sha256"],
+        "exact_image_preflight_execution_sha256": image_execution["sha256"],
         "tests": {
             "passed": 213,
             "failed": 0,
@@ -174,6 +214,7 @@ def _static_evidence():
     operator_wrapper = _wrap(operator, "operator-file")
     adapter_tests_wrapper = _wrap(adapter_tests, "adapter-tests-file")
     image_wrapper = _wrap(image, "image-file")
+    image_execution_wrapper = _wrap(image_execution, "image-execution-file")
     operator_tests_wrapper = _wrap(operator_tests, "operator-tests-file")
     return {
         "pins": {
@@ -181,6 +222,9 @@ def _static_evidence():
             "adapter_freeze_file_sha256": adapter_wrapper["file_sha256"],
             "adapter_test_receipt_file_sha256": adapter_tests_wrapper["file_sha256"],
             "exact_image_preflight_receipt_file_sha256": image_wrapper["file_sha256"],
+            "exact_image_preflight_execution_receipt_file_sha256": image_execution_wrapper[
+                "file_sha256"
+            ],
             "operator_commit": operator["commit"],
             "operator_freeze_file_sha256": operator_wrapper["file_sha256"],
             "operator_test_receipt_file_sha256": operator_tests_wrapper["file_sha256"],
@@ -188,6 +232,7 @@ def _static_evidence():
         "adapter_freeze": adapter_wrapper,
         "adapter_test_receipt": adapter_tests_wrapper,
         "exact_image_preflight_receipt": image_wrapper,
+        "exact_image_preflight_execution_receipt": image_execution_wrapper,
         "operator_freeze": operator_wrapper,
         "operator_test_receipt": operator_tests_wrapper,
     }
@@ -196,6 +241,74 @@ def _static_evidence():
 def _lane():
     row, plan, request = transition._lane_objects()[0]
     return row, plan, request
+
+
+def _reseal_wrapper(wrapper):
+    body = transition._sealed(
+        {key: value for key, value in wrapper["body"].items() if key != "sha256"}
+    )
+    wrapper["body"] = body
+    wrapper["body_sha256"] = "sha256:" + digest(body)
+    return wrapper
+
+
+@pytest.mark.parametrize(
+    ("field", "bad_value"),
+    [
+        ("status", "failed"),
+        ("job_name", "other-preflight"),
+        ("namespace", "default"),
+        ("kubernetes_context", "dev-context"),
+        ("runtime_image", "registry.invalid/example@sha256:" + "0" * 64),
+        ("observed_image_id", "registry.invalid/example@sha256:" + "0" * 64),
+        ("job_uid", "not-a-uuid"),
+        ("pod_uid", "not-a-uuid"),
+        ("priority_class", "c0"),
+        ("queue_priority", "q0"),
+        ("root_failure_alerts", "on"),
+        ("backoff_limit", 1),
+        ("restart_policy", "OnFailure"),
+        ("requested_gpus", 1),
+        ("pod_restarts", 1),
+        ("exit_code", 1),
+        ("preview_manifest_sha256", "not-a-sha"),
+        ("preview_count", 1),
+        ("preflight_receipt_sha256", "sha256:" + "0" * 64),
+        ("cleanup_job_uid", "00000000-0000-4000-8000-000000000003"),
+        ("job_absent_after_cleanup", False),
+        ("pod_absent_after_cleanup", False),
+        ("resources_released", False),
+        ("released_at", "2026-09-24T08:59:59Z"),
+    ],
+)
+def test_exact_image_execution_receipt_tamper_fails_closed(field, bad_value):
+    evidence = _static_evidence()
+    image = evidence["exact_image_preflight_receipt"]["body"]
+    wrapper = evidence["exact_image_preflight_execution_receipt"]
+    wrapper["body"][field] = bad_value
+    _reseal_wrapper(wrapper)
+    with pytest.raises(ValueError, match="execution receipt is incomplete"):
+        transition._validate_image_preflight_execution(
+            wrapper,
+            expected_file_sha256=wrapper["file_sha256"],
+            expected_runtime_image=mechanics.IMAGE,
+            expected_preflight_sha256=image["sha256"],
+        )
+
+
+def test_static_gate_requires_execution_body_and_adapter_cross_link(live_receipt):
+    missing = _static_evidence()
+    missing.pop("exact_image_preflight_execution_receipt")
+    candidate = transition.build_review_candidate(live_receipt, missing, observed_at=NOW)
+    assert candidate["gates"][0]["passed"] is False
+
+    mismatch = _static_evidence()
+    mismatch["adapter_freeze"]["body"]["exact_image_preflight_execution_sha256"] = (
+        "sha256:" + "0" * 64
+    )
+    _reseal_wrapper(mismatch["adapter_freeze"])
+    candidate = transition.build_review_candidate(live_receipt, mismatch, observed_at=NOW)
+    assert candidate["gates"][0]["passed"] is False
 
 
 def _post_bundle(plan, request):

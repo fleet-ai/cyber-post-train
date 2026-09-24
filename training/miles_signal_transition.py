@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import uuid
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -33,6 +34,7 @@ OPERATOR_FREEZE_SCHEMA = "cyber_qwen38_miles96_operator_freeze_v1"
 POST_BUNDLE_SCHEMA = "cyber_qwen38_miles_signal_post_receipt_bundle_v1"
 TEST_RECEIPT_SCHEMA = "cyber_qwen38_miles96_focused_tests_v1"
 IMAGE_PREFLIGHT_SCHEMA = "cyber_qwen38_miles96_exact_image_preflight_v1"
+IMAGE_PREFLIGHT_EXECUTION_SCHEMA = "cyber_qwen38_miles96_exact_image_preflight_execution_v1"
 OPERATOR_SOURCE_PATHS = (
     "cyber_post_train/gpu_capacity.py",
     "cyber_post_train/jobs.py",
@@ -304,6 +306,13 @@ def _commit(value: Any) -> bool:
     return isinstance(value, str) and COMMIT.fullmatch(value) is not None
 
 
+def _uuid(value: Any) -> bool:
+    try:
+        return str(uuid.UUID(str(value))) == value
+    except (ValueError, TypeError, AttributeError):
+        return False
+
+
 def _validate_test_receipt(
     wrapper: dict[str, Any],
     *,
@@ -348,16 +357,101 @@ def _validate_image_preflight(
         or body.get("runtime_image") != expected_runtime_image
         or body.get("image_digest") != image_digest
         or body.get("source_closure_sha256") != expected_source_closure_sha256
+        or body.get("raw_tool_catalog_sha256")
+        != "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+        or body.get("openai_tool_catalog_sha256")
+        != "sha256:9c3ad657a76c11423cdd1f543abb0d5363420dd4aae6244a2de73bb58913ce20"
+        or body.get("tool_transform_source_sha256")
+        != "sha256:0524f19dcc886b20d17b39c21bd6417f537423eec6ef2359487fc3911dad441c"
         or checks
         != {
             "image_digest_exact": True,
             "pinned_fti_imports": True,
             "pinned_miles_sources": True,
             "zero_update_entrypoint": True,
+            "sealed_raw_tool_catalog_exact": True,
+            "pinned_openai_projection_exact": True,
+            "session_open_exact_catalog_passed": True,
+            "session_open_visible_drift_rejected_and_closed": True,
+            "session_open_plan_drift_rejected_and_closed": True,
+            "session_open_plan_load_error_rejected_and_closed": True,
         }
     ):
         raise ValueError("exact-image preflight receipt is incomplete")
     _time(body["observed_at"])
+    return body
+
+
+def _validate_image_preflight_execution(
+    wrapper: dict[str, Any],
+    *,
+    expected_file_sha256: str,
+    expected_runtime_image: str,
+    expected_preflight_sha256: str,
+) -> dict[str, Any]:
+    from training import miles96_mechanics_canary as mechanics
+
+    body = _verify_loaded_receipt(wrapper, expected_file_sha256)
+    _verify_seal(body, IMAGE_PREFLIGHT_EXECUTION_SCHEMA)
+    image_digest = expected_runtime_image.rsplit("@", 1)[1]
+    if (
+        set(body)
+        != {
+            "schema",
+            "status",
+            "job_name",
+            "namespace",
+            "kubernetes_context",
+            "job_uid",
+            "pod_uid",
+            "runtime_image",
+            "observed_image_id",
+            "priority_class",
+            "queue_priority",
+            "root_failure_alerts",
+            "backoff_limit",
+            "restart_policy",
+            "requested_gpus",
+            "pod_restarts",
+            "exit_code",
+            "preview_manifest_sha256",
+            "preview_count",
+            "preflight_receipt_sha256",
+            "cleanup_job_uid",
+            "job_absent_after_cleanup",
+            "pod_absent_after_cleanup",
+            "resources_released",
+            "observed_at",
+            "released_at",
+            "sha256",
+        }
+        or body.get("status") != "passed"
+        or not re.fullmatch(r"chris-q38-m96-image-preflight-[a-z0-9-]+", body.get("job_name", ""))
+        or body.get("namespace") != mechanics.NAMESPACE
+        or body.get("kubernetes_context") != mechanics.PROD_CONTEXT
+        or not _uuid(body.get("job_uid"))
+        or not _uuid(body.get("pod_uid"))
+        or body.get("runtime_image") != expected_runtime_image
+        or not isinstance(body.get("observed_image_id"), str)
+        or not body["observed_image_id"].endswith("@" + image_digest)
+        or body.get("priority_class") != "c1"
+        or body.get("queue_priority") != "q1"
+        or body.get("root_failure_alerts") != "off"
+        or body.get("backoff_limit") != 0
+        or body.get("restart_policy") != "Never"
+        or body.get("requested_gpus") != 0
+        or body.get("pod_restarts") != 0
+        or body.get("exit_code") != 0
+        or not _sha(body.get("preview_manifest_sha256"))
+        or body.get("preview_count") != 2
+        or body.get("preflight_receipt_sha256") != expected_preflight_sha256
+        or body.get("cleanup_job_uid") != body.get("job_uid")
+        or body.get("job_absent_after_cleanup") is not True
+        or body.get("pod_absent_after_cleanup") is not True
+        or body.get("resources_released") is not True
+        or _time(body["released_at"]) < _time(body["observed_at"])
+    ):
+        raise ValueError("exact-image preflight execution receipt is incomplete")
     return body
 
 
@@ -393,6 +487,7 @@ def _validate_adapter_freeze(
             "source_closure_sha256",
             "tests_receipt_sha256",
             "exact_image_preflight_receipt_sha256",
+            "exact_image_preflight_execution_sha256",
             "tests",
             "lanes",
         }
@@ -405,6 +500,7 @@ def _validate_adapter_freeze(
         or body.get("source_closure_sha256") != "sha256:" + digest(signal.runtime_source_manifest())
         or not _sha(body.get("tests_receipt_sha256"))
         or not _sha(body.get("exact_image_preflight_receipt_sha256"))
+        or not _sha(body.get("exact_image_preflight_execution_sha256"))
         or type(tests.get("passed")) is not int
         or tests["passed"] < 1
         or tests.get("failed") != 0
@@ -471,9 +567,16 @@ def _candidate_gate_status(
             expected_runtime_image=adapter["runtime_image"],
             expected_source_closure_sha256=adapter["source_closure_sha256"],
         )
+        image_execution = _validate_image_preflight_execution(
+            evidence["exact_image_preflight_execution_receipt"],
+            expected_file_sha256=pins["exact_image_preflight_execution_receipt_file_sha256"],
+            expected_runtime_image=adapter["runtime_image"],
+            expected_preflight_sha256=image["sha256"],
+        )
         if (
             adapter["tests_receipt_sha256"] != adapter_tests["sha256"]
             or adapter["exact_image_preflight_receipt_sha256"] != image["sha256"]
+            or adapter["exact_image_preflight_execution_sha256"] != image_execution["sha256"]
         ):
             raise ValueError("adapter freeze references different supporting receipts")
         adapter_ok = True
