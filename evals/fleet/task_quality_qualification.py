@@ -481,9 +481,7 @@ def _protected_rows(split: dict[str, Any]) -> tuple[list[dict[str, Any]], int]:
         )
     if selection.get("exact_task_version_count") != len(protected):
         raise QualificationError("repaired held-out protocol count is invalid")
-    if len({(row["task_key"], row["task_version_id"]) for row in protected}) != len(
-        protected
-    ):
+    if len({(row["task_key"], row["task_version_id"]) for row in protected}) != len(protected):
         raise QualificationError("repaired held-out protocol contains duplicate task versions")
     return protected, sum(row["split"] == "final_test" for row in protected)
 

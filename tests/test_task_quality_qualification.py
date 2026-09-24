@@ -69,27 +69,21 @@ def test_sep24_expansion_requirements_bind_census_and_bounded_waves():
         "root_annotation": {"fleet.ai/failure-alerts": "off"},
         "server_preview_must_prove_root_annotation_before_create": True,
     }
+
+
 def test_sep24_coverage_sets_are_exact_and_disjoint():
     root = Path(__file__).parents[1] / "configs/data"
     inventory = json.loads(
         (root / "fleet-blackbox-current-production-20260924-v1.json").read_text()
     )
-    proven = json.loads(
-        (root / "fleet-blackbox-receipt-proven-20260924-v1.json").read_text()
-    )
-    candidates = json.loads(
-        (root / "fleet-blackbox-qa-candidates-20260924-v1.json").read_text()
-    )
-    coverage = json.loads(
-        (root / "fleet-blackbox-training-coverage-20260924-v1.json").read_text()
-    )
+    proven = json.loads((root / "fleet-blackbox-receipt-proven-20260924-v1.json").read_text())
+    candidates = json.loads((root / "fleet-blackbox-qa-candidates-20260924-v1.json").read_text())
+    coverage = json.loads((root / "fleet-blackbox-training-coverage-20260924-v1.json").read_text())
     for value in (inventory, proven, candidates, coverage):
         assert value["sha256"] == qualification.digest(
             {key: item for key, item in value.items() if key != "sha256"}
         )
-    identities = {
-        (row["task_key"], row["task_version_id"]) for row in inventory["tasks"]
-    }
+    identities = {(row["task_key"], row["task_version_id"]) for row in inventory["tasks"]}
     proven_identities = {
         (row["task_key"], row["task_version_id"]) for row in proven["task_versions"]
     }
