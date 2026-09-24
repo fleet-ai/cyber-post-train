@@ -731,6 +731,42 @@ def active_claims(dsn: str) -> dict[str, Any]:
     }
 
 
+def cell_status(
+    dsn: str, *, task_version_id: str, model_revision: str, attempt: int
+) -> dict[str, Any]:
+    """Return one score-blind cell result after its source Job is terminal."""
+    if (
+        not isinstance(task_version_id, str)
+        or not task_version_id
+        or not isinstance(model_revision, str)
+        or not model_revision
+        or type(attempt) is not int
+        or attempt < 1
+    ):
+        raise rollout_ledger.LedgerError("cell status identity is invalid")
+    with _read_transaction(dsn) as connection:
+        rows = connection.execute(
+            """
+            SELECT cell_id, state, result_class, receipt_digest,
+                   failure_code, reconciliation_digest
+            FROM rollout_cells
+            WHERE task_version_id = %s AND model_revision = %s AND attempt = %s
+            LIMIT 2
+            """,
+            (task_version_id, model_revision, attempt),
+        ).fetchall()
+        if len(rows) != 1:
+            raise rollout_ledger.LedgerError("cell status identity is not unique")
+        row = dict(rows[0])
+        row["local_result_present"] = bool(
+            connection.execute(
+                "SELECT EXISTS(SELECT 1 FROM rollout_local_results WHERE cell_id = %s) AS present",
+                (row["cell_id"],),
+            ).fetchone()["present"]
+        )
+    return row
+
+
 def summary(dsn: str) -> dict[str, Any]:
     with _read_transaction(dsn) as connection:
         total = connection.execute("SELECT COUNT(*) AS count FROM rollout_cells").fetchone()[

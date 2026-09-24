@@ -183,6 +183,15 @@ immutable serving-image/weight receipts and live parity from
 [the evaluation skill](../../skills/cyber-eval-parity/SKILL.md).
 Never silently pool serving blocks or use external benchmark observations to tune.
 
+For the locked six-arm final-eight pass@4 comparison, use
+`evals.fleet.campaign_adapter` through the generic campaign controller. It maps
+192 logical model/task/attempt records onto exactly 24 existing held-out source
+Jobs (six models × seeds 46–49), then imports each task independently after the
+exact source Job UID is terminal. See
+[the campaign protocol](../../docs/EVALUATION_CAMPAIGNS.md#concrete-fleet-final8-mapping).
+This is a prospective locked confirmation on a historically exposed set, not
+an untouched final test; no historical result cells are reused.
+
 See [PostgreSQL operations](../../docs/ROLLOUT_POSTGRES.md) for reconciliation
 and backup ownership. Historical Qwen3.6/Qwen Code/exact-800 campaign artifacts
 remain reproducible in Git; their names, ledger and retries are not starter templates.
