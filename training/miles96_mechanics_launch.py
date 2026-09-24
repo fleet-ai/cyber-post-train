@@ -50,6 +50,7 @@ OPERATOR_SOURCE_PATHS = (
     "training/dev_cleanup_observer.py",
     "training/fleet.py",
     "training/miles96_mechanics_launch.py",
+    "training/miles96_phase1_terminal_gate.py",
     "training/miles_signal_transition.py",
     "training/miles_signal_wave.py",
     "evals/fleet/opencode_self_hosted.py",
@@ -1158,6 +1159,35 @@ def validate_reviewed_transition(
     return approved
 
 
+def validate_phase1_terminal_authority(
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    *,
+    authority: dict[str, Any] | None,
+    expected_sha256: str | None,
+    now: float,
+) -> dict[str, Any] | None:
+    """Require actual terminal phase-1 evidence before a learning POST."""
+    learning = (
+        plan.get("schema") == mechanics.SCHEMA and request.get("name") == plan["identity"]["name"]
+    )
+    if not learning:
+        if authority is not None or expected_sha256 is not None:
+            raise JobsError("phase-1 terminal authority cannot authorize this request")
+        return None
+    if authority is None or expected_sha256 is None:
+        raise JobsError("mechanics learning requires exact phase-1 terminal authority")
+    from training import miles96_phase1_terminal_gate as terminal_gate
+
+    return terminal_gate.validate_authority(
+        plan,
+        request,
+        authority,
+        expected_sha256=expected_sha256,
+        now=datetime.fromtimestamp(now, UTC),
+    )
+
+
 def submit_once(
     plan: dict[str, Any],
     request: dict[str, Any],
@@ -1179,6 +1209,8 @@ def submit_once(
     post_receipt_bundle: dict[str, Any] | None = None,
     expected_parent_review_sha256: str | None = None,
     expected_reviewed_transition_sha256: str | None = None,
+    phase1_terminal_authority: dict[str, Any] | None = None,
+    expected_phase1_terminal_authority_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Preview, arm, recheck, journal, and issue exactly one Jobs API POST."""
     plan = _validate_plan(plan)
@@ -1200,6 +1232,13 @@ def submit_once(
         post_receipt_bundle=post_receipt_bundle,
         expected_parent_review_sha256=expected_parent_review_sha256,
         expected_reviewed_transition_sha256=expected_reviewed_transition_sha256,
+        now=now(),
+    )
+    validated_phase1_terminal = validate_phase1_terminal_authority(
+        plan,
+        request,
+        authority=phase1_terminal_authority,
+        expected_sha256=expected_phase1_terminal_authority_sha256,
         now=now(),
     )
     paths = _paths(directory)
@@ -1278,6 +1317,11 @@ def submit_once(
                     "final_prepost_gate": final_gate,
                     "final_sfs_output_absence_receipt_sha256": final_sfs_proof["sha256"],
                     "capacity_gate": capacity,
+                    "phase1_terminal_authority_sha256": (
+                        validated_phase1_terminal["sha256"]
+                        if validated_phase1_terminal is not None
+                        else None
+                    ),
                 },
                 sort_keys=True,
                 separators=(",", ":"),
@@ -1308,6 +1352,13 @@ def submit_once(
             post_receipt_bundle=post_receipt_bundle,
             expected_parent_review_sha256=expected_parent_review_sha256,
             expected_reviewed_transition_sha256=expected_reviewed_transition_sha256,
+            now=now(),
+        )
+        validate_phase1_terminal_authority(
+            plan,
+            request,
+            authority=phase1_terminal_authority,
+            expected_sha256=expected_phase1_terminal_authority_sha256,
             now=now(),
         )
         # Keep liveness as the last fallible local gate before the only POST.
@@ -1354,6 +1405,8 @@ def main() -> None:
     parser.add_argument("--post-receipt-bundle")
     parser.add_argument("--expected-parent-review-sha256")
     parser.add_argument("--expected-reviewed-transition-sha256")
+    parser.add_argument("--phase1-terminal-authority")
+    parser.add_argument("--expected-phase1-terminal-authority-sha256")
     parser.add_argument("--attempt", type=int, default=1)
     args = parser.parse_args()
     plan = _validate_plan(json.loads(Path(args.plan).read_text()))
@@ -1421,6 +1474,8 @@ def main() -> None:
                 args.post_receipt_bundle,
                 args.expected_parent_review_sha256,
                 args.expected_reviewed_transition_sha256,
+                args.phase1_terminal_authority,
+                args.expected_phase1_terminal_authority_sha256,
             )
         ):
             parser.error("--prepare-review runs before transition approval")
@@ -1456,6 +1511,13 @@ def main() -> None:
         if all(transition_inputs)
         else [None, None, None, None, None]
     )
+    if bool(args.phase1_terminal_authority) != bool(args.expected_phase1_terminal_authority_sha256):
+        parser.error("phase-1 terminal authority requires its independent digest pin")
+    phase1_terminal_authority = (
+        json.loads(Path(args.phase1_terminal_authority).read_text())
+        if args.phase1_terminal_authority
+        else None
+    )
     token = os.environ.get("FLEET_API_KEY")
     if not token:
         parser.error("--submit requires FLEET_API_KEY in the process environment")
@@ -1474,6 +1536,10 @@ def main() -> None:
             post_receipt_bundle=post_bundle,
             expected_parent_review_sha256=args.expected_parent_review_sha256,
             expected_reviewed_transition_sha256=args.expected_reviewed_transition_sha256,
+            phase1_terminal_authority=phase1_terminal_authority,
+            expected_phase1_terminal_authority_sha256=(
+                args.expected_phase1_terminal_authority_sha256
+            ),
         )
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))
 

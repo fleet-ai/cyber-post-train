@@ -1052,6 +1052,7 @@ def _fake_start_observer(plan: dict, request: dict):
 
 def test_live_preview_absence_and_exactly_one_post_are_durably_journaled(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _plan()
     request = mechanics.job_request(plan)
@@ -1074,6 +1075,19 @@ def test_live_preview_absence_and_exactly_one_post_are_durably_journaled(
             **kwargs,
         )
 
+    terminal_authority = {"sha256": _sha("e")}
+    terminal_checks = []
+
+    def validate_terminal(*_args, **_kwargs):
+        terminal_checks.append(True)
+        return terminal_authority
+
+    monkeypatch.setattr(
+        launch,
+        "validate_phase1_terminal_authority",
+        validate_terminal,
+    )
+
     result = launch.submit_once(
         plan,
         request,
@@ -1085,12 +1099,15 @@ def test_live_preview_absence_and_exactly_one_post_are_durably_journaled(
         capacity_reader=capacity_reader,
         now=time.time,
         start_observer=_fake_start_observer(plan, request),
+        phase1_terminal_authority=terminal_authority,
+        expected_phase1_terminal_authority_sha256=_sha("e"),
     )
     rows = [
         json.loads(line) for line in (tmp_path / "launch/SUBMISSION.jsonl").read_text().splitlines()
     ]
     assert result["name"] == request["name"] + "-1234abcd"
     assert client.posts == 1
+    assert terminal_checks == [True, True]
     assert [row["state"] for row in rows] == [
         "POST_INTENT_DO_NOT_RETRY",
         "POST_RESPONSE",
