@@ -897,6 +897,15 @@ def test_retained_anchor_blocks_retry_after_journal_parent_is_recreated(tmp_path
     assert not journal.exists()
     assert (moved / journal.name).exists()
     assert anchor.samefile(moved / journal.name)
+    expected_manifest = validate_preview(config(), preview())["manifest_sha256"]
+    for evidence_path in (anchor, moved / journal.name):
+        _, response, _ = jobs_module.read_submission_journal(
+            evidence_path,
+            config(),
+            expected_manifest_sha256=expected_manifest,
+            expected_intent_evidence_file_sha256=None,
+        )
+        assert response == result
 
 
 def test_expired_authority_stops_before_callback_intent_and_post(tmp_path, monkeypatch) -> None:

@@ -638,6 +638,7 @@ class Jobs:
         config: dict,
         journal: Path,
         *,
+        journal_anchor: Path | None = None,
         expected_preview_manifest_sha256: str | None = None,
         intent_evidence_file_sha256: str | None = None,
         before_intent: Callable[[dict], str] | None = None,
@@ -648,6 +649,15 @@ class Jobs:
             raise JobsError("submission intent evidence has two competing producers")
         if journal.exists() or journal.is_symlink():
             raise JobsError("submission journal already exists; reconcile, never repeat POST")
+        if journal_anchor is not None:
+            try:
+                journal_anchor.absolute().relative_to(journal.parent.absolute())
+            except ValueError:
+                pass
+            else:
+                raise JobsError("submission anchor must be outside the journal directory")
+            if journal_anchor.exists() or journal_anchor.is_symlink():
+                raise JobsError("submission anchor already exists; reconcile, never repeat POST")
         for row in self.all_runs():
             name = row["name"]
             if (
@@ -683,16 +693,23 @@ class Jobs:
             type(not_after_epoch) is not int or time.time() + 30 > not_after_epoch
         ):
             raise JobsError("submission authority expired during final duplicate checks")
-        if journal.name in {"", ".", ".."} or journal.parent.is_symlink():
+        intent_path = journal if journal_anchor is None else journal_anchor
+        if (
+            journal.name in {"", ".", ".."}
+            or journal.parent.is_symlink()
+            or intent_path.name in {"", ".", ".."}
+            or intent_path.parent.is_symlink()
+        ):
             raise JobsError("submission journal path is unsafe")
         directory_fd = -1
+        journal_directory_fd = -1
         journal_fd = -1
-        temporary_name = f".{journal.name}.{uuid4().hex}.tmp"
+        temporary_name = f".{intent_path.name}.{uuid4().hex}.tmp"
 
         def require_attached_journal_directory(*, durable_intent: bool) -> None:
             try:
                 opened = os.fstat(directory_fd)
-                named = os.stat(journal.parent, follow_symlinks=False)
+                named = os.stat(intent_path.parent, follow_symlinks=False)
             except OSError as exc:
                 suffix = (
                     " after durable intent; reconcile, never repeat POST"
@@ -714,9 +731,16 @@ class Jobs:
 
         try:
             directory_fd = os.open(
-                journal.parent,
+                intent_path.parent,
                 os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
             )
+            if journal_anchor is not None:
+                journal_directory_fd = os.open(
+                    journal.parent,
+                    os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+                )
+                if os.fstat(directory_fd).st_dev != os.fstat(journal_directory_fd).st_dev:
+                    raise JobsError("submission anchor and journal must share one filesystem")
             journal_fd = os.open(
                 temporary_name,
                 os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
@@ -758,12 +782,21 @@ class Jobs:
             require_attached_journal_directory(durable_intent=False)
             os.link(
                 temporary_name,
-                journal.name,
+                intent_path.name,
                 src_dir_fd=directory_fd,
                 dst_dir_fd=directory_fd,
                 follow_symlinks=False,
             )
             os.fsync(directory_fd)
+            if journal_anchor is not None:
+                os.link(
+                    intent_path.name,
+                    journal.name,
+                    src_dir_fd=directory_fd,
+                    dst_dir_fd=journal_directory_fd,
+                    follow_symlinks=False,
+                )
+                os.fsync(journal_directory_fd)
         except OSError as exc:
             if directory_fd >= 0:
                 with contextlib.suppress(OSError):
@@ -774,6 +807,9 @@ class Jobs:
             if directory_fd >= 0:
                 os.close(directory_fd)
                 directory_fd = -1
+            if journal_directory_fd >= 0:
+                os.close(journal_directory_fd)
+                journal_directory_fd = -1
             raise JobsError("submission intent could not be durably published") from exc
         except Exception:
             if directory_fd >= 0:
@@ -785,6 +821,9 @@ class Jobs:
             if directory_fd >= 0:
                 os.close(directory_fd)
                 directory_fd = -1
+            if journal_directory_fd >= 0:
+                os.close(journal_directory_fd)
+                journal_directory_fd = -1
             raise
         try:
             if not_after_epoch is not None and time.time() > not_after_epoch:
@@ -820,3 +859,5 @@ class Jobs:
                 with contextlib.suppress(OSError):
                     os.fsync(directory_fd)
                 os.close(directory_fd)
+            if journal_directory_fd >= 0:
+                os.close(journal_directory_fd)
