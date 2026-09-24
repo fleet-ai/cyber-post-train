@@ -14,6 +14,7 @@ import pytest
 import yaml
 
 from evals.fleet import heldout_launch as launch
+from scripts import prepare_qwen38_fleet_seed44_two_arm_packets as packet_renderer
 
 NAMESPACE = "fleet-train-jobs"
 JOB_NAME = "chris-heldout-base-a1"
@@ -242,8 +243,8 @@ def _packet(tmp_path: Path) -> Path:
         "data": {
             "config.json": config_text,
             "heldout.json": config_text,
-            "task-set.json": json.dumps(task_set, sort_keys=True),
-            "run.sh": "true\n",
+            "task-set.json": json.dumps(task_set, sort_keys=True) + "\n",
+            "run.sh": (ROOT / "evals/fleet/scripts/run_qwen38_dev17_single_arm_v3.sh").read_text(),
         },
     }
     job = {
@@ -382,9 +383,6 @@ def _retarget_task_set(packet: Path, task_set_name: str) -> None:
         {
             "config.json": config_text,
             "heldout.json": config_text,
-            "run.sh": (
-                ROOT / "evals/fleet/scripts/run_qwen38_dev17_single_arm_v3.sh"
-            ).read_text(),
         }
     )
     config_map_path.write_text(yaml.safe_dump(config_map), encoding="utf-8")
@@ -448,10 +446,34 @@ def test_non_database_job_is_unaffected_by_postgres_client_label_gate(tmp_path):
 
 @pytest.mark.parametrize("task_set_name", ["dev13.json", "final7.json"])
 def test_rendered_bundle_installs_configured_task_set_basename(tmp_path, task_set_name):
-    packet = _packet(tmp_path)
-    _retarget_task_set(packet, task_set_name)
+    synthetic_packet = _packet(tmp_path)
+    _retarget_task_set(synthetic_packet, task_set_name)
+    raw = json.loads(synthetic_packet.read_text())
+    protocol_path = tmp_path / raw["files"]["comparison_protocol"]["path"]
+    arm = {
+        "job_name": JOB_NAME,
+        "config_map_name": CONFIG_MAP_NAME,
+        "output_root": OUTPUT_ROOT,
+        "database": DATABASE,
+        "model_revision": "base-revision",
+    }
+    rendered = tmp_path / "rendered"
+    packet_renderer._prepare_arm(  # noqa: SLF001
+        rendered,
+        arm_id="base",
+        arm=arm,
+        config_path=tmp_path / raw["files"]["evaluation_config"]["path"],
+        config=json.loads((tmp_path / raw["files"]["evaluation_config"]["path"]).read_text()),
+        task_set_path=tmp_path / raw["files"]["task_set"]["path"],
+        split_path=tmp_path / raw["files"]["split_manifest"]["path"],
+        protocol_path=protocol_path,
+        protocol=json.loads(protocol_path.read_text()),
+        checkpoint_path=tmp_path / raw["files"]["checkpoint_provenance"]["path"],
+        proof_path=tmp_path / raw["files"]["serving_route_proof"]["path"],
+        ledger_path=tmp_path / raw["files"]["evaluation_ledger"]["path"],
+    )
 
-    package = launch.build_package(packet)
+    package = launch.build_package(rendered / "LAUNCH_PACKET.json")
     environment = launch._container_environment(  # noqa: SLF001
         package.job["spec"]["template"]["spec"]["containers"][0]
     )
@@ -461,6 +483,65 @@ def test_rendered_bundle_installs_configured_task_set_basename(tmp_path, task_se
     assert environment["EVAL_TASK_SET_NAME"] == task_set_name
     assert '"$root/configs/evaluation/$EVAL_TASK_SET_NAME"' in script
     assert "qwen38-fresh75-fleet-dev17-task-set-v1.json" not in script
+
+
+def test_rendered_bundle_rejects_legacy_hardcoded_task_set_install(tmp_path):
+    packet = _packet(tmp_path)
+    raw = json.loads(packet.read_text())
+    config_map_path = packet.parent / raw["files"]["config_map"]["path"]
+    config_map = yaml.safe_load(config_map_path.read_text())
+    config_map["data"]["run.sh"] = (
+        "install -m 0644 /bootstrap/task-set.json "
+        '"$root/configs/evaluation/old-hardcoded-task-set.json"\n'
+    )
+    config_map_path.write_text(yaml.safe_dump(config_map), encoding="utf-8")
+    raw["files"]["config_map"]["sha256"] = _sha(config_map_path)
+    _reseal_packet(packet, raw)
+
+    with pytest.raises(launch.HeldoutLaunchError, match="task set is invalid"):
+        launch.build_package(packet)
+
+
+def test_rendered_bundle_rejects_task_set_path_traversal(tmp_path):
+    packet = _packet(tmp_path)
+    raw = json.loads(packet.read_text())
+    config_path = packet.parent / raw["files"]["evaluation_config"]["path"]
+    config = json.loads(config_path.read_text())
+    config["task_set"] = "../task-set.json"
+    _write_json(config_path, config)
+    config_text = json.dumps(config, sort_keys=True, separators=(",", ":"))
+    config_map_path = packet.parent / raw["files"]["config_map"]["path"]
+    config_map = yaml.safe_load(config_map_path.read_text())
+    config_map["data"].update({"config.json": config_text, "heldout.json": config_text})
+    config_map_path.write_text(yaml.safe_dump(config_map), encoding="utf-8")
+    job_path = packet.parent / raw["files"]["job"]["path"]
+    job = yaml.safe_load(job_path.read_text())
+    environment = job["spec"]["template"]["spec"]["containers"][0]["env"]
+    next(item for item in environment if item["name"] == "EVAL_TASK_SET_NAME")["value"] = (
+        "../task-set.json"
+    )
+    job_path.write_text(yaml.safe_dump(job), encoding="utf-8")
+    raw["files"]["evaluation_config"]["sha256"] = _sha(config_path)
+    raw["files"]["config_map"]["sha256"] = _sha(config_map_path)
+    raw["files"]["job"]["sha256"] = _sha(job_path)
+    _reseal_packet(packet, raw)
+
+    with pytest.raises(launch.HeldoutLaunchError, match="task set is invalid"):
+        launch.build_package(packet)
+
+
+def test_rendered_bundle_rejects_task_set_payload_mismatch(tmp_path):
+    packet = _packet(tmp_path)
+    raw = json.loads(packet.read_text())
+    config_map_path = packet.parent / raw["files"]["config_map"]["path"]
+    config_map = yaml.safe_load(config_map_path.read_text())
+    config_map["data"]["task-set.json"] = "{}\n"
+    config_map_path.write_text(yaml.safe_dump(config_map), encoding="utf-8")
+    raw["files"]["config_map"]["sha256"] = _sha(config_map_path)
+    _reseal_packet(packet, raw)
+
+    with pytest.raises(launch.HeldoutLaunchError, match="task set is invalid"):
+        launch.build_package(packet)
 
 
 def test_stale_postgres_client_label_on_non_database_job_fails_render(tmp_path):

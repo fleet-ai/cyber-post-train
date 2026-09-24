@@ -62,7 +62,7 @@ SOURCE_FILES = {
     "rollout_ledger.py": ROOT / "evals/fleet/rollout_ledger.py",
     "rollout_postgres.py": ROOT / "evals/fleet/rollout_postgres.py",
     "rollout_worker.py": ROOT / "evals/fleet/rollout_worker.py",
-    "run.sh": ROOT / "evals/fleet/scripts/run_qwen38_dev17_single_arm_v1.sh",
+    "run.sh": ROOT / "evals/fleet/scripts/run_qwen38_dev17_single_arm_v3.sh",
 }
 
 
@@ -639,8 +639,11 @@ def _prepare_arm(
             required.update({"model_artifact_v2.py", "model_artifact_v3.py"})
         elif schema != "cyber_fleet_eval_model_artifact_packet_v1":
             raise ValueError(f"{arm_id} model artifact packet schema is unsupported")
-        if not required.issubset(actual_source_files) or (
-            required and actual_source_files.get("run.sh") == SOURCE_FILES["run.sh"]
+        run_script = actual_source_files.get("run.sh")
+        if (
+            not required.issubset(actual_source_files)
+            or run_script is None
+            or "/bootstrap/model-artifact.json" not in run_script.read_text(encoding="utf-8")
         ):
             raise ValueError(f"{arm_id} artifact validator/runtime files are not staged")
     directory.mkdir(mode=0o700)

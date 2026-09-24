@@ -20,7 +20,7 @@ CANDIDATES = ("fresh75", "teacher186", "self44", "lr30s76")
 SOURCE_FILES = {
     **shared.SOURCE_FILES,
     "model_artifact_v2.py": ROOT / "evals/fleet/model_artifact_v2.py",
-    "run.sh": ROOT / "evals/fleet/scripts/run_qwen38_dev17_single_arm_v2.sh",
+    "model_artifact_v3.py": ROOT / "evals/fleet/model_artifact_v3.py",
 }
 
 
