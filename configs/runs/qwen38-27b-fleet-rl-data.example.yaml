@@ -1,0 +1,27 @@
+# Stage one of the Fleet RL surface: render exact task prompts for native Miles.
+#
+# CPU only, inside the Miles image. It performs Fleet account and task GETs, and
+# never creates an environment, generates a token or submits a job. Copy this
+# file, replace every <...> placeholder with a reviewed artifact, and keep the
+# name identical to the `rl` configuration that consumes the manifest.
+name: <run-name>
+backend: miles
+# Reviewed private inputs. `task_set` is a self-digesting cyber_rl_task_set_v1
+# object with training_data_eligible true; `split` is a cyber_task_split_v1
+# object covering exactly the same tasks; `tool_catalog` is the observed
+# task-facing MCP catalog in bash, submit_report order.
+task_set: <reviewed-task-set.json>
+split: <reviewed-split.json>
+tool_catalog: <reviewed-mcp-tools.json>
+model_lock: configs/models/qwen38-27b-1d4bf0f2.lock.json
+model_root: /mnt/sfs/models/Qwen/Qwen3.8-27B/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+output: <private-output-directory>
+limits:
+  context_tokens: 98304
+  response_tokens: 81920
+  max_tokens_per_turn: 4096
+  max_turns: 80
+  episode_seconds: 2400
+  # Must exceed the catalog's largest bash timeout with transport headroom.
+  tool_seconds: 330
+  tool_result_chars: 50000

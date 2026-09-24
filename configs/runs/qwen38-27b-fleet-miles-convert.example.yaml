@@ -1,0 +1,12 @@
+# Stage two of the Fleet RL surface: convert the pinned HF base to the native
+# distributed checkpoint Megatron loads. One eight-GPU node, zero optimizer
+# steps, no Fleet session. The output is parallelism-agnostic, so a single
+# conversion serves every node count the training configuration may request.
+name: <run-name>-miles-base
+output_root: /mnt/sfs/jobs/<run-name>-miles-base
+model:
+  lock: configs/models/qwen38-27b-1d4bf0f2.lock.json
+  weights: configs/models/qwen38-27b-1d4bf0f2.weights.json
+  root: /mnt/sfs/models/Qwen/Qwen3.8-27B/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+cluster:
+  priority: c1
