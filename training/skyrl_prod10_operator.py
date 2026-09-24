@@ -45,6 +45,31 @@ FAILURE_TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_failure_v1"
 GUARD_ARCHIVE_SCHEMA = "cyber_skyrl_prod10_dead_guard_archive_v1"
 FAST3_PREDECESSOR_EVIDENCE_SCHEMA = "cyber_skyrl_prod11_fast3_predecessor_evidence_v1"
 FAST3_MARKER_ABSENCE_SCHEMA = "cyber_skyrl_prod11_fast3_marker_absence_v1"
+FAST3_LAUNCH_GATE_SCHEMA = "cyber_qwen38_skyrl_reward_canary_port_v10"
+FAST3_LAUNCH_GATE_SHA256 = "sha256:ebcb3eb4c2eb8fe1c89ff2b05ff5cd5ed177377370cc82f311ddc1dbc03a44a8"
+FAST3_SOURCE_MERGE_HEAD = "ceee1ec7d3ddb10ee66e6387c5f3f47f9e700b2d"
+FAST3_LAUNCHER_MERGE_HEAD = "1335f2a7afabd863044922ae76c25d45a128f50e"
+FAST3_DIAGNOSTIC_FILE_SHA256 = (
+    "sha256:69ced0087abecd437308c2ffb66e8a0167bf56f7a3ba3ad22f3b1c18a481c2f0"
+)
+FAST3_DIAGNOSTIC_SELF_SHA256 = (
+    "sha256:200d51089c155cac2fa777db4f84287c50d14bdb23c86e60e8e47c2d3d2fd2fe"
+)
+FAST3_FAST2_RETIREMENT_FILE_SHA256 = (
+    "sha256:a99d7f43e2a7f202404a9903f38f5f19ed388dcd9f870bcaef5dc85649e0cf39"
+)
+FAST3_FAST2_RETIREMENT_SELF_SHA256 = (
+    "sha256:f8cded5039d649de08db82ff5f21deb21979ca9dade7d431c0550dc268e5552d"
+)
+FAST3_RETRY_POLICY_SHA256 = (
+    "sha256:3df3abe9fbadcf4cbc89d842a857d68b2510ef36f919bc035427fd85db5b2c28"
+)
+FAST3_PREDECESSOR_SCIENCE_SHA256 = (
+    "sha256:3dabc8a650c86586a354afb8deeda19a7a144183fe2b8b25b1b8da958a0f8cd7"
+)
+FAST3_PUBLIC_MANIFEST_INVARIANTS_SHA256 = (
+    "sha256:d3b12ceab477bc2f268648516548a083768561321e0e2c396638b851c12b79e2"
+)
 _GUARD_ARCHIVE_NAME = "TRAINING_JOBS_API_PREFIX_GUARD.launch-v3-failed.json"
 _GUARD_ARCHIVE_RECEIPT_NAME = "TRAINING_JOBS_API_PREFIX_GUARD.launch-v3-archive.json"
 OPERATOR_NAMES = {
@@ -795,6 +820,161 @@ def _validate_seal(value: object, schema: str) -> dict[str, Any]:
     return value
 
 
+def fast3_launch_gate(value: object) -> dict[str, Any]:
+    """Validate the exact append-only authority for every Fast3 external phase."""
+    try:
+        checked = _validate_seal(value, FAST3_LAUNCH_GATE_SCHEMA)
+    except ValueError as exc:
+        raise ValueError("Fast3 append-only launch gate changed") from exc
+    if (
+        checked.get("sha256") != FAST3_LAUNCH_GATE_SHA256
+        or checked.get("merge_evidence", {}).get("source", {}).get("commit")
+        != FAST3_SOURCE_MERGE_HEAD
+        or checked.get("merge_evidence", {}).get("launcher", {}).get("commit")
+        != FAST3_LAUNCHER_MERGE_HEAD
+        or checked.get("submission_gate")
+        != {
+            "blockers": [],
+            "preview_authorized": True,
+            "submission_authorized": True,
+        }
+    ):
+        raise ValueError("Fast3 append-only launch gate changed")
+    return checked
+
+
+def fast3_public_manifest(value: object, *, expected_name: str) -> dict[str, Any]:
+    """Accept the v8 public template with only the Fast3 rebound fields changed."""
+    if not isinstance(value, dict):
+        raise ValueError("Fast3 public manifest changed")
+    body = {key: item for key, item in value.items() if key != "sha256"}
+    try:
+        invariant = json.loads(json.dumps(body))
+        hashes = [invariant["files"][split]["sha256"] for split in ("train", "dev")]
+        invariant["name"] = "$NAME"
+        for split in ("train", "dev"):
+            invariant["files"][split]["sha256"] = "$SHA256"
+    except (KeyError, TypeError, ValueError):
+        raise ValueError("Fast3 public manifest changed") from None
+    if (
+        value.get("name") != expected_name
+        or value.get("sha256") != "sha256:" + digest(body)
+        or any(
+            not isinstance(item, str) or re.fullmatch(r"sha256:[0-9a-f]{64}", item) is None
+            for item in hashes
+        )
+        or "sha256:" + digest(invariant) != FAST3_PUBLIC_MANIFEST_INVARIANTS_SHA256
+    ):
+        raise ValueError("Fast3 public manifest changed")
+    return value
+
+
+def _verify_fast3_staged_public_manifest(
+    receipt: dict[str, Any], successor: dict[str, Any]
+) -> None:
+    """Reopen the exact private package before surfacing its public manifest."""
+
+    def stable(value: os.stat_result) -> tuple[Any, ...]:
+        return (
+            value.st_dev,
+            value.st_ino,
+            value.st_mode,
+            value.st_nlink,
+            value.st_uid,
+            value.st_gid,
+            value.st_size,
+            value.st_mtime_ns,
+            value.st_ctime_ns,
+        )
+
+    expected_names = {
+        "manifest.json",
+        "split.json",
+        "task-set.json",
+        "train.jsonl",
+        "dev.jsonl",
+    }
+    if receipt.get("destination") != FAST3_IDENTITY.data_root:
+        raise ValueError("Fast3 staged public payload changed")
+    destination = Path(FAST3_IDENTITY.data_root)
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        path_before = os.stat(destination, follow_symlinks=False)
+        directory_fd = os.open(destination, flags | getattr(os, "O_DIRECTORY", 0))
+    except OSError as exc:
+        raise ValueError("Fast3 staged public payload changed") from exc
+    try:
+        directory_before = os.fstat(directory_fd)
+        path_open = os.stat(destination, follow_symlinks=False)
+        if (
+            not stat.S_ISDIR(directory_before.st_mode)
+            or (directory_before.st_uid, directory_before.st_gid) != (os.geteuid(), os.getegid())
+            or stat.S_IMODE(directory_before.st_mode) != 0o700
+            or stable(path_before) != stable(directory_before)
+            or stable(path_open) != stable(directory_before)
+            or set(os.listdir(directory_fd)) != expected_names
+        ):
+            raise ValueError("Fast3 staged public payload changed")
+        observed = []
+        manifest_payload = b""
+        for name in sorted(expected_names):
+            try:
+                entry_before = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+                descriptor = os.open(name, flags, dir_fd=directory_fd)
+            except OSError as exc:
+                raise ValueError("Fast3 staged public payload changed") from exc
+            try:
+                before = os.fstat(descriptor)
+                if (
+                    not stat.S_ISREG(before.st_mode)
+                    or before.st_nlink != 1
+                    or (before.st_uid, before.st_gid) != (os.geteuid(), os.getegid())
+                    or stat.S_IMODE(before.st_mode) != 0o600
+                    or stable(entry_before) != stable(before)
+                ):
+                    raise ValueError("Fast3 staged public payload changed")
+                hasher = hashlib.sha256()
+                chunks = []
+                while payload := os.read(descriptor, 1024 * 1024):
+                    hasher.update(payload)
+                    chunks.append(payload)
+                after = os.fstat(descriptor)
+                entry_after = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+                if stable(before) != stable(after) or stable(entry_after) != stable(after):
+                    raise ValueError("Fast3 staged public payload changed")
+                observed.append(
+                    {
+                        "path": name,
+                        "bytes": before.st_size,
+                        "sha256": "sha256:" + hasher.hexdigest(),
+                    }
+                )
+                if name == "manifest.json":
+                    manifest_payload = b"".join(chunks)
+            finally:
+                os.close(descriptor)
+        if (
+            stable(directory_before) != stable(os.fstat(directory_fd))
+            or stable(directory_before) != stable(os.stat(destination, follow_symlinks=False))
+            or set(os.listdir(directory_fd)) != expected_names
+            or receipt.get("files") != observed
+        ):
+            raise ValueError("Fast3 staged public payload changed")
+        try:
+            persisted = json.loads(manifest_payload)
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise ValueError("Fast3 staged public payload changed") from exc
+        if persisted != successor:
+            raise ValueError("Fast3 staged public payload changed")
+    finally:
+        os.close(directory_fd)
+
+
+def _require_fast3_packet_gate(packet: dict[str, Any], identity: historical.RailIdentity) -> None:
+    if identity == FAST3_IDENTITY:
+        fast3_launch_gate(packet.get("launch_gate"))
+
+
 def fast3_predecessor_evidence(
     *,
     source_head: str,
@@ -816,6 +996,16 @@ def fast3_predecessor_evidence(
     )
     if re.fullmatch(r"[0-9a-f]{40}", source_head) is None or any(
         re.fullmatch(r"sha256:[0-9a-f]{64}", value) is None for value in values
+    ):
+        raise ValueError("Fast3 predecessor evidence digest changed")
+    if (
+        source_head != FAST3_SOURCE_MERGE_HEAD
+        or failure_diagnostic_file_sha256 != FAST3_DIAGNOSTIC_FILE_SHA256
+        or failure_diagnostic_self_sha256 != FAST3_DIAGNOSTIC_SELF_SHA256
+        or fast2_retirement_file_sha256 != FAST3_FAST2_RETIREMENT_FILE_SHA256
+        or fast2_retirement_self_sha256 != FAST3_FAST2_RETIREMENT_SELF_SHA256
+        or generation_retry_policy_sha256 != FAST3_RETRY_POLICY_SHA256
+        or predecessor_science_sha256 != FAST3_PREDECESSOR_SCIENCE_SHA256
     ):
         raise ValueError("Fast3 predecessor evidence digest changed")
     return _seal(
@@ -967,16 +1157,30 @@ def _write_once(path: Path, value: dict[str, Any]) -> None:
 
 
 def _write_termination(*, phase: str, result_path: Path, result: dict[str, Any]) -> None:
-    value = _seal(
-        {
-            "schema": TERMINATION_SCHEMA,
-            "status": "passed",
-            "phase": phase,
-            "result_path": str(result_path),
-            "result_sha256": result["sha256"],
-            "gpus": 0,
-        }
-    )
+    body = {
+        "schema": TERMINATION_SCHEMA,
+        "status": "passed",
+        "phase": phase,
+        "result_path": str(result_path),
+        "result_sha256": result["sha256"],
+        "gpus": 0,
+    }
+    if phase == "stage" and result.get("fresh_identity") is True:
+        checked = _validate_seal(result, DIRECT_STAGE_RESULT_SCHEMA)
+        receipt = direct._stage_receipt(
+            checked.get("stage"), checked.get("receipt"), identity=FAST3_IDENTITY
+        )
+        successor = fast3_public_manifest(
+            receipt["successor_manifest"], expected_name=FAST3_IDENTITY.run_name
+        )
+        _verify_fast3_staged_public_manifest(receipt, successor)
+        body.update(
+            {
+                "successor_manifest": successor,
+                "successor_manifest_sha256": successor["sha256"],
+            }
+        )
+    value = _seal(body)
     encoded = (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
     if len(encoded) > 3500:
         raise ValueError("prod10 operator termination receipt is too large")
@@ -1094,6 +1298,8 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
         raise ValueError("prod10 operator phase changed")
     if packet.get("operator_name") != names[phase]:
         raise ValueError("prod10 operator name changed")
+    if identity == FAST3_IDENTITY:
+        fast3_launch_gate(packet.get("launch_gate"))
     if phase == "stage":
         if identity == FAST3_IDENTITY:
             if packet.get("fresh_identity") is not True:
@@ -1709,6 +1915,7 @@ def _new_observer(
 
 def run_stage(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> dict[str, Any]:
     identity = _identity(packet["identity"])
+    _require_fast3_packet_gate(packet, identity)
     names = operator_names(identity)
     stage, _ = training._stage_identity(packet.get("stage"))
     # The child manifest is historical v6 evidence only.  V7 executes the
@@ -1788,6 +1995,7 @@ def run_stage(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> d
 
 def run_preflight(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> dict[str, Any]:
     identity = _identity(packet["identity"])
+    _require_fast3_packet_gate(packet, identity)
     names = operator_names(identity)
     plan = packet.get("plan")
     request = packet.get("request")
@@ -1897,6 +2105,7 @@ def run_preflight(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) 
         prod_preview=prod_preview,
         observer=state["armed"],
         identity=identity,
+        launch_gate=packet.get("launch_gate"),
     )
     created = launch_direct.create_preflight_once(
         operation_root,
@@ -1907,6 +2116,7 @@ def run_preflight(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) 
         identity=identity,
         runner=runner,
         dev_duplicate_proof=packet["dev_duplicate_proof"],
+        launch_gate=packet.get("launch_gate"),
     )
     release = _join_observer(thread, state)
     receipt = release.get("receipt")
@@ -1933,6 +2143,7 @@ def run_preflight(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) 
 
 def run_manifest(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> dict[str, Any]:
     identity = _identity(packet["identity"])
+    _require_fast3_packet_gate(packet, identity)
     names = operator_names(identity)
     stage, stage_identity = training._stage_identity(packet.get("stage"))
     if stage_identity != identity:
@@ -2358,6 +2569,8 @@ def _fast3_guard_armed(operation_root: Path) -> dict[str, Any]:
 def run_inspect(packet: dict[str, Any]) -> dict[str, Any]:
     """Inspect only the five canonical SFS markers after the failed v5 outer."""
     identity = _identity(packet["identity"])
+    if identity == FAST3_IDENTITY:
+        raise ValueError("Fast3 inspect phase is unsupported")
     plan = packet.get("plan")
     if not isinstance(plan, dict):
         raise ValueError("prod10 launch inspection plan changed")
@@ -2400,6 +2613,7 @@ def _pre_guard_launch(packet: dict[str, Any], runner: InClusterKubernetesRunner)
     global _LAUNCH_STAGE
     _LAUNCH_STAGE = "plan_identity"
     identity = _identity(packet["identity"])
+    _require_fast3_packet_gate(packet, identity)
     names = operator_names(identity)
     plan = packet.get("plan")
     if not isinstance(plan, dict):
@@ -2428,9 +2642,21 @@ def _pre_guard_launch(packet: dict[str, Any], runner: InClusterKubernetesRunner)
     if preflight.get("sha256") != receipt["result_sha256"]:
         raise OperatorFailure("launch_preflight_result_digest_rejected")
     _LAUNCH_STAGE = "sealed_preflight_validate"
-    preflight = launch_direct.preflight_result(plan, request, preflight, identity=identity)
+    preflight = launch_direct.preflight_result(
+        plan,
+        request,
+        preflight,
+        identity=identity,
+        launch_gate=packet.get("launch_gate"),
+    )
     _LAUNCH_STAGE = "fresh_preflight_revalidate"
-    revalidation = launch_direct.revalidate_preflight(plan, request, preflight, identity=identity)
+    revalidation = launch_direct.revalidate_preflight(
+        plan,
+        request,
+        preflight,
+        identity=identity,
+        launch_gate=packet.get("launch_gate"),
+    )
     _LAUNCH_STAGE = "image_identity"
     image_identity = launch_direct.image_identity(request, preflight)
     _LAUNCH_STAGE = "source_preview_shape"
@@ -2505,6 +2731,14 @@ def run_probe(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> d
     launch_packet = packet.get("launch_packet")
     if not isinstance(launch_packet, dict):
         raise ValueError("prod10 launch probe source packet changed")
+    identity_value = packet.get("identity", launch_packet.get("identity"))
+    if (
+        isinstance(identity_value, dict)
+        and historical.identity_from_mapping(identity_value) == FAST3_IDENTITY
+    ):
+        raise ValueError("Fast3 probe phase is unsupported")
+    if launch_packet.get("plan", {}).get("run_name") == FAST3_IDENTITY.run_name:
+        raise ValueError("Fast3 probe phase is unsupported")
     try:
         _LAUNCH_STAGE = "plan_identity"
         plan = launch_packet.get("plan")
@@ -2755,6 +2989,7 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         token=token,
         runner=runner,
         jobs_factory=Jobs,
+        launch_gate=packet.get("launch_gate"),
     )
     _LAUNCH_STAGE = "live_preview_read"
     with Jobs(token, base_url=launch_direct.API_URLS["prod"]) as client:
@@ -2814,6 +3049,7 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         prior_duplicate=jit_before_guard,
         runner=runner,
         jobs_factory=Jobs,
+        launch_gate=packet.get("launch_gate"),
     )
     if fresh_fast3:
         _LAUNCH_STAGE = "fresh_marker_recheck"
@@ -2864,6 +3100,7 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         prod_preview=prod_preview,
         observer=armed,
         identity=identity,
+        launch_gate=packet.get("launch_gate"),
     )
     _LAUNCH_STAGE = "create_once"
     created = launch_direct.create_once(
@@ -2882,6 +3119,7 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         final_duplicate=jit_before_intent,
         host_duplicate=packet["duplicate_proof"],
         live_preview=live_preview,
+        launch_gate=packet.get("launch_gate"),
         **({"live_source_preview": live_source} if fresh_fast3 else {}),
     )
     _LAUNCH_STAGE = "observe"

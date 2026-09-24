@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import copy
 import inspect
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from cyber_post_train import skyrl_prod10_operator_job as operator_job
 from cyber_post_train.jobs import JobsError, digest
 from scripts import finalize_qwen38_skyrl_prod11_fast3_launch as finalizer
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _at(value: datetime) -> str:
@@ -69,6 +73,8 @@ def test_fast3_finalizer_orders_proofs_and_has_one_opt_in_create() -> None:
             "a" * 40,
             "--launcher-head",
             "b" * 40,
+            "--launch-gate",
+            "gate.json",
             "--identity",
             "identity.json",
             "--plan-sha256",
@@ -110,6 +116,8 @@ def test_fast3_finalizer_rejects_symlink_output_before_any_provider_call(tmp_pat
             "a" * 40,
             "--launcher-head",
             "b" * 40,
+            "--launch-gate",
+            "gate.json",
             "--identity",
             "identity.json",
             "--plan-sha256",
@@ -147,13 +155,43 @@ def test_fast3_source_evidence_rejects_in_tree_symlink(tmp_path: Path) -> None:
         finalizer._source_file(tmp_path.resolve(), alias)
 
 
+@pytest.mark.parametrize("payload", [None, b"{}"])
+def test_fast3_finalizer_rejects_missing_or_invalid_gate_before_git(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, payload: bytes | None
+) -> None:
+    output = tmp_path / "output"
+    output.mkdir(mode=0o700)
+    gate = tmp_path / "gate.json"
+    if payload is not None:
+        gate.write_bytes(payload)
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("git subprocess reached before the Fast3 gate")
+
+    monkeypatch.setattr(finalizer.subprocess, "check_output", forbidden)
+    monkeypatch.setattr(finalizer.subprocess, "run", forbidden)
+    with pytest.raises(ValueError, match="unreadable|launch gate"):
+        finalizer.finalize(
+            SimpleNamespace(
+                source_root=tmp_path,
+                operation_directory=output,
+                launch_gate=gate,
+            )
+        )
+
+
 def test_fast3_preflight_binds_exact_packet_to_terminal_launch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    plan = {"plan": "exact"}
+    successor = {"manifest": "derived-from-stage"}
+    plan = {"plan": "exact", "data": successor}
     request = {"request": "exact"}
+    gate = {"gate": "exact"}
     packet = {
         "identity": finalizer.operator.FAST3_IDENTITY.sealed_mapping(),
+        "launch_gate": gate,
+        "stage": {"stage": "exact"},
+        "stage_launch_result": {"launch": "exact"},
         "plan": plan,
         "request": request,
         "sha256": "sha256:" + "1" * 64,
@@ -162,7 +200,7 @@ def test_fast3_preflight_binds_exact_packet_to_terminal_launch(
         "status": "operator_succeeded_and_released",
         "package": {
             "name": finalizer.operator.FAST3_OPERATOR_NAMES["preflight"],
-            "packet_sha256": "sha256:" + "2" * 64,
+            "packet_sha256": packet["sha256"],
         },
         "observer": {
             "terminal_status": "Succeeded",
@@ -174,12 +212,58 @@ def test_fast3_preflight_binds_exact_packet_to_terminal_launch(
     }
     (tmp_path / "PREFLIGHT_PACKET.json").write_text("{}")
     (tmp_path / "PREFLIGHT_LAUNCH_RESULT.json").write_text(json.dumps(launch))
+    (tmp_path / "SUCCESSOR_MANIFEST.json").write_text('{"private":"ignored"}')
     (tmp_path / "OPERATOR_CREATE.jsonl").write_text("{}\n")
     monkeypatch.setattr(finalizer.operator, "_packet", lambda *_args: packet)
     monkeypatch.setattr(finalizer.prod10_finalizer, "_terminal_preflight", lambda *_args: launch)
+    monkeypatch.setattr(
+        finalizer.operator_job, "fast3_successor_manifest", lambda *_args, **_kwargs: successor
+    )
+    monkeypatch.setattr(
+        finalizer.operator_job, "fast3_plan_from_successor", lambda *_args, **_kwargs: plan
+    )
+    monkeypatch.setattr(finalizer.launch_direct, "job_request", lambda *_args, **_kwargs: request)
 
+    assert finalizer._preflight(tmp_path, plan, request, gate) == (launch, successor)
+
+    launch["package"]["packet_sha256"] = "sha256:" + "2" * 64
+    (tmp_path / "PREFLIGHT_LAUNCH_RESULT.json").write_text(json.dumps(launch))
     with pytest.raises(ValueError, match="preflight changed"):
-        finalizer._preflight(tmp_path, plan, request)
+        finalizer._preflight(tmp_path, plan, request, gate)
+
+
+def test_fast3_preflight_rejects_recompiled_stage_plan_drift_before_terminal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    successor = {"manifest": "stage-a"}
+    plan = {"data": successor, "plan": "reviewed"}
+    request = {"request": "reviewed"}
+    gate = {"gate": "exact"}
+    packet = {
+        "identity": finalizer.operator.FAST3_IDENTITY.sealed_mapping(),
+        "launch_gate": gate,
+        "stage": {"stage": "exact"},
+        "stage_launch_result": {"launch": "exact"},
+        "plan": plan,
+        "request": request,
+    }
+    (tmp_path / "PREFLIGHT_PACKET.json").write_text("{}")
+    monkeypatch.setattr(finalizer.operator, "_packet", lambda *_args: packet)
+    monkeypatch.setattr(
+        finalizer.operator_job, "fast3_successor_manifest", lambda *_args, **_kwargs: successor
+    )
+    monkeypatch.setattr(
+        finalizer.operator_job,
+        "fast3_plan_from_successor",
+        lambda *_args, **_kwargs: {"data": {"manifest": "plan-b"}, "plan": "reviewed"},
+    )
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("terminal/provider seam reached before stage-plan equality")
+
+    monkeypatch.setattr(finalizer.prod10_finalizer, "_terminal_preflight", forbidden)
+    with pytest.raises(ValueError, match="preflight changed"):
+        finalizer._preflight(tmp_path, plan, request, gate)
 
 
 def test_fast3_retry_policy_is_bounded_and_never_retries_an_episode(tmp_path: Path) -> None:
@@ -207,6 +291,96 @@ def test_fast3_retry_policy_is_bounded_and_never_retries_an_episode(tmp_path: Pa
     path.write_text(json.dumps({**changed_body, "sha256": "sha256:" + digest(changed_body)}))
     with pytest.raises(ValueError, match="bounded generation retry"):
         finalizer._retry_policy(path)
+
+
+def test_fast3_append_only_launch_gate_closes_only_merged_blockers() -> None:
+    parent_path = ROOT / "configs/qualification/qwen38-rl-reward-canary-port-v9.json"
+    gate_path = ROOT / finalizer.LAUNCH_GATE_PATH
+    parent = json.loads(parent_path.read_bytes())
+    plan = {
+        "qualification": {
+            "qualification_self_sha256": parent["sha256"],
+            "submission_gate": parent["submission_gate"],
+            "fast3": {"qualification": parent},
+        }
+    }
+    gate = finalizer._launch_gate(gate_path, plan)
+
+    assert parent["submission_gate"] == {
+        "blockers": [
+            "fast3_source_pr_not_merged",
+            "fast3_launch_chain_not_separately_bound",
+        ],
+        "preview_authorized": False,
+        "submission_authorized": False,
+    }
+    assert gate["submission_gate"] == {
+        "blockers": [],
+        "preview_authorized": True,
+        "submission_authorized": True,
+    }
+    assert gate["merge_evidence"]["source"]["commit"] == finalizer.SOURCE_MERGE_HEAD
+    assert gate["merge_evidence"]["launcher"]["commit"] == finalizer.LAUNCHER_MERGE_HEAD
+    assert gate["preserved_identity"]["runtime_evidence"]["port_successor_sha256"] == (
+        "sha256:38b2bfd0fa425c45a28cea50d488f4b9c57466cb7ffdeed952a349ca8d323f68"
+    )
+    assert gate["preserved_identity"]["reload_source"]["file_sha256"] == (
+        "sha256:46c9ea1daeb6965b85f0eed8ab9dd2c50a13ef68916092b0cba306367031ee84"
+    )
+    assert gate["preserved_identity"]["failure_diagnostic"] == {
+        "file_sha256": finalizer.DIAGNOSTIC_FILE_SHA256,
+        "path": (
+            "../../docs/evidence/qwen38-study/"
+            "2026-09-23-skyrl-prod11-generation-failure-diagnostic-v1.json"
+        ),
+        "self_sha256": finalizer.DIAGNOSTIC_SELF_SHA256,
+    }
+    assert gate["preserved_identity"]["fast2_retirement"] == {
+        "file_sha256": finalizer.FAST2_RETIREMENT_FILE_SHA256,
+        "path": (
+            "../../docs/evidence/qwen38-study/2026-09-23-skyrl-prod11-fast2-retirement-v1.json"
+        ),
+        "self_sha256": finalizer.FAST2_RETIREMENT_SELF_SHA256,
+    }
+
+
+def test_fast3_source_head_is_exact_accepted_merge_before_git_access() -> None:
+    with pytest.raises(ValueError, match="accepted Fast3 source merge"):
+        finalizer._source_head(ROOT, "0" * 40)
+
+
+def test_fast3_append_only_launch_gate_rejects_plan_or_authority_drift(
+    tmp_path: Path,
+) -> None:
+    parent = json.loads(
+        (ROOT / "configs/qualification/qwen38-rl-reward-canary-port-v9.json").read_bytes()
+    )
+    plan = {
+        "qualification": {
+            "qualification_self_sha256": parent["sha256"],
+            "submission_gate": parent["submission_gate"],
+            "fast3": {"qualification": parent},
+        }
+    }
+    changed = copy.deepcopy(plan)
+    changed["qualification"]["submission_gate"]["preview_authorized"] = True
+    with pytest.raises(ValueError, match="append-only launch authorization"):
+        finalizer._launch_gate(ROOT / finalizer.LAUNCH_GATE_PATH, changed)
+
+    gate = json.loads((ROOT / finalizer.LAUNCH_GATE_PATH).read_bytes())
+    gate["submission_gate"]["blockers"] = ["invented"]
+    temporary = tmp_path / "changed-gate.json"
+    temporary.write_text(json.dumps(gate))
+    with pytest.raises(ValueError, match="append-only launch"):
+        finalizer._launch_gate(temporary, plan)
+
+
+def test_fast3_launch_gate_precedes_every_external_finalizer_action() -> None:
+    source = inspect.getsource(finalizer.finalize)
+    gate = source.index("launch_gate = _launch_gate")
+    jobs = source.index("token = os.environ")
+    gpu = source.index("source_preview, expected, gpu_previews, provenance")
+    assert gate < jobs < gpu
 
 
 def test_fast3_finalizer_requires_eval_before_train_and_truthful_label() -> None:

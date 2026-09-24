@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+import shutil
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest import mock
+from types import SimpleNamespace
 
 import pytest
 
@@ -20,6 +22,11 @@ from training import skyrl_reward_rayjob as historical
 
 ROOT = Path(__file__).resolve().parents[1]
 PREDECESSOR = ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json"
+LAUNCH_GATE = ROOT / "configs/qualification/qwen38-rl-reward-canary-port-v10.json"
+
+
+def _gate() -> dict:
+    return json.loads(LAUNCH_GATE.read_bytes())
 
 
 def _stage() -> dict:
@@ -32,35 +39,62 @@ def _stage() -> dict:
 
 
 def _plan(stage: dict) -> dict:
-    fast3_training = pytest.importorskip("training.skyrl_fast3_training")
-    sft = pytest.importorskip("training.sft")
-    run_path = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod-v11-fast3.json"
-    selected = json.loads(run_path.read_bytes())
     data = copy.deepcopy(stage["predecessor_manifest"])
     data["name"] = operator.FAST3_IDENTITY.run_name
     data["sha256"] = "sha256:" + digest(
         {key: value for key, value in data.items() if key != "sha256"}
     )
-    original = sft.read_mapping
-
-    def read(path: Path) -> dict:
-        if Path(path) == Path(selected["data"]["manifest"]):
-            return copy.deepcopy(data)
-        return original(path)
-
-    with mock.patch.object(sft, "read_mapping", side_effect=read):
-        return fast3_training.compile_rl(selected, relative_to=run_path.parent)
+    return operator_job.fast3_plan_from_successor(data, launch_gate=_gate())
 
 
 def _predecessor_evidence() -> dict:
     return operator.fast3_predecessor_evidence(
-        source_head="a" * 40,
-        failure_diagnostic_file_sha256="sha256:" + "1" * 64,
-        failure_diagnostic_self_sha256="sha256:" + "2" * 64,
-        fast2_retirement_file_sha256="sha256:" + "3" * 64,
-        fast2_retirement_self_sha256="sha256:" + "4" * 64,
-        generation_retry_policy_sha256="sha256:" + "5" * 64,
-        predecessor_science_sha256="sha256:" + "6" * 64,
+        source_head=operator.FAST3_SOURCE_MERGE_HEAD,
+        failure_diagnostic_file_sha256=operator.FAST3_DIAGNOSTIC_FILE_SHA256,
+        failure_diagnostic_self_sha256=operator.FAST3_DIAGNOSTIC_SELF_SHA256,
+        fast2_retirement_file_sha256=operator.FAST3_FAST2_RETIREMENT_FILE_SHA256,
+        fast2_retirement_self_sha256=operator.FAST3_FAST2_RETIREMENT_SELF_SHA256,
+        generation_retry_policy_sha256=operator.FAST3_RETRY_POLICY_SHA256,
+        predecessor_science_sha256=operator.FAST3_PREDECESSOR_SCIENCE_SHA256,
+    )
+
+
+def _stage_result(stage: dict, successor: dict) -> dict:
+    files = []
+    by_split = {item["path"]: item["sha256"] for item in successor["files"].values()}
+    for name in ("dev.jsonl", "manifest.json", "split.json", "task-set.json", "train.jsonl"):
+        files.append(
+            {
+                "path": name,
+                "bytes": 1,
+                "sha256": by_split.get(name, "sha256:" + "9" * 64),
+            }
+        )
+    raw_receipt = {
+        "schema": training.STAGE_RECEIPT_SCHEMA,
+        "status": "published",
+        "stage_spec_sha256": stage["sha256"],
+        "identity_sha256": operator.FAST3_IDENTITY.sealed_mapping()["sha256"],
+        "source": operator.FAST3_IDENTITY.predecessor_data_root,
+        "destination": operator.FAST3_IDENTITY.data_root,
+        "predecessor_manifest_sha256": stage["predecessor_manifest_sha256"],
+        "successor_manifest": successor,
+        "successor_manifest_sha256": successor["sha256"],
+        "files": files,
+        "gpus": 0,
+        "runtime_user": {"uid": 1000, "gid": 100},
+        **stage["scientific_work"],
+    }
+    receipt = {**raw_receipt, "receipt_sha256": digest(raw_receipt)}
+    return operator._seal(
+        {
+            "schema": operator.DIRECT_STAGE_RESULT_SCHEMA,
+            "status": "stage_ready",
+            "phase": "stage",
+            "fresh_identity": True,
+            "stage": stage,
+            "receipt": receipt,
+        }
     )
 
 
@@ -76,8 +110,65 @@ def test_fast3_identity_and_operator_names_are_exact() -> None:
         operator.operator_names(changed)
 
 
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("submission_gate", "preview_authorized"), False),
+        (("submission_gate", "submission_authorized"), False),
+        (("submission_gate", "blockers"), ["invented"]),
+        (("merge_evidence", "source", "commit"), "0" * 40),
+        (("merge_evidence", "launcher", "commit"), "1" * 40),
+        (("preserved_identity", "failure_diagnostic", "file_sha256"), "sha256:" + "2" * 64),
+    ],
+)
+def test_fast3_launch_gate_rejects_resealed_drift(path: tuple[str, ...], value: object) -> None:
+    gate = _gate()
+    target = gate
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+    gate = operator._seal(gate)
+    with pytest.raises(ValueError, match="append-only launch gate"):
+        operator.fast3_launch_gate(gate)
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "source_head",
+        "failure_diagnostic_file_sha256",
+        "failure_diagnostic_self_sha256",
+        "fast2_retirement_file_sha256",
+        "fast2_retirement_self_sha256",
+        "generation_retry_policy_sha256",
+        "predecessor_science_sha256",
+    ],
+)
+def test_fast3_predecessor_evidence_rejects_every_literal_drift(field: str) -> None:
+    evidence = _predecessor_evidence()
+    kwargs = {
+        key: value
+        for key, value in evidence.items()
+        if key
+        in {
+            "source_head",
+            "failure_diagnostic_file_sha256",
+            "failure_diagnostic_self_sha256",
+            "fast2_retirement_file_sha256",
+            "fast2_retirement_self_sha256",
+            "generation_retry_policy_sha256",
+            "predecessor_science_sha256",
+        }
+    }
+    kwargs[field] = "0" * 40 if field == "source_head" else "sha256:" + "0" * 64
+    with pytest.raises(ValueError, match="predecessor evidence digest"):
+        operator.fast3_predecessor_evidence(**kwargs)
+
+
 def test_fast3_stage_package_is_fresh_alert_off_c1_q1_zero_gpu() -> None:
-    packet = operator_job.stage_packet(identity=operator.FAST3_IDENTITY, stage=_stage())
+    packet = operator_job.stage_packet(
+        identity=operator.FAST3_IDENTITY, stage=_stage(), launch_gate=_gate()
+    )
     package = operator_job.build_operator_package(packet)
     proof = operator_job.validate_operator_package(package)
     pod_template = package.job["spec"]["template"]
@@ -94,6 +185,8 @@ def test_fast3_stage_package_is_fresh_alert_off_c1_q1_zero_gpu() -> None:
         "prod11-fast3-bounded-operator"
     )
     assert "nvidia.com/gpu" not in json.dumps(package.job, sort_keys=True)
+    with pytest.raises(ValueError, match="append-only launch gate"):
+        operator_job.stage_packet(identity=operator.FAST3_IDENTITY, stage=_stage())
 
 
 def test_fast3_manifest_packet_requires_and_preserves_full_plan(
@@ -103,11 +196,15 @@ def test_fast3_manifest_packet_requires_and_preserves_full_plan(
     plan = _plan(stage)
     launch = {"synthetic": "released-stage"}
     monkeypatch.setattr(direct, "_direct_stage_launch", lambda value, *_args, **_kwargs: value)
+    monkeypatch.setattr(
+        operator_job, "fast3_successor_manifest", lambda *_args, **_kwargs: plan["data"]
+    )
     packet = operator_job.manifest_packet(
         identity=operator.FAST3_IDENTITY,
         stage=stage,
         stage_launch_result=launch,
         plan=plan,
+        launch_gate=_gate(),
     )
     package = operator_job.build_operator_package(packet)
 
@@ -120,6 +217,7 @@ def test_fast3_manifest_packet_requires_and_preserves_full_plan(
             identity=operator.FAST3_IDENTITY,
             stage=stage,
             stage_launch_result=launch,
+            launch_gate=_gate(),
         )
     partial = {"schema": training.SCHEMA, "run_name": operator.FAST3_IDENTITY.run_name}
     with pytest.raises(ValueError, match="full training plan"):
@@ -128,7 +226,241 @@ def test_fast3_manifest_packet_requires_and_preserves_full_plan(
             stage=stage,
             stage_launch_result=launch,
             plan=partial,
+            launch_gate=_gate(),
         )
+
+
+def test_fast3_stage_termination_surfaces_only_bound_public_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stage = _stage()
+    plan = _plan(stage)
+    result = _stage_result(stage, plan["data"])
+    target = tmp_path / "termination.log"
+    monkeypatch.setattr(operator, "_TERMINATION_PATH", target)
+    monkeypatch.setattr(
+        operator,
+        "_verify_fast3_staged_public_manifest",
+        lambda _receipt, _successor: None,
+    )
+    operator._write_termination(
+        phase="stage",
+        result_path=Path("/mnt/sfs/fixed/STAGE_OPERATOR_RESULT.json"),
+        result=result,
+    )
+    encoded = target.read_bytes()
+    termination = json.loads(encoded)
+    assert len(encoded) < 3500
+    assert termination["successor_manifest"] == plan["data"]
+    assert termination["successor_manifest_sha256"] == plan["data"]["sha256"]
+
+    launch = {"observer": {"receipt": termination}}
+    monkeypatch.setattr(direct, "_direct_stage_launch", lambda value, *_args, **_kwargs: value)
+    assert operator_job.fast3_successor_manifest(stage, launch, launch_gate=_gate()) == plan["data"]
+    packet = operator_job.manifest_packet(
+        identity=operator.FAST3_IDENTITY,
+        stage=stage,
+        stage_launch_result=launch,
+        plan=plan,
+        launch_gate=_gate(),
+    )
+    assert packet["plan"]["data"] == termination["successor_manifest"]
+
+    changed = copy.deepcopy(termination)
+    changed["successor_manifest"]["name"] = "chris-q38-rlreward-prod11-fast3-drift"
+    successor_body = {
+        key: item for key, item in changed["successor_manifest"].items() if key != "sha256"
+    }
+    changed["successor_manifest"]["sha256"] = "sha256:" + digest(successor_body)
+    changed["successor_manifest_sha256"] = changed["successor_manifest"]["sha256"]
+    changed = operator._seal(changed)
+    with pytest.raises(ValueError, match="surfaced stage manifest"):
+        operator_job.fast3_successor_manifest(
+            stage, {"observer": {"receipt": changed}}, launch_gate=_gate()
+        )
+
+
+@pytest.mark.parametrize(
+    ("path", "private_value"),
+    [
+        (("private_rows",), [{"prompt": "DO_NOT_EXPORT"}]),
+        (("files", "train", "private_prompt"), "DO_NOT_EXPORT"),
+        (("tokenizer", "repo"), "DO_NOT_EXPORT"),
+        (("tokenizer", "files", 0, "path"), "DO_NOT_EXPORT"),
+    ],
+)
+def test_fast3_public_stage_manifest_rejects_fully_resealed_private_fields(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    path: tuple[str | int, ...],
+    private_value: object,
+) -> None:
+    stage = _stage()
+    successor = _plan(stage)["data"]
+    changed = copy.deepcopy(successor)
+    target = changed
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = private_value
+    changed["sha256"] = "sha256:" + digest(
+        {key: item for key, item in changed.items() if key != "sha256"}
+    )
+    result = _stage_result(stage, changed)
+    target = tmp_path / "termination.log"
+    monkeypatch.setattr(operator, "_TERMINATION_PATH", target)
+    with pytest.raises(ValueError, match="public manifest"):
+        operator._write_termination(
+            phase="stage",
+            result_path=Path("/mnt/sfs/fixed/STAGE_OPERATOR_RESULT.json"),
+            result=result,
+        )
+    assert not target.exists()
+
+    predecessor = copy.deepcopy(stage["predecessor_manifest"])
+    target = predecessor
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = private_value
+    predecessor["sha256"] = "sha256:" + digest(
+        {key: item for key, item in predecessor.items() if key != "sha256"}
+    )
+    changed_stage = training.stage_spec(operator.FAST3_IDENTITY, predecessor)
+    with pytest.raises(ValueError, match="public manifest"):
+        operator_job.stage_packet(
+            identity=operator.FAST3_IDENTITY,
+            stage=changed_stage,
+            launch_gate=_gate(),
+        )
+
+
+def test_fast3_public_stage_manifest_rejects_resealed_hex_payload_channel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stage = _stage()
+    successor = _plan(stage)["data"]
+    observed = {split: successor["files"][split]["sha256"] for split in ("train", "dev")}
+    secret = b"DO_NOT_EXPORT".hex().ljust(64, "0")
+    successor["files"]["train"]["sha256"] = "sha256:" + secret
+    successor["sha256"] = "sha256:" + digest(
+        {key: item for key, item in successor.items() if key != "sha256"}
+    )
+    target = tmp_path / "termination.log"
+    monkeypatch.setattr(operator, "_TERMINATION_PATH", target)
+
+    def verify(_receipt: dict, value: dict) -> None:
+        if any(value["files"][split]["sha256"] != observed[split] for split in ("train", "dev")):
+            raise ValueError("Fast3 staged public payload changed")
+
+    monkeypatch.setattr(operator, "_verify_fast3_staged_public_manifest", verify)
+    with pytest.raises(ValueError, match="staged public payload"):
+        operator._write_termination(
+            phase="stage",
+            result_path=Path("/mnt/sfs/fixed/STAGE_OPERATOR_RESULT.json"),
+            result=_stage_result(stage, successor),
+        )
+    assert not target.exists()
+
+
+def test_fast3_public_manifest_reopens_exact_stat_stable_stage_package(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    destination = tmp_path / "data"
+    destination.mkdir(mode=0o700)
+    payloads = {
+        "dev.jsonl": b'{"split":"dev"}\n',
+        "split.json": b"{}\n",
+        "task-set.json": b"{}\n",
+        "train.jsonl": b'{"split":"train"}\n',
+    }
+    successor = _plan(_stage())["data"]
+    for split in ("train", "dev"):
+        payload = payloads[split + ".jsonl"]
+        successor["files"][split]["sha256"] = "sha256:" + hashlib.sha256(payload).hexdigest()
+    successor["sha256"] = "sha256:" + digest(
+        {key: item for key, item in successor.items() if key != "sha256"}
+    )
+    payloads["manifest.json"] = (
+        json.dumps(successor, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode()
+    for name, payload in payloads.items():
+        path = destination / name
+        path.write_bytes(payload)
+        path.chmod(0o600)
+
+    def files() -> list[dict]:
+        return [
+            {
+                "path": name,
+                "bytes": len(payloads[name]),
+                "sha256": "sha256:" + hashlib.sha256(payloads[name]).hexdigest(),
+            }
+            for name in sorted(payloads)
+        ]
+
+    monkeypatch.setattr(operator, "FAST3_IDENTITY", SimpleNamespace(data_root=str(destination)))
+    receipt = {"destination": str(destination), "files": files()}
+    operator._verify_fast3_staged_public_manifest(receipt, successor)
+
+    replacement = tmp_path / "replacement"
+    stale = tmp_path / "stale"
+    shutil.copytree(destination, replacement)
+    original_fstat = operator.os.fstat
+    swapped = False
+
+    def swap_path(descriptor: int):
+        nonlocal swapped
+        if not swapped:
+            swapped = True
+            destination.rename(stale)
+            replacement.rename(destination)
+        return original_fstat(descriptor)
+
+    monkeypatch.setattr(operator.os, "fstat", swap_path)
+    with pytest.raises(ValueError, match="staged public payload"):
+        operator._verify_fast3_staged_public_manifest(receipt, successor)
+    monkeypatch.setattr(operator.os, "fstat", original_fstat)
+
+    secret = b"DO_NOT_EXPORT".hex().ljust(64, "0")
+    changed = copy.deepcopy(successor)
+    changed["files"]["train"]["sha256"] = "sha256:" + secret
+    changed["sha256"] = "sha256:" + digest(
+        {key: item for key, item in changed.items() if key != "sha256"}
+    )
+    payloads["manifest.json"] = (
+        json.dumps(changed, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode()
+    (destination / "manifest.json").write_bytes(payloads["manifest.json"])
+    (destination / "manifest.json").chmod(0o600)
+    receipt["files"] = files()
+    next(item for item in receipt["files"] if item["path"] == "train.jsonl")["sha256"] = (
+        "sha256:" + secret
+    )
+    with pytest.raises(ValueError, match="staged public payload"):
+        operator._verify_fast3_staged_public_manifest(receipt, changed)
+    (destination / "train.jsonl").unlink()
+    (destination / "train.jsonl").symlink_to(destination / "dev.jsonl")
+    with pytest.raises(ValueError, match="staged public payload"):
+        operator._verify_fast3_staged_public_manifest(receipt, changed)
+
+
+def test_prod10_stage_termination_bytes_remain_without_successor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "termination.log"
+    monkeypatch.setattr(operator, "_TERMINATION_PATH", target)
+    result = operator._seal({"schema": operator.RESULT_SCHEMA, "status": "stage_ready"})
+    operator._write_termination(phase="stage", result_path=Path("/fixed/result"), result=result)
+    termination = json.loads(target.read_bytes())
+    assert termination == operator._seal(
+        {
+            "schema": operator.TERMINATION_SCHEMA,
+            "status": "passed",
+            "phase": "stage",
+            "result_path": "/fixed/result",
+            "result_sha256": result["sha256"],
+            "gpus": 0,
+        }
+    )
 
 
 def test_fast3_plan_dispatch_uses_append_only_request_and_zero_gpu_preflight() -> None:
@@ -146,6 +478,88 @@ def test_fast3_plan_dispatch_uses_append_only_request_and_zero_gpu_preflight() -
     assert manifest["metadata"]["annotations"][FAILURE_ALERT_ANNOTATION] == "off"
     assert manifest["spec"]["template"]["spec"]["priorityClassName"] == "c1"
     assert "nvidia.com/gpu" not in json.dumps(manifest, sort_keys=True)
+
+
+def test_fast3_preflight_package_binds_gate_and_full_manifest_chain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stage = _stage()
+    plan = _plan(stage)
+    request = launch_direct.job_request(plan, identity=operator.FAST3_IDENTITY)
+    stage_launch = {"synthetic": "released-stage"}
+    monkeypatch.setattr(direct, "_direct_stage_launch", lambda value, *_args, **_kwargs: value)
+    monkeypatch.setattr(direct, "_fresh_at", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        direct, "validate_cpu_preview_proof", lambda _expected, value, **_kwargs: value
+    )
+    manifest_receipt = direct._seal(
+        {
+            "schema": direct.DIRECT_MANIFEST_RESULT_SCHEMA,
+            "status": "passed",
+            "successor_manifest": plan["data"],
+            "successor_manifest_sha256": plan["data"]["sha256"],
+            "private_rows_exported": False,
+            "nested_jobs_created": 0,
+            "gpus": 0,
+        }
+    )
+    manifest_release = direct._seal(
+        {
+            "schema": cleanup.DIRECT_RESULT_SCHEMA,
+            "status": "released",
+            "terminal_status": "Succeeded",
+            "release_observed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "receipt": manifest_receipt,
+        }
+    )
+    manifest_launch = direct._seal(
+        {
+            "schema": direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA,
+            "status": "operator_succeeded_and_released",
+            "gpus": 0,
+            "package": {
+                "name": operator.FAST3_OPERATOR_NAMES["manifest"],
+                "phase": "manifest",
+                "failure_alerts": "off",
+                "priority": "c1",
+                "queue_priority": "q1",
+                "gpus": 0,
+            },
+            "observer": manifest_release,
+        }
+    )
+    dev_preview = direct._seal(
+        {
+            "schema": direct.CPU_PREVIEW_SCHEMA,
+            "context": direct.DEV_CONTEXT,
+        }
+    )
+    duplicate = direct._seal(
+        {
+            "schema": direct.CPU_DUPLICATE_PROOF_SCHEMA,
+            "context": direct.DEV_CONTEXT,
+            "name": operator.FAST3_IDENTITY.preflight_name,
+        }
+    )
+    packet = operator_job.preflight_packet(
+        identity=operator.FAST3_IDENTITY,
+        plan=plan,
+        request=request,
+        stage=stage,
+        stage_launch_result=stage_launch,
+        manifest_launch_result=manifest_launch,
+        dev_preview=dev_preview,
+        dev_duplicate_proof=duplicate,
+        launch_gate=_gate(),
+    )
+    package = operator_job.build_operator_package(packet)
+    proof = operator_job.validate_operator_package(package)
+    assert packet["launch_gate"] == _gate()
+    assert proof["phase"] == "preflight"
+    assert proof["failure_alerts"] == "off"
+    assert proof["priority"] == "c1"
+    assert proof["queue_priority"] == "q1"
+    assert proof["gpus"] == 0
 
 
 def test_fast3_plan_dispatch_validates_fast3_preflight_receipt() -> None:
@@ -241,6 +655,7 @@ def test_fast3_launch_packet_has_no_prod10_incident_chain(
     capacity["sha256"] = digest(capacity)
     packet = operator_job.launch_packet(
         identity=operator.FAST3_IDENTITY,
+        launch_gate=_gate(),
         plan=plan,
         request=request,
         preflight_launch_result=preflight,
@@ -304,6 +719,7 @@ def test_fast3_host_proof_is_truthful_and_jit_checks_sfs(
         token="token",
         runner=runner,
         jobs_factory=FakeJobs,
+        launch_gate=_gate(),
     )
     assert "output_root" not in host
     assert "output_absent" not in host
@@ -315,11 +731,160 @@ def test_fast3_host_proof_is_truthful_and_jit_checks_sfs(
         token="token",
         runner=runner,
         jobs_factory=FakeJobs,
+        launch_gate=_gate(),
     )
     assert output_checks == [{"run_dir": operator.FAST3_IDENTITY.output_root}]
     assert proof["runtime_prod_kubernetes_inventories_checked"] == 5
     assert proof["output_absent"] is True
     assert len(commands) == 15
+
+
+def test_fast3_external_entrypoints_fail_before_io_without_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("external I/O occurred before the Fast3 gate")
+
+    with monkeypatch.context() as context:
+        context.setattr(training, "_stage_identity", forbidden)
+        context.setattr(launch_direct, "plan_identity", forbidden)
+        with pytest.raises(ValueError, match="append-only launch gate"):
+            operator_job.stage_packet(identity=operator.FAST3_IDENTITY, stage={})
+        with pytest.raises(ValueError, match="append-only launch gate"):
+            operator_job.manifest_packet(
+                identity=operator.FAST3_IDENTITY,
+                stage={},
+                stage_launch_result={},
+            )
+        with pytest.raises(ValueError, match="append-only launch gate"):
+            operator_job.preflight_packet(
+                identity=operator.FAST3_IDENTITY,
+                plan={},
+                request={},
+                stage={},
+                stage_launch_result={},
+                manifest_launch_result={},
+                dev_preview={},
+                dev_duplicate_proof={},
+            )
+        with pytest.raises(ValueError, match="append-only launch gate"):
+            operator_job.launch_packet(
+                identity=operator.FAST3_IDENTITY,
+                plan={},
+                request={},
+                preflight_launch_result={},
+                source_preview={},
+                manifest_sha256="",
+                dev_preview={},
+                dev_preview_provenance={},
+                duplicate_proof={},
+                capacity_census={},
+            )
+
+    with pytest.raises(ValueError, match="append-only launch gate"):
+        launch_direct.host_identity_proof(
+            operator.FAST3_IDENTITY,
+            token="token",
+            runner=forbidden,
+            jobs_factory=forbidden,
+        )
+    with pytest.raises(ValueError, match="append-only launch gate"):
+        launch_direct.jit_duplicate_proof(
+            operator.FAST3_IDENTITY,
+            {},
+            token="token",
+            runner=forbidden,
+            jobs_factory=forbidden,
+        )
+    with pytest.raises(ValueError, match="host identity proof"):
+        launch_direct.duplicate_proof(
+            operator.FAST3_IDENTITY,
+            token="token",
+            runner=forbidden,
+            jobs_factory=forbidden,
+        )
+    with pytest.raises(ValueError, match="append-only launch gate"):
+        launch_direct.revalidate_preflight({}, {}, {}, identity=operator.FAST3_IDENTITY)
+    with pytest.raises(ValueError, match="append-only launch gate"):
+        launch_direct.preflight_result({}, {}, {}, identity=operator.FAST3_IDENTITY)
+    with pytest.raises(ValueError, match="append-only launch gate"):
+        launch_direct.authorize_preflight_direct_manifest(
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            stage_operator_name="forbidden",
+            manifest_operator_name="forbidden",
+            dev_preview={},
+            prod_preview={},
+            observer={},
+            identity=operator.FAST3_IDENTITY,
+        )
+    with pytest.raises(ValueError, match="append-only launch gate"):
+        launch_direct.authorize(
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            dev_preview={},
+            dev_provenance={},
+            prod_preview={},
+            observer={},
+            identity=operator.FAST3_IDENTITY,
+        )
+    with pytest.raises(ValueError, match="append-only launch gate"):
+        launch_direct.create_preflight_once(
+            tmp_path,
+            {},
+            {},
+            {},
+            {},
+            identity=operator.FAST3_IDENTITY,
+            runner=forbidden,
+            dev_duplicate_proof={},
+        )
+    with pytest.raises(ValueError, match="append-only launch gate"):
+        launch_direct.create_once(
+            tmp_path,
+            {},
+            {},
+            {},
+            {},
+            {},
+            token="token",
+            identity=operator.FAST3_IDENTITY,
+            duplicate={},
+            final_duplicate={},
+            host_duplicate={},
+            census={},
+            live_preview={},
+            runner=forbidden,
+            jobs_factory=forbidden,
+        )
+    with pytest.raises(ValueError, match="append-only launch gate"):
+        operator_job.fast3_preflight_development_proofs({}, launch_gate={}, runner=forbidden)
+
+    with pytest.raises(ValueError, match="Fast3 inspect"):
+        operator_job.inspect_packet(
+            identity=operator.FAST3_IDENTITY,
+            plan={},
+            preflight_launch_result={},
+        )
+    with pytest.raises(ValueError, match="Fast3 inspect"):
+        operator.run_inspect({"identity": operator.FAST3_IDENTITY.sealed_mapping()})
+    with pytest.raises(ValueError, match="Fast3 probe"):
+        operator.run_probe(
+            {
+                "identity": operator.FAST3_IDENTITY.sealed_mapping(),
+                "launch_packet": {},
+            },
+            runner=forbidden,
+        )
 
 
 def test_fast3_rejects_legacy_host_output_absence_claim() -> None:

@@ -175,6 +175,18 @@ def _plan_training(identity: historical.RailIdentity) -> ModuleType:
     return _fast3_modules()[1] if identity == FAST3_IDENTITY else training
 
 
+def _external_launch_gate(
+    identity: historical.RailIdentity, value: object
+) -> dict[str, Any] | None:
+    if identity == FAST3_IDENTITY:
+        from . import skyrl_prod10_operator
+
+        return skyrl_prod10_operator.fast3_launch_gate(value)
+    if value is not None:
+        raise JobsError("prod10 external action received an unexpected Fast3 launch gate")
+    return None
+
+
 def plan_identity(
     plan: dict[str, Any], identity: historical.RailIdentity
 ) -> historical.RailIdentity:
@@ -252,7 +264,9 @@ def authorize_preflight_direct_manifest(
     prod_preview: dict[str, Any],
     observer: dict[str, Any],
     identity: historical.RailIdentity,
+    launch_gate: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    _external_launch_gate(identity, launch_gate)
     return _plan_direct(identity).authorize_preflight_direct_manifest(
         plan,
         request,
@@ -280,7 +294,9 @@ def create_preflight_once(
     identity: historical.RailIdentity,
     runner: Callable[..., subprocess.CompletedProcess[str]],
     dev_duplicate_proof: dict[str, Any],
+    launch_gate: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    _external_launch_gate(identity, launch_gate)
     return _plan_direct(identity).create_preflight_once(
         directory,
         plan,
@@ -442,8 +458,10 @@ def preflight_result(
     value: object,
     *,
     identity: historical.RailIdentity,
+    launch_gate: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Strictly validate the immutable v3 result; launch rechecks live state."""
+    _external_launch_gate(identity, launch_gate)
     backend = _plan_direct(identity)
     bound = backend._identity(plan, identity)
     result = direct._validate_seal(value, PREFLIGHT_RESULT_SCHEMA)
@@ -546,9 +564,11 @@ def revalidate_preflight(
     preflight: dict[str, Any],
     *,
     identity: historical.RailIdentity,
+    launch_gate: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Rerun the exact-image CPU gate; never extend the old result's TTL."""
-    checked = preflight_result(plan, request, preflight, identity=identity)
+    _external_launch_gate(identity, launch_gate)
+    checked = preflight_result(plan, request, preflight, identity=identity, launch_gate=launch_gate)
     backend = _plan_direct(identity)
     receipt = _seal_fresh_preflight_receipt(_plan_training(identity).preflight(plan))
     receipt = backend._preflight_receipt(plan, request, receipt, identity=identity)
@@ -573,9 +593,12 @@ def _revalidation(
     preflight: dict[str, Any],
     *,
     identity: historical.RailIdentity,
+    launch_gate: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     checked = direct._validate_seal(value, REVALIDATION_SCHEMA)
-    expected = preflight_result(plan, request, preflight, identity=identity)
+    expected = preflight_result(
+        plan, request, preflight, identity=identity, launch_gate=launch_gate
+    )
     if (
         checked.get("status") != "fresh_exact_image_preflight_passed"
         or checked.get("preflight_result_sha256") != expected["sha256"]
@@ -594,6 +617,8 @@ def duplicate_proof(
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     jobs_factory: Callable[..., Jobs] = Jobs,
 ) -> dict[str, Any]:
+    if identity == FAST3_IDENTITY:
+        raise JobsError("prod11 Fast3 duplicate check requires the host identity proof")
     checked = direct._direct_duplicate_checks(
         identity, token=token, runner=runner, jobs_factory=jobs_factory
     )
@@ -616,6 +641,7 @@ def host_identity_proof(
     token: str,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     jobs_factory: Callable[..., Jobs] = Jobs,
+    launch_gate: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Prove only Kubernetes and Jobs API identity absence for Fast3.
 
@@ -625,6 +651,7 @@ def host_identity_proof(
     """
     if identity != FAST3_IDENTITY:
         raise JobsError("prod11 Fast3 host identity proof used for another run")
+    _external_launch_gate(identity, launch_gate)
     checked = direct._direct_duplicate_checks(
         identity, token=token, runner=runner, jobs_factory=jobs_factory
     )
@@ -696,8 +723,10 @@ def jit_duplicate_proof(
     prior_duplicate: object | None = None,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     jobs_factory: Callable[..., Jobs] = Jobs,
+    launch_gate: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Refresh prod state while preserving fresh sealed host dev provenance."""
+    _external_launch_gate(identity, launch_gate)
     host = _duplicate(host_duplicate, identity, fresh=True)
     prior_sha256 = None
     if prior_duplicate is not None:
@@ -1021,10 +1050,19 @@ def authorize(
     prod_preview: dict[str, Any],
     observer: dict[str, Any],
     identity: historical.RailIdentity,
+    launch_gate: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    _external_launch_gate(identity, launch_gate)
     bound = plan_identity(plan, identity)
-    checked = preflight_result(plan, request, preflight, identity=bound)
-    fresh = _revalidation(revalidation, plan, request, checked, identity=bound)
+    checked = preflight_result(plan, request, preflight, identity=bound, launch_gate=launch_gate)
+    fresh = _revalidation(
+        revalidation,
+        plan,
+        request,
+        checked,
+        identity=bound,
+        launch_gate=launch_gate,
+    )
     image = image_identity(request, checked)
     if expected != gpu_manifest(
         plan, request, source_preview, identity=bound, image_identity_receipt=image
@@ -1110,8 +1148,10 @@ def create_once(
     live_source_preview: dict[str, Any] | None = None,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     jobs_factory: Callable[..., Jobs] = Jobs,
+    launch_gate: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Revalidate live state, journal intent, and perform exactly one API POST."""
+    _external_launch_gate(identity, launch_gate)
     bound = plan_identity(plan, identity)
     root = training_operation_root(plan, identity=bound)
     journal = root / "PROD10_DIRECT_V3_CREATE.jsonl"
@@ -1137,6 +1177,7 @@ def create_once(
         prod_preview=auth["prod_preview"],
         observer=auth["observer"],
         identity=bound,
+        launch_gate=launch_gate,
     )
     if auth != expected_auth:
         raise JobsError("prod10 direct-v3 authorization changed")
