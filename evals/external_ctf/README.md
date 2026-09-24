@@ -20,9 +20,8 @@ the five present tasks and never turns the missing source into a model failure.
 The NYU test manifest names 19 web tasks. Three of them (`scp-terminal`,
 `snailrace1`, and `sharkfacts`) have no Docker Compose runtime in the pinned
 official release; the project TODO also says `snailrace1` is not playable.
-The protocol retains all 19 identities, marks those three as infrastructure
-unavailable. The remaining 16 are compose-declared candidates; their OpenCode
-adapter and remote runtime are not yet qualified.
+The protocol retains all 19 identities and marks those three as infrastructure
+unavailable. The remaining 16 are compose-declared candidates.
 
 Each benchmark uses a deterministic grading authority. CVE-Bench and Cybench
 publish their native grading path. Cybench task acceptance is the exact
@@ -168,12 +167,23 @@ Only a small sealed terminal receipt can be read back from the sandbox.
 
 All provider launches are currently blocked. A live shared-capacity successor,
 immutable qualification packet, and remote model-free receipts do not yet exist.
-CVE-Bench is the only
-scored adapter, but it is not launch-qualified until those receipts are sealed.
-NYU and Cybench now have create-once, model-free runtime qualification executors;
-their scored adapters remain false and explicitly blocked until their
-Linux/amd64 challenge startup, OpenCode isolation, remote-runtime, and
-terminal-acceptance receipts pass. The
+CVE-Bench already has a scored adapter, but it is not launch-qualified until
+those receipts are sealed. NYU and Cybench now share one small scored OpenCode
+executor and their existing deterministic graders. The executor removes the
+real provider credential from the worker environment before any benchmark
+container is started; only a separate fixed inference proxy receives it. Their
+launches remain explicitly blocked until the existing per-task Linux runtime
+receipts and this model-free credential-isolation receipt pass:
+
+```sh
+uv run python -m evals.external_ctf.opencode_scored \
+  --qualify-credential-boundary \
+  --output /private/path/external-ctf-scored-adapter-qualification.json
+```
+
+That qualification uses a non-secret sentinel and makes no provider or model
+request. It proves the proxy/agent network and credential boundary, then
+removes every container and network it created. The
 pinned NYU census proves 16 source-qualified runtime candidates, not 16
 reproducible executions. Local platform checks are not benchmark results and do
 not authorize a launch.
@@ -203,3 +213,60 @@ closed until their model-free remote runtime receipts pass. Fleet Kubernetes is
 not used as a fallback because these official benchmarks require isolated
 Docker workloads; forcing them into a GPU training node would be less reliable
 and would waste the eight-node training budget.
+
+## Six-model pass@4 campaign adapter
+
+[`campaign_adapter.py`](./campaign_adapter.py) connects these existing
+benchmark runtimes to the generic resumable controller in
+[`evals/campaign.py`](../campaign.py). It does not copy or replace the native
+graders. A reviewed private binding file supplies the frozen six-model matrix,
+exact serving-route checks, the existing capacity handoff, the model-free
+qualification packet, and one accepted qualification summary per benchmark.
+The adapter then renders 1,464 candidate cells: 61 available tasks × six exact
+model weights × four attempts. Every attempt has a null seed and a unique,
+deterministic provider name that includes its stable experiment key.
+
+The controller runs canary cells one at a time, then permits at most four of
+this campaign's sandboxes at once. Its shared TensorLake capacity and duplicate
+checks still apply. Valid cells resume independently, so one infrastructure
+failure does not discard other completed cells. Scoring is local and uses only
+the benchmark's pinned deterministic grader; no GPT judge is called.
+
+Render a controller configuration without creating a sandbox:
+
+```sh
+uv run python -m evals.external_ctf.campaign_adapter \
+  --bindings /private/path/external-ctf-campaign-bindings.json \
+  render --output /private/path/external-ctf-campaign.json
+```
+
+Prepare the immutable campaign state and generate read-only previews through
+the standalone controller:
+
+```sh
+uv run python -m evals.campaign prepare \
+  /private/path/external-ctf-campaign.json \
+  --output /private/path/external-ctf-campaign-state
+uv run python -m evals.campaign step \
+  /private/path/external-ctf-campaign-state
+```
+
+Only a later, reviewed `step --execute` may create work. This adapter and its
+template do not execute that command or authorize a provider request.
+
+The binding file is create-once evidence, not a convenient defaults file. It
+must bind the exact protocol, capacity handoff, qualification packet and
+summaries, six route checks, budget digest, harness digests, scoring digests,
+and the frozen six-arm matrix in
+[`qwen38-top5-multibench-pass4-matrix-20260923-v1.json`](../../configs/evaluation/qwen38-top5-multibench-pass4-matrix-20260923-v1.json).
+The adapter checks each model id, checkpoint artifact, and arm digest against
+that matrix before readiness and again under the shared create lock immediately
+before a provider request.
+
+CVE-Bench's 40 available tasks can advance after its gates pass. NYU's 16
+available rows and Cybench's five available rows use the same gated interface,
+but truthfully remain deferred until the exact credential-isolation receipt is
+bound alongside their accepted task runtime receipts.
+Their four declared unavailable tasks remain in the campaign template's
+official denominators and are never converted into model failures. This change
+performed no external create and authorizes none by itself.
