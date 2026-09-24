@@ -21,7 +21,7 @@ TASK_VERSION_ID = "0920e798-c7e7-4da6-9d5e-ebeba45ec05a"
 VERIFIER_VERSION_ID = "9356b7ca-43b4-4926-a871-d9a95b41f6e5"
 MODEL_REVISION = "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
 SERVED_MODEL = "qwen/chris-q38-base-pass4-v1"
-JOB_NAME = "chris-q38-m96-signal-a2-leak-a3"
+JOB_NAME = "chris-q38-m96-signal-a2-leak-a4"
 CM_NAME = JOB_NAME + "-code"
 NAMESPACE = "fleet-train-jobs"
 IMAGE = (
@@ -85,55 +85,6 @@ def _write_once(path: Path, value: dict[str, Any]) -> None:
         os.fsync(stream.fileno())
 
 
-def _failure_summary(source: Path) -> dict[str, Any]:
-    """Return only score-blind terminal counts and controller failure classes."""
-    worker_path = source / "TERMINAL-base-v1.json"
-    campaign_path = source / "EVAL_TERMINAL.json"
-    worker_codes: dict[str, int] = {}
-    if worker_path.is_file() and not worker_path.is_symlink():
-        worker = _read(worker_path)
-        if (
-            worker.get("schema_version") != "fleet-rollout-ledger-controller-terminal-v1"
-            or worker.get("scores_included") is not False
-            or worker.get("prompts_or_traces_included") is not False
-        ):
-            raise ValueError("score-blind worker terminal contract differs")
-        for row in worker.get("results") or []:
-            if not isinstance(row, dict):
-                raise ValueError("worker terminal result is invalid")
-            code = (
-                "accepted"
-                if row.get("accepted") is True
-                else (
-                    row.get("failure_code") or row.get("controller_failure_code") or "unclassified"
-                )
-            )
-            if not isinstance(code, str) or re.fullmatch(r"[a-z0-9_.:-]{1,128}", code) is None:
-                raise ValueError("worker terminal failure class is invalid")
-            worker_codes[code] = worker_codes.get(code, 0) + 1
-    campaign_states: dict[str, int] = {}
-    if campaign_path.is_file() and not campaign_path.is_symlink():
-        campaign = _read(campaign_path)
-        summary = campaign.get("summary") or {}
-        states = summary.get("by_state") or {}
-        if campaign.get("schema") != "fleet_eval_campaign_terminal_v1" or not isinstance(
-            states, dict
-        ):
-            raise ValueError("score-blind campaign terminal contract differs")
-        if any(
-            not isinstance(key, str) or isinstance(value, bool) or not isinstance(value, int)
-            for key, value in states.items()
-        ):
-            raise ValueError("campaign terminal state counts are invalid")
-        campaign_states = dict(sorted(states.items()))
-    return {
-        "worker_terminal_present": worker_path.is_file(),
-        "worker_failure_code_counts": dict(sorted(worker_codes.items())),
-        "campaign_terminal_present": campaign_path.is_file(),
-        "campaign_state_counts": campaign_states,
-    }
-
-
 def reconcile(source: Path = SOURCE) -> dict[str, Any]:
     receipt_path = source / RECEIPT.name
     if source.is_symlink() or not source.is_dir() or receipt_path.exists():
@@ -168,11 +119,6 @@ def reconcile(source: Path = SOURCE) -> dict[str, Any]:
         raise ValueError("private instance roster is not unique")
     if cleanup_count not in {7, 8}:
         raise ValueError("private cleanup count is outside the reviewed seven-or-eight bound")
-
-    result_file_count = sum((attempt / "reward-result.json").is_file() for attempt in attempts)
-    accepted_file_count = sum((attempt / "ACCEPTED.json").is_file() for attempt in attempts)
-    signal_validated_present = (source / "SIGNAL_VALIDATED.json").is_file()
-    failure = _failure_summary(source)
 
     live: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
     for instance_id, runtime in rows:
@@ -215,6 +161,10 @@ def reconcile(source: Path = SOURCE) -> dict[str, Any]:
             raise RuntimeError("one or more exact instances remain live after release")
         time.sleep(2**attempt)
 
+    result_file_count = sum((attempt / "reward-result.json").is_file() for attempt in attempts)
+    accepted_file_count = sum((attempt / "ACCEPTED.json").is_file() for attempt in attempts)
+    signal_validated_present = (source / "SIGNAL_VALIDATED.json").is_file()
+
     body = {
         "schema": "cyber_qwen38_miles96_signal_leak_reconciliation_v2",
         "status": "all_exact_instances_released",
@@ -224,7 +174,7 @@ def reconcile(source: Path = SOURCE) -> dict[str, Any]:
         "preexisting_cleanup_receipt_count": cleanup_count,
         "accepted_receipt_count": accepted_file_count,
         "signal_validated_present": signal_validated_present,
-        **failure,
+        "reward_terminal_metadata_read": False,
         "live_instance_count_before": len(live),
         "exact_delete_attempted": deleted,
         "deleted_instance_identity_sha256": deleted_digest,
@@ -328,7 +278,7 @@ def packet() -> dict[str, Any]:
         ],
     }
     body = {
-        "schema": "cyber_qwen38_miles96_signal_leak_reconcile_packet_v2",
+        "schema": "cyber_qwen38_miles96_signal_leak_reconcile_packet_v3",
         "job_name": JOB_NAME,
         "config_map_name": CM_NAME,
         "source_job_uid": SOURCE_JOB_UID,

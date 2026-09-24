@@ -129,6 +129,18 @@ def test_reconcile_accepts_eight_cleanup_receipts_without_delete(
             )
         )
 
+    (source / "TERMINAL-base-v1.json").write_text(
+        json.dumps(
+            {
+                "worker_id": "base-v1",
+                "plan_sha256": "sha256:opaque",
+                "results": [{"accepted": False, "failure_code": "opaque.failure"}],
+                "accepted": 0,
+                "receipt_sha256": "sha256:opaque",
+            }
+        )
+    )
+
     calls = []
 
     def request(instance_id: str, method: str):
@@ -141,38 +153,6 @@ def test_reconcile_accepts_eight_cleanup_receipts_without_delete(
     receipt = cleanup.reconcile(source)
     assert receipt["preexisting_cleanup_receipt_count"] == 8
     assert receipt["exact_delete_attempted"] is False
+    assert receipt["reward_terminal_metadata_read"] is False
     assert len(calls) == 16
     assert all(instance_id not in json.dumps(receipt) for instance_id in ids)
-
-
-def test_failure_summary_preserves_only_sanitized_counts(tmp_path: Path) -> None:
-    source = tmp_path / "signal"
-    source.mkdir()
-    (source / "TERMINAL-base-v1.json").write_text(
-        json.dumps(
-            {
-                "schema_version": "fleet-rollout-ledger-controller-terminal-v1",
-                "accepted": False,
-                "results": [
-                    {"accepted": False, "failure_code": "model_trace_created.runtimeerror"},
-                    {"accepted": False, "failure_code": "model_trace_created.runtimeerror"},
-                ],
-                "scores_included": False,
-                "prompts_or_traces_included": False,
-            }
-        )
-    )
-    (source / "EVAL_TERMINAL.json").write_text(
-        json.dumps(
-            {
-                "schema": "fleet_eval_campaign_terminal_v1",
-                "summary": {"by_state": {"retry_review": 8, "accepted": 0}},
-            }
-        )
-    )
-    assert cleanup._failure_summary(source) == {
-        "worker_terminal_present": True,
-        "worker_failure_code_counts": {"model_trace_created.runtimeerror": 2},
-        "campaign_terminal_present": True,
-        "campaign_state_counts": {"accepted": 0, "retry_review": 8},
-    }
