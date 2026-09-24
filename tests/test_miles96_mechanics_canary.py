@@ -7,9 +7,11 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import types
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace as NS
@@ -45,24 +47,59 @@ def _install_fake_fti_session(
     *,
     raw_override: list[dict] | None = None,
     visible_drift: bool = False,
+    base_list_error: bool = False,
+    base_transform_error: bool = False,
+    barrier=None,
+    preexisting_overrides: bool = False,
 ) -> tuple[type, object]:
     raw = _raw_tool_catalog() if raw_override is None else raw_override
+    state = NS(clients=[], instances=[], client_overrides=[], instance_overrides=[])
 
     def openai_tools(catalog):
+        if base_transform_error:
+            raise ValueError("base tool projection failed")
         return mechanics._openai_tool_catalog(catalog)
 
     class FakeInstance:
         def __init__(self):
             self.calls = 0
+            if preexisting_overrides:
+                original = self.list_tools
+
+                def instance_list_override():
+                    return original()
+
+                self.list_tools = instance_list_override
+                state.instance_overrides.append(instance_list_override)
 
         def list_tools(self):
             self.calls += 1
+            if barrier is not None:
+                barrier.wait()
+            if base_list_error:
+                raise RuntimeError("base tools/list failed")
             return copy.deepcopy(raw)
 
-    instance = FakeInstance()
+    class FakeClient:
+        def __init__(self):
+            if preexisting_overrides:
+                original = self.create_reward_instance
+
+                def client_create_override(*args, **kwargs):
+                    return original(*args, **kwargs)
+
+                self.create_reward_instance = client_create_override
+                state.client_overrides.append(client_create_override)
+
+        def create_reward_instance(self, *_args, **_kwargs):
+            instance = FakeInstance()
+            state.instances.append(instance)
+            return instance
 
     class FakeTaskSession:
         def __init__(self):
+            self.client = FakeClient()
+            state.clients.append(self.client)
             self.instance = None
             self.tools = []
             self.close_calls = 0
@@ -71,10 +108,14 @@ def _install_fake_fti_session(
             self.verifier_version_id = plan["task_binding"]["verifier_version_id"]
 
         def open(self):
-            self.instance = instance
-            self.tools = openai_tools(instance.list_tools())
-            if visible_drift:
-                self.tools[0]["function"]["name"] = "drifted"
+            try:
+                self.instance = self.client.create_reward_instance()
+                self.tools = openai_tools(self.instance.list_tools())
+                if visible_drift:
+                    self.tools[0]["function"]["name"] = "drifted"
+            except BaseException:
+                self.close()
+                raise
 
         def close(self):
             self.close_calls += 1
@@ -98,7 +139,7 @@ def _install_fake_fti_session(
         monkeypatch.setitem(sys.modules, name, module)
     monkeypatch.setattr(mechanics, "_EVIDENCE_SESSION_CLASS", None)
     monkeypatch.setattr(mechanics, "_load_runtime_plan", lambda: plan)
-    return mechanics._evidence_session_class(), instance
+    return mechanics._evidence_session_class(), state
 
 
 def _phase1_plan() -> dict:
@@ -246,34 +287,46 @@ def test_evidence_session_open_accepts_exact_raw_and_openai_tools(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _phase1_plan()
-    session_type, instance = _install_fake_fti_session(monkeypatch, plan)
+    session_type, state = _install_fake_fti_session(monkeypatch, plan, preexisting_overrides=True)
     session = session_type()
     session.open()
-    assert instance.calls == 1
+    assert state.instances[0].calls == 1
     assert session.close_calls == 0
+    assert session.client.__dict__["create_reward_instance"] is state.client_overrides[0]
+    assert session.instance.__dict__["list_tools"] is state.instance_overrides[0]
     assert (
         "sha256:" + mechanics.digest(session.tools)
         == plan["tool_contract"]["openai_tool_catalog_sha256"]
     )
 
 
-@pytest.mark.parametrize("fault", ["raw", "visible", "plan", "plan_load_error"])
+@pytest.mark.parametrize(
+    "fault",
+    ["raw_meta", "raw_visible", "visible", "plan_raw", "plan_visible", "plan_load_error"],
+)
 def test_evidence_session_open_rejects_tool_drift_and_closes_once(
     monkeypatch: pytest.MonkeyPatch, fault: str
 ) -> None:
     plan = _phase1_plan()
     raw_override: list[dict] | None = None
     visible_drift = fault == "visible"
-    if fault == "raw":
+    if fault == "raw_meta":
+        raw_override = _raw_tool_catalog()
+        raw_override[0]["_meta"] = {"private": "not model visible"}
+    elif fault == "raw_visible":
         raw_override = _raw_tool_catalog()
         raw_override[0]["name"] = "drifted"
-    session_type, instance = _install_fake_fti_session(
+    session_type, state = _install_fake_fti_session(
         monkeypatch,
         plan,
         raw_override=raw_override,
         visible_drift=visible_drift,
     )
-    if fault == "plan":
+    if fault == "plan_raw":
+        changed = copy.deepcopy(plan)
+        changed["tool_contract"]["raw_tool_catalog_sha256"] = _sha("e")
+        monkeypatch.setattr(mechanics, "_load_runtime_plan", lambda: changed)
+    elif fault == "plan_visible":
         changed = copy.deepcopy(plan)
         changed["tool_contract"]["openai_tool_catalog_sha256"] = _sha("f")
         monkeypatch.setattr(mechanics, "_load_runtime_plan", lambda: changed)
@@ -286,8 +339,43 @@ def test_evidence_session_open_rejects_tool_drift_and_closes_once(
     session = session_type()
     with pytest.raises(ValueError):
         session.open()
-    assert instance.calls == 1
+    assert state.instances[0].calls == 1
     assert session.close_calls == 1
+    assert "create_reward_instance" not in session.client.__dict__
+    assert "list_tools" not in session.instance.__dict__
+
+
+@pytest.mark.parametrize("fault", ["list", "transform"])
+def test_evidence_session_base_open_failure_closes_once_and_restores(
+    monkeypatch: pytest.MonkeyPatch, fault: str
+) -> None:
+    session_type, state = _install_fake_fti_session(
+        monkeypatch,
+        _phase1_plan(),
+        base_list_error=fault == "list",
+        base_transform_error=fault == "transform",
+    )
+    session = session_type()
+    with pytest.raises((RuntimeError, ValueError)):
+        session.open()
+    assert session.close_calls == 1
+    assert state.instances[0].calls == 1
+    assert "create_reward_instance" not in session.client.__dict__
+    assert "list_tools" not in session.instance.__dict__
+
+
+def test_evidence_session_concurrent_opens_keep_raw_capture_isolated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    barrier = threading.Barrier(2)
+    session_type, state = _install_fake_fti_session(monkeypatch, _phase1_plan(), barrier=barrier)
+    sessions = [session_type(), session_type()]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(lambda session: session.open(), sessions))
+    assert [session.close_calls for session in sessions] == [0, 0]
+    assert [instance.calls for instance in state.instances] == [1, 1]
+    assert all("create_reward_instance" not in session.client.__dict__ for session in sessions)
+    assert all("list_tools" not in session.instance.__dict__ for session in sessions)
 
 
 def _receipt(plan: dict) -> dict:
@@ -565,6 +653,8 @@ def test_phase2_rereads_exact_phase1_source_and_zero_update_filesystem(
         "raw_tool_catalog_sha256": phase1["tool_contract"]["raw_tool_catalog_sha256"],
         "openai_tool_catalog_sha256": phase1["tool_contract"]["openai_tool_catalog_sha256"],
         "tool_transform_source_sha256": phase1["tool_contract"]["transform_source_sha256"],
+        "single_raw_tool_read_capture": True,
+        "live_raw_tool_catalog_gate_at_session_open": True,
         "live_tool_schema_gate_at_session_open": True,
         "outer_episode_replacements": 0,
     }

@@ -480,7 +480,12 @@ def _runtime_signal_binding(plan: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("exact-image raw or OpenAI-visible tool contract drift")
     session_source = inspect.getsource(mechanics._evidence_session_class)
     if (
-        '"sha256:" + digest(self.tools) != tools["openai_tool_catalog_sha256"]'
+        "client.create_reward_instance = create_reward_instance" not in session_source
+        or "if captured_raw_tools is not None:" not in session_source
+        or 'instance.__dict__.pop("list_tools", None)' not in session_source
+        or '"sha256:" + digest(captured_raw_tools)' not in session_source
+        or "visible_tools != self.tools" not in session_source
+        or '"sha256:" + digest(self.tools) != tools["openai_tool_catalog_sha256"]'
         not in session_source
         or "except BaseException:" not in session_source
         or "self.close()" not in session_source
@@ -502,6 +507,8 @@ def _runtime_signal_binding(plan: dict[str, Any]) -> dict[str, Any]:
         "raw_tool_catalog_sha256": tools["raw_tool_catalog_sha256"],
         "openai_tool_catalog_sha256": tools["openai_tool_catalog_sha256"],
         "tool_transform_source_sha256": tools["transform_source_sha256"],
+        "single_raw_tool_read_capture": True,
+        "live_raw_tool_catalog_gate_at_session_open": True,
         "live_tool_schema_gate_at_session_open": True,
         "outer_episode_replacements": 0,
     }
@@ -1111,6 +1118,8 @@ def _validate_runtime_preflight(plan: dict[str, Any], value: dict[str, Any]) -> 
             "raw_tool_catalog_sha256",
             "openai_tool_catalog_sha256",
             "tool_transform_source_sha256",
+            "single_raw_tool_read_capture",
+            "live_raw_tool_catalog_gate_at_session_open",
             "live_tool_schema_gate_at_session_open",
             "outer_episode_replacements",
             "sha256",
@@ -1132,6 +1141,8 @@ def _validate_runtime_preflight(plan: dict[str, Any], value: dict[str, Any]) -> 
         != plan["tool_contract"]["openai_tool_catalog_sha256"]
         or value.get("tool_transform_source_sha256")
         != plan["tool_contract"]["transform_source_sha256"]
+        or value.get("single_raw_tool_read_capture") is not True
+        or value.get("live_raw_tool_catalog_gate_at_session_open") is not True
         or value.get("live_tool_schema_gate_at_session_open") is not True
         or value.get("outer_episode_replacements") != 0
     ):

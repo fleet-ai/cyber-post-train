@@ -1136,7 +1136,7 @@ def _evidence_session_class() -> type:
         return _EVIDENCE_SESSION_CLASS
 
     from fti.fleet import GradeResult
-    from fti.fleet.v1 import PlatformError
+    from fti.fleet.v1 import PlatformError, openai_tools
     from fti.miles.v1.common import TaskSession, numeric_reward
 
     class EvidenceTaskSession(TaskSession):
@@ -1144,15 +1144,60 @@ def _evidence_session_class() -> type:
         authority_evidence_sha256: str | None = None
 
         def open(self) -> None:
-            super().open()
+            captured_raw_tools = None
+            restored_instances: list[tuple[Any, object]] = []
+            missing = object()
+            client = self.client
+            original_create = client.create_reward_instance
+            client_override = client.__dict__.get("create_reward_instance", missing)
+
+            def create_reward_instance(*args: Any, **kwargs: Any):
+                instance = original_create(*args, **kwargs)
+                original_list = instance.list_tools
+                instance_override = instance.__dict__.get("list_tools", missing)
+
+                def list_tools():
+                    nonlocal captured_raw_tools
+                    if captured_raw_tools is not None:
+                        raise ValueError("task tools were listed more than once")
+                    raw = original_list()
+                    captured_raw_tools = json.loads(
+                        json.dumps(raw, sort_keys=True, separators=(",", ":"), allow_nan=False)
+                    )
+                    return raw
+
+                instance.list_tools = list_tools
+                restored_instances.append((instance, instance_override))
+                return instance
+
+            client.create_reward_instance = create_reward_instance
+            try:
+                super().open()
+            finally:
+                if client_override is missing:
+                    client.__dict__.pop("create_reward_instance", None)
+                else:
+                    client.__dict__["create_reward_instance"] = client_override
+                for instance, override in restored_instances:
+                    if override is missing:
+                        instance.__dict__.pop("list_tools", None)
+                    else:
+                        instance.__dict__["list_tools"] = override
             try:
                 plan = _load_runtime_plan()
                 binding = plan["task_binding"]
                 tools = plan["tool_contract"]
+                visible_tools = (
+                    openai_tools(captured_raw_tools)
+                    if isinstance(captured_raw_tools, list)
+                    else None
+                )
                 if (
                     self.task_key != binding["task_key"]
                     or self.task_version_id != binding["task_version_id"]
                     or self.verifier_version_id != binding["verifier_version_id"]
+                    or "sha256:" + digest(captured_raw_tools) != tools["raw_tool_catalog_sha256"]
+                    or visible_tools != self.tools
                     or "sha256:" + digest(self.tools) != tools["openai_tool_catalog_sha256"]
                 ):
                     raise ValueError("live V1 task authority differs from the immutable plan")

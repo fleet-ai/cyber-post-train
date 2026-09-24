@@ -72,6 +72,8 @@ def _preflight(plan: dict) -> dict:
         "raw_tool_catalog_sha256": plan["tool_contract"]["raw_tool_catalog_sha256"],
         "openai_tool_catalog_sha256": plan["tool_contract"]["openai_tool_catalog_sha256"],
         "tool_transform_source_sha256": plan["tool_contract"]["transform_source_sha256"],
+        "single_raw_tool_read_capture": True,
+        "live_raw_tool_catalog_gate_at_session_open": True,
         "live_tool_schema_gate_at_session_open": True,
         "outer_episode_replacements": 0,
     }
