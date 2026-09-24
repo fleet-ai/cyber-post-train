@@ -1,0 +1,405 @@
+{
+  "schema": "cyber_qwen38_teacher3k96_step400_heldout20_successor_v1",
+  "status": "prepared_inert_fail_closed",
+  "launchable": false,
+  "purpose": "Prepare the next score-blind Fleet heldout20 comparison by reusing the accepted baseline arm from the corrected base-versus-step1000 study and evaluating the live 96K SFT run's checkpoint 400 only after immutable promotion and matched-serving gates pass.",
+  "repository": {
+    "prepared_against_main_commit": "0ae3e0923c1e74e65bea3a91f102c1ac7a12917d",
+    "derived_from_pr587_commit": "fe26e6483b00a5fc4ac026133009df95801ab81a"
+  },
+  "scientific_boundary": {
+    "private_prompts_or_traces_read": false,
+    "flags_or_answers_read": false,
+    "raw_scores_read": false,
+    "selection_changed_after_outcomes": false,
+    "external_mutations": 0,
+    "eval_launches": 0,
+    "model_calls": 0
+  },
+  "predecessor_study": {
+    "campaign_id": "q38-heldout20-base-step1000-p4-v2",
+    "status_required": "accepted_terminal_before_successor_launch",
+    "source_protocol": {
+      "repository_commit": "5b31f910de81809811c61118b7ec0d11d353eb61",
+      "path": "configs/evaluation/qwen38-teacher3k-fleet-heldout20-pass4-protocol-v2.json",
+      "file_sha256": "sha256:a2a0389494fa1bca26911081c1d5f55d235cc52c74c15dcd0d98355b7a4dd106",
+      "sha256": "sha256:2ac58c3ded7ba5c9bacd27dc3a379c726912a3f0cafc3ee542672de730e1fe0e"
+    },
+    "fresh_study_plan": {
+      "repository_commit": "5b31f910de81809811c61118b7ec0d11d353eb61",
+      "path": "configs/evaluation/qwen38-teacher3k-heldout20-pass4-fresh-study-v1.json",
+      "file_sha256": "sha256:563e34b2dba443647925a4c7750af32ee54be40ab5d3314ef3f55c620d28e10e",
+      "sha256": "sha256:edb1bbfcc48b3c97c5ad01602dd668cae3aa7603125f3a25acf5b2b55840c39f"
+    },
+    "baseline_reuse_gate": {
+      "expected_valid_base_cells": 80,
+      "normal_completion_required_for_every_reused_cell": true,
+      "exact_task_version_seed_harness_and_model_identity_required": true,
+      "exact_serving_precision_runtime_image_and_arguments_required": true,
+      "raw_score_selection_forbidden": true,
+      "reuse_only_accepted_terminal_receipts": true,
+      "accepted_terminal_receipt_set_path": null,
+      "accepted_terminal_receipt_set_sha256": null,
+      "successor_amendment_importing_exact_receipt_set_required": true,
+      "missing_or_invalid_base_cell_policy": "hold_out_the_cell_or_freeze_a_separate_symmetric_base_and_step400_replacement_map_before_any_replacement_launch",
+      "silent_zero_imputation_forbidden": true
+    }
+  },
+  "baseline_arm": {
+    "artifact_id": "qwen38-27b-base-control",
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "weights_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+    "tokenizer_sha256": "sha256:0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+    "tokenizer_config_sha256": "sha256:b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27",
+    "chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "serving_route": {
+      "model_id": "chris-q38-base-pass4-v1",
+      "uid": "da760862-0903-46b8-b54b-2b21cc8052a0",
+      "source_path": "/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+    },
+    "reuse_policy": "Do not relaunch this arm when all 80 predecessor base cells have accepted normal-completion receipts; import only their immutable terminal receipt digests."
+  },
+  "candidate_checkpoint": {
+    "artifact_id": "q38-teacher3k-96k-step400",
+    "optimizer_step": 400,
+    "path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/checkpoints/global_step_400",
+    "receipt_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/checkpoint_receipts/step-000400.json",
+    "receipt_file_sha256": null,
+    "receipt_sha256": null,
+    "saved_at_utc": null,
+    "source_plan_sha256": "sha256:6741fb125ce20856df85fa065ccfc8723bb99f327a809aa10725a57fc0558792",
+    "supervised_tokens_seen": null,
+    "observed_file_count": null,
+    "observed_total_bytes": null,
+    "immutable_manifest_present": null,
+    "retention": {
+      "checkpoint_interval": 50,
+      "keep_checkpoints": 2,
+      "planned_final_step": 856,
+      "eviction_risk": "Checkpoint 400 is transient until it is sealed or exported; the live trainer may delete it after later checkpoints are retained."
+    }
+  },
+  "training_identity": {
+    "api_name": "chris-q38-t3k96-b8-v3-e7d5c0f8",
+    "api_run_id": "e7d5c0f8-289a-483f-b851-2d6eafdcf1fe",
+    "rayjob_uid": "5d1ccf28-df5a-4161-b876-61507bd5029b",
+    "raycluster_uid": "f616bd9b-c8a7-4d6c-9ef5-3d9039fcb735",
+    "workload_uid": "c86cdc66-ac7b-491f-b49f-8bc098c3e5c7",
+    "pod_uid": "eacead90-fb9f-4227-93c4-7cd176a0587a",
+    "namespace": "fleet-train-jobs",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "runtime_sha256": "sha256:8cb671f377d089e1303248e237f386c256b212b15e41dadc07ac49cf2695ee17",
+    "plan_sha256": "sha256:6741fb125ce20856df85fa065ccfc8723bb99f327a809aa10725a57fc0558792",
+    "training_config": {
+      "path": "configs/runs/qwen38-teacher3k-96k-full-b8-lr3e6-v3.json",
+      "file_sha256": "sha256:fc8422f6dfa7d3493e3352a614aca19aafab8f824b9fa19b9e1d40fc70dcaca1"
+    },
+    "base_model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "base_weights_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+    "tokenizer_sha256": "sha256:0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+    "tokenizer_config_sha256": "sha256:b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27",
+    "chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "context_tokens": 98304,
+    "global_batch_size": 8,
+    "microbatch_per_gpu": 1,
+    "learning_rate": 0.000003,
+    "seed": 20260920,
+    "corpus_manifest_sha256": "sha256:8297f035f4c5b0446578cfa46897733273286f76e55d486c9598452e5585a479",
+    "split_manifest_sha256": "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
+    "requested_priority_class": "c1",
+    "observed_rayjob_priority_class": "q1",
+    "observed_effective_workload_priority": 10000,
+    "root_failure_alerts": "off"
+  },
+  "promotion": {
+    "status": "non_executable_future_plan",
+    "exact_workload_identity_amendment_required_before_any_create": true,
+    "exact_workload_identity_plan": null,
+    "proposed_model_id": "chris-q38-t3k96-s400-v1",
+    "proposed_export_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/hf-export-step400-v1",
+    "proposed_export_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/hf-export-step400-v1/EXPORT.json",
+    "proposed_cpu_check_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/hf-export-step400-v1-cpu-check.json",
+    "proposed_reload_receipt_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/chris-q38-t3k96-s400-gpu-check-v1/GPU_CHECK.json",
+    "proposed_stage_path": "/models/chris-q38-t3k96-s400-v1",
+    "proposed_stage_acceptance_path": "/models/chris-q38-t3k96-s400-v1/.fleet-acceptance.json",
+    "expected_sidecars": {
+      "tokenizer.json": "sha256:0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+      "tokenizer_config.json": "sha256:b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27",
+      "chat_template.jinja": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+      "config.json": "sha256:191e0af232104ed8b65258cf3fb2b842e288008baca7633c11b82a1ac7203aab",
+      "generation_config.json": "sha256:e70c136c1b78ddc1fb0905bac8e733a4dc448d4f852a5dd75143fffc70be550e"
+    },
+    "required_gates_in_order": [
+      "seal_checkpoint_400_with_a_create_once_byte_manifest",
+      "create_once_bf16_export_bound_to_the_checkpoint_seal",
+      "validate_exact_tensor_layout_dtype_and_sidecar_hashes_on_cpu",
+      "perform_a_zero_optimizer_update_gpu_reload_with_finite_output_and_unchanged_source",
+      "create_once_immutable_stage_and_acceptance_receipt",
+      "register_the_exact_model_paused_at_zero_replicas",
+      "perform_fresh_readback_and_live_parity_before_evaluation"
+    ],
+    "job_contract": {
+      "priority_class": "c1",
+      "root_metadata_annotations": {
+        "fleet.ai/failure-alerts": "off"
+      },
+      "preview_required_before_create": true,
+      "patch_after_create_forbidden": true,
+      "create_once_destinations_required": true
+    }
+  },
+  "serving": {
+    "reference_route": {
+      "model_id": "chris-q38-t3k96-s300-v1",
+      "uid": "10f37a96-d3d2-4830-8362-baa8209b9490",
+      "revision": "sha256:7e610d8005c66939945053341fd2a02b710cd2b1ea49f4a3326aabb766a8c51d",
+      "source_path": "/models/chris-q38-t3k96-s300-v1",
+      "canonical_spec_sha256": "sha256:83954964aba3ba59e44ca552574cecedfbc59643883795c6958d0cf98b5213e0"
+    },
+    "candidate_route": {
+      "model_id": "chris-q38-t3k96-s400-v1",
+      "source_path": "/models/chris-q38-t3k96-s400-v1",
+      "precision": "bf16",
+      "quantization": null,
+      "tensor_parallel_size": 1,
+      "data_parallel_size": 8,
+      "context_length": 262144,
+      "kv_cache_dtype": "fp8_e4m3",
+      "runtime_image": "lmsysorg/sglang@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9",
+      "reasoning_parser": "qwen3",
+      "tool_call_parser": "qwen3_coder",
+      "priority_class": "c1",
+      "initial_state": "paused_zero_replicas",
+      "allowed_differences_from_reference": [
+        "display_name",
+        "model_id",
+        "model_path",
+        "model_revision",
+        "source_path",
+        "served_model_name",
+        "idempotency_key",
+        "request_fingerprint"
+      ]
+    },
+    "fresh_model_revision": null,
+    "fresh_route_uid": null,
+    "fresh_registration_sha256": null,
+    "fresh_live_parity_receipt_sha256": null
+  },
+  "evaluation": {
+    "comparison": "accepted_predecessor_base_arm_vs_teacher3k96_step400",
+    "candidate_rollouts": 80,
+    "baseline_rollouts_reused": 80,
+    "new_total_rollouts": 80,
+    "task_count": 20,
+    "strata": {
+      "dev": 13,
+      "final_test": 7
+    },
+    "pass_k": 4,
+    "attempt_seeds": [
+      975414717,
+      3965467,
+      807861398,
+      1399333715
+    ],
+    "sampling": {
+      "temperature": 0.6,
+      "top_p": 0.95
+    },
+    "harness": {
+      "name": "opencode",
+      "version": "1.18.27",
+      "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+      "provider_adapter": "@ai-sdk/openai-compatible",
+      "context_management": "opencode_1.18.27_native_compaction_autocontinue_v2",
+      "context_window_size": 262144,
+      "compaction_headroom_tokens": 20000,
+      "max_output_tokens": 32768,
+      "max_model_requests": 600,
+      "timeout_seconds": 28800,
+      "tools_in_order": [
+        "bash",
+        "submit_report"
+      ],
+      "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+      "agent_image": "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92",
+      "proxy_image": "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+    },
+    "job_contract": {
+      "source_job_count": 8,
+      "tasks_per_seed": {
+        "dev": 13,
+        "final_test": 7
+      },
+      "gpus_per_job": 0,
+      "priority_class": "c1",
+      "backoff_limit": 0,
+      "root_metadata_annotations": {
+        "fleet.ai/failure-alerts": "off"
+      },
+      "server_double_preview_required": true,
+      "training_data_eligible": false,
+      "reviewed_infrastructure_retries": 0
+    },
+    "candidate_execution_identity_plan": {
+      "schema": "cyber_qwen38_teacher3k96_step400_heldout20_execution_identity_v1",
+      "campaign_id": "q38-heldout20-t3k96-s400-p4-v1",
+      "derivation": {
+        "partition": "one exact stratum and one frozen attempt seed per source Job",
+        "partial_root": "No separate partial root is allowed; the create-once output root owns all durable state.",
+        "task_ordinal": "Use the zero-based array order of source_protocol.selection.tasks at protocol SHA-256 2ac58c3ded7ba5c9bacd27dc3a379c726912a3f0cafc3ee542672de730e1fe0e, filtered without reordering to the row's exact source_role stratum.",
+        "run_id": "Substitute the zero-based task ordinal into each row's run_id_template.",
+        "experiment_identity": "Canonical SHA-256 of the eventual launch packet's exact evaluation_identity after the staged model revision and live-parity receipt are bound.",
+        "session_identity": "Fleet creates a session UUID only after a fresh ledger claim; every cell's session_id must be null in the newly created database before launch."
+      },
+      "rows": [
+        {
+          "attempt_slot": 0,
+          "attempt_seed": 975414717,
+          "stratum": "dev",
+          "task_count": 13,
+          "job_name": "chris-q38-h20-s400-d-a0-v1",
+          "config_map_name": "chris-q38-h20-s400-d-a0-v1-cfg",
+          "output_root": "/mnt/sfs/jobs/chris-q38-h20-s400-d-a0-v1",
+          "partial_root": null,
+          "database": "chris_q38_h20_s400_d_a0_v1",
+          "evaluation_config_name": "q38-h20-s400-d-a0-v1",
+          "run_id_template": "q38-h20-s400-d-a0-v1-t{task_ordinal:02d}"
+        },
+        {
+          "attempt_slot": 0,
+          "attempt_seed": 975414717,
+          "stratum": "final_test",
+          "task_count": 7,
+          "job_name": "chris-q38-h20-s400-f-a0-v1",
+          "config_map_name": "chris-q38-h20-s400-f-a0-v1-cfg",
+          "output_root": "/mnt/sfs/jobs/chris-q38-h20-s400-f-a0-v1",
+          "partial_root": null,
+          "database": "chris_q38_h20_s400_f_a0_v1",
+          "evaluation_config_name": "q38-h20-s400-f-a0-v1",
+          "run_id_template": "q38-h20-s400-f-a0-v1-t{task_ordinal:02d}"
+        },
+        {
+          "attempt_slot": 1,
+          "attempt_seed": 3965467,
+          "stratum": "dev",
+          "task_count": 13,
+          "job_name": "chris-q38-h20-s400-d-a1-v1",
+          "config_map_name": "chris-q38-h20-s400-d-a1-v1-cfg",
+          "output_root": "/mnt/sfs/jobs/chris-q38-h20-s400-d-a1-v1",
+          "partial_root": null,
+          "database": "chris_q38_h20_s400_d_a1_v1",
+          "evaluation_config_name": "q38-h20-s400-d-a1-v1",
+          "run_id_template": "q38-h20-s400-d-a1-v1-t{task_ordinal:02d}"
+        },
+        {
+          "attempt_slot": 1,
+          "attempt_seed": 3965467,
+          "stratum": "final_test",
+          "task_count": 7,
+          "job_name": "chris-q38-h20-s400-f-a1-v1",
+          "config_map_name": "chris-q38-h20-s400-f-a1-v1-cfg",
+          "output_root": "/mnt/sfs/jobs/chris-q38-h20-s400-f-a1-v1",
+          "partial_root": null,
+          "database": "chris_q38_h20_s400_f_a1_v1",
+          "evaluation_config_name": "q38-h20-s400-f-a1-v1",
+          "run_id_template": "q38-h20-s400-f-a1-v1-t{task_ordinal:02d}"
+        },
+        {
+          "attempt_slot": 2,
+          "attempt_seed": 807861398,
+          "stratum": "dev",
+          "task_count": 13,
+          "job_name": "chris-q38-h20-s400-d-a2-v1",
+          "config_map_name": "chris-q38-h20-s400-d-a2-v1-cfg",
+          "output_root": "/mnt/sfs/jobs/chris-q38-h20-s400-d-a2-v1",
+          "partial_root": null,
+          "database": "chris_q38_h20_s400_d_a2_v1",
+          "evaluation_config_name": "q38-h20-s400-d-a2-v1",
+          "run_id_template": "q38-h20-s400-d-a2-v1-t{task_ordinal:02d}"
+        },
+        {
+          "attempt_slot": 2,
+          "attempt_seed": 807861398,
+          "stratum": "final_test",
+          "task_count": 7,
+          "job_name": "chris-q38-h20-s400-f-a2-v1",
+          "config_map_name": "chris-q38-h20-s400-f-a2-v1-cfg",
+          "output_root": "/mnt/sfs/jobs/chris-q38-h20-s400-f-a2-v1",
+          "partial_root": null,
+          "database": "chris_q38_h20_s400_f_a2_v1",
+          "evaluation_config_name": "q38-h20-s400-f-a2-v1",
+          "run_id_template": "q38-h20-s400-f-a2-v1-t{task_ordinal:02d}"
+        },
+        {
+          "attempt_slot": 3,
+          "attempt_seed": 1399333715,
+          "stratum": "dev",
+          "task_count": 13,
+          "job_name": "chris-q38-h20-s400-d-a3-v1",
+          "config_map_name": "chris-q38-h20-s400-d-a3-v1-cfg",
+          "output_root": "/mnt/sfs/jobs/chris-q38-h20-s400-d-a3-v1",
+          "partial_root": null,
+          "database": "chris_q38_h20_s400_d_a3_v1",
+          "evaluation_config_name": "q38-h20-s400-d-a3-v1",
+          "run_id_template": "q38-h20-s400-d-a3-v1-t{task_ordinal:02d}"
+        },
+        {
+          "attempt_slot": 3,
+          "attempt_seed": 1399333715,
+          "stratum": "final_test",
+          "task_count": 7,
+          "job_name": "chris-q38-h20-s400-f-a3-v1",
+          "config_map_name": "chris-q38-h20-s400-f-a3-v1-cfg",
+          "output_root": "/mnt/sfs/jobs/chris-q38-h20-s400-f-a3-v1",
+          "partial_root": null,
+          "database": "chris_q38_h20_s400_f_a3_v1",
+          "evaluation_config_name": "q38-h20-s400-f-a3-v1",
+          "run_id_template": "q38-h20-s400-f-a3-v1-t{task_ordinal:02d}"
+        }
+      ],
+      "runtime_fields_required_null_before_create": [
+        "job_uid",
+        "config_map_uid",
+        "pod_uid",
+        "workload_uid",
+        "session_id",
+        "experiment_identity_sha256"
+      ],
+      "sha256": "sha256:b9fbed4ec618bbf904dc16d6c80cc037b10156b5c2704d1062516d14cde7c5d9"
+    }
+  },
+  "duplicate_and_absence_gates": {
+    "promotion_destinations_must_be_absent_before_create": [
+      "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/checkpoint-seals-v1/step-400.json",
+      "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/hf-export-step400-v1",
+      "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/hf-export-step400-v1-cpu-check.json",
+      "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/chris-q38-t3k96-s400-gpu-check-v1",
+      "/models/chris-q38-t3k96-s400-v1"
+    ],
+    "serving_identity_must_be_absent_before_registration": "chris-q38-t3k96-s400-v1",
+    "candidate_identity_plan_sha256": "sha256:b9fbed4ec618bbf904dc16d6c80cc037b10156b5c2704d1062516d14cde7c5d9",
+    "evaluation_census_required": "Check all eight exact candidate identity rows plus their deterministic run IDs; require every runtime-only UID, session ID, and experiment digest to be absent before create.",
+    "success_condition": "All proposed candidate identities are absent, or an existing identity is proven byte-for-byte equivalent and adopted without a second create."
+  },
+  "route_swap_after_predecessor": [
+    "Require the base-versus-step1000 campaign to reach accepted terminal state and preserve its baseline receipts.",
+    "Pause the step1000 route and confirm zero active pods before allocating another serving node.",
+    "Pause the base route and confirm zero active pods, zero ready replicas, and routing disabled because its accepted baseline receipts are reused; do not spend a second serving node on a duplicate baseline arm.",
+    "Resume only the newly registered step400 route, then require exact readback and live parity against the frozen harness contract.",
+    "Launch the eight zero-GPU candidate source Jobs only after all duplicate, task, budget, route, and preview gates pass.",
+    "Pause the step400 route after every candidate cell has an accepted terminal receipt and no source Job still needs it."
+  ],
+  "blockers": [
+    "The checkpoint-400 byte manifest is absent, so the native checkpoint receipt does not yet provide an immutable weights identity.",
+    "The promotion workload names and kinds are deliberately unbound; an exact versioned promotion-workload identity amendment and fresh absence census are required before any create.",
+    "The checkpoint-400 BF16 export, CPU validation, zero-update GPU reload, immutable stage, and paused serving registration are absent.",
+    "The checkpoint-400 serving model revision, route UID, registration digest, and fresh live-parity receipt therefore do not yet exist.",
+    "A reviewed successor amendment must bind this inert plan to the exact repository commit and regenerate every content-derived digest before use.",
+    "The base-versus-step1000 predecessor study has not supplied the accepted terminal baseline-arm receipt set required for reuse.",
+    "Fresh duplicate, live-task, serving, daily-budget, and server-preview receipts must be collected immediately before launch."
+  ],
+  "sha256": "sha256:3dca6ae5a320e67a10b9a66b96af2a4faa7597ce8a423951bc5d06a9aff91046"
+}
