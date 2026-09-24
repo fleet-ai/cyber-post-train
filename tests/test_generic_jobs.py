@@ -908,6 +908,119 @@ def test_retained_anchor_blocks_retry_after_journal_parent_is_recreated(tmp_path
         assert response == result
 
 
+def test_retained_anchor_survives_a_torn_response_and_still_blocks_retry(
+    tmp_path, monkeypatch
+) -> None:
+    launch = tmp_path / "launch"
+    launch.mkdir()
+    moved = tmp_path / "launch-moved"
+    journal = launch / "SUBMISSION.jsonl"
+    retained = tmp_path / "retained"
+    retained.mkdir()
+    anchor = retained / "phase1a-SUBMISSION.jsonl"
+    posts = []
+    response_write_started = False
+    original_write = os.write
+
+    def write(descriptor, payload):
+        nonlocal response_write_started
+        if not response_write_started and payload.startswith(b'{"state": "POST_RESPONSE"'):
+            response_write_started = True
+            return original_write(descriptor, payload[: len(payload) // 2])
+        if response_write_started:
+            raise OSError("injected torn response")
+        return original_write(descriptor, payload)
+
+    def handler(req):
+        if req.method == "GET":
+            return httpx.Response(200, json={"items": [], "has_more": False})
+        if req.url.path.endswith("/preview"):
+            return httpx.Response(200, json=preview())
+        posts.append(req.url.path)
+        return httpx.Response(202, json=creator_row())
+
+    monkeypatch.setattr(jobs_module.os, "write", write)
+    with client(handler) as api, pytest.raises(JobsError, match="durably recorded"):
+        api.submit_once(config(), journal, journal_anchor=anchor)
+    monkeypatch.undo()
+
+    assert posts == ["/v1/runs"]
+    assert response_write_started is True
+    assert anchor.samefile(journal)
+    expected_manifest = validate_preview(config(), preview())["manifest_sha256"]
+    with pytest.raises(JobsError, match="unverified torn response"):
+        jobs_module.read_submission_journal(
+            anchor,
+            config(),
+            expected_manifest_sha256=expected_manifest,
+            expected_intent_evidence_file_sha256=None,
+        )
+    intent, response, _ = jobs_module.read_submission_journal(
+        anchor,
+        config(),
+        expected_manifest_sha256=expected_manifest,
+        expected_intent_evidence_file_sha256=None,
+        expected_response=validate_creator_response(config(), creator_row()),
+    )
+    assert intent["state"] == "POST_INTENT_DO_NOT_RETRY"
+    assert response is None
+
+    launch.rename(moved)
+    launch.mkdir()
+    with client(handler) as api, pytest.raises(JobsError, match="anchor already exists"):
+        api.submit_once(config(), journal, journal_anchor=anchor)
+    assert posts == ["/v1/runs"]
+    assert anchor.samefile(moved / journal.name)
+
+
+def test_cross_device_anchor_fails_before_intent_and_post(tmp_path, monkeypatch) -> None:
+    launch = tmp_path / "launch"
+    launch.mkdir()
+    journal = launch / "SUBMISSION.jsonl"
+    retained = tmp_path / "retained"
+    retained.mkdir()
+    anchor = retained / "phase1a-SUBMISSION.jsonl"
+    posts = []
+    journal_directory_fd = None
+    original_open = os.open
+    original_fstat = os.fstat
+
+    def open_path(path, *args, **kwargs):
+        nonlocal journal_directory_fd
+        descriptor = original_open(path, *args, **kwargs)
+        if os.fspath(path) == os.fspath(journal.parent) and args[0] & os.O_DIRECTORY:
+            journal_directory_fd = descriptor
+        return descriptor
+
+    def fstat(descriptor):
+        metadata = original_fstat(descriptor)
+        if descriptor == journal_directory_fd:
+            return type("DifferentDevice", (), {"st_dev": metadata.st_dev + 1})()
+        return metadata
+
+    def handler(req):
+        if req.method == "GET":
+            return httpx.Response(200, json={"items": [], "has_more": False})
+        if req.url.path.endswith("/preview"):
+            return httpx.Response(200, json=preview())
+        posts.append(req.url.path)
+        return httpx.Response(202, json=creator_row())
+
+    monkeypatch.setattr(jobs_module.os, "open", open_path)
+    monkeypatch.setattr(jobs_module.os, "fstat", fstat)
+    with client(handler) as api, pytest.raises(JobsError, match="share one filesystem"):
+        api.submit_once(config(), journal, journal_anchor=anchor)
+    monkeypatch.undo()
+
+    assert posts == []
+    assert not anchor.exists()
+    assert not journal.exists()
+    assert not list(retained.glob(".*.tmp"))
+    with client(handler) as api:
+        assert api.submit_once(config(), journal, journal_anchor=anchor)["status"] == "QUEUED"
+    assert posts == ["/v1/runs"]
+
+
 def test_expired_authority_stops_before_callback_intent_and_post(tmp_path, monkeypatch) -> None:
     journal = tmp_path / "intent.jsonl"
     calls = []
