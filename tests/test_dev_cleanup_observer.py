@@ -122,6 +122,8 @@ class FakeJobCluster:
             )
         if args[:3] == ["get", "pod", "preflight-pod"]:
             return NS(returncode=0, stdout="", stderr="")
+        if args[:2] == ["get", "workload"] and "--selector" in args:
+            return NS(returncode=0, stdout=json.dumps({"items": []}), stderr="")
         if args[:2] == ["delete", "--raw"]:
             self.deleted = True
             self.delete_calls += 1
@@ -282,6 +284,8 @@ class Prod8TerminalProbeCluster:
             )
         if args[:3] == ["get", "pod", "prod8-terminal-probe-pod"]:
             return NS(returncode=0, stdout="", stderr="")
+        if args[:2] == ["get", "workload"] and "--selector" in args:
+            return NS(returncode=0, stdout=json.dumps({"items": []}), stderr="")
         if args[:2] == ["delete", "--raw"]:
             assert args[2] == (f"/apis/batch/v1/namespaces/{cleanup.NAMESPACE}/jobs/{probe.NAME}")
             assert args[-2:] == ["-f", "-"]

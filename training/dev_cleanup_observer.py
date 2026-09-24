@@ -2113,6 +2113,7 @@ class Observer:
 
     def wait_for_release(self) -> dict:
         deadline = time.monotonic() + self.release_seconds
+        exact_job_absence_streak = 0
         while True:
             # A same-name replacement is neither proof that the bound target
             # remains nor proof that it was released.  Never turn it into a
@@ -2129,6 +2130,27 @@ class Observer:
             rayjob_present = self._present("rayjob", self.snapshot.rayjob_name)
             workload_present = self._present("workload", self.snapshot.workload_name)
             cluster_present = self._present("raycluster", self.snapshot.raycluster_name)
+            if self.kind == "job" and self.profile in {
+                "production-cpu",
+                "production-cpu-recovery",
+            }:
+                selector_pods = self._list(
+                    "pod",
+                    "--selector",
+                    f"batch.kubernetes.io/controller-uid={self.snapshot.uid}",
+                )
+                selector_workloads = self._list(
+                    "workload",
+                    "--selector",
+                    f"kueue.x-k8s.io/job-uid={self.snapshot.uid}",
+                )
+                pod_present = pod_present or bool(selector_pods)
+                workload_present = workload_present or bool(selector_workloads)
+                exact_job_absence_streak = (
+                    exact_job_absence_streak + 1
+                    if not selector_pods and not selector_workloads
+                    else 0
+                )
             if not any(
                 (
                     target_present,
@@ -2138,6 +2160,17 @@ class Observer:
                     cluster_present,
                 )
             ):
+                if (
+                    self.kind == "job"
+                    and self.profile
+                    in {
+                        "production-cpu",
+                        "production-cpu-recovery",
+                    }
+                    and exact_job_absence_streak < 2
+                ):
+                    time.sleep(self.poll_seconds)
+                    continue
                 # Re-read the root immediately before certifying release.  A
                 # recreated same-name target raises from _same_target rather
                 # than being mistaken for the just-deleted UID.
