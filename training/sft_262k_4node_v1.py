@@ -8,11 +8,14 @@ remains submission-blocked until its zero-GPU preflight and root review exist.
 
 from __future__ import annotations
 
+import base64
 import copy
 import hashlib
+import json
+import shlex
 from pathlib import Path
 
-from cyber_post_train.jobs import API_URLS, digest, validate_request
+from cyber_post_train.jobs import API_URLS, canonical_gzip, digest, validate_request
 
 from . import sft
 from .sft_262k_runtime import QUALIFICATION, SUBMISSION_GATE, validate_plan
@@ -101,7 +104,93 @@ def job_request(plan: dict) -> dict:
     if plan.get("runtime_variant") != VARIANT:
         raise ValueError("four-node 262K plan selected the wrong compiler")
     validate_plan(plan, check_files=False)
-    return sft.job_request(plan)
+    if "plan_sha256" in plan:
+        raise ValueError("plan_sha256 is a runtime-only evidence field")
+
+    runtime_path = Path(__file__).with_name("sft_262k_runtime.py")
+    base_runtime_path = Path(__file__).with_name("sft_runtime.py")
+    runtime = runtime_path.read_bytes()
+    base_runtime = base_runtime_path.read_bytes()
+    if hashlib.sha256(runtime).hexdigest() != plan["runtime_sha256"]:
+        raise ValueError("four-node 262K runtime changed since this plan was compiled")
+    if (
+        hashlib.sha256(base_runtime).hexdigest()
+        != plan["long_context_qualification"]["base_runtime_sha256"]
+    ):
+        raise ValueError("four-node 262K base runtime changed since qualification")
+
+    plan_bytes = json.dumps(
+        plan,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode()
+    contents = {
+        "runtime": runtime.decode(),
+        "plan": plan_bytes.decode(),
+        "extra_files": {
+            "training/__init__.py": "",
+            "training/sft_runtime.py": base_runtime.decode(),
+            "training/sft_262k_runtime.py": runtime.decode(),
+        },
+    }
+    compressed = canonical_gzip(
+        json.dumps(contents, sort_keys=True, separators=(",", ":")).encode()
+    )
+    bundle_sha = hashlib.sha256(compressed).hexdigest()
+    encoded = base64.b64encode(compressed).decode()
+    transport = {"CYBER_SFT_BUNDLE": encoded}
+    bundle_expression = "os.environ.pop('CYBER_SFT_BUNDLE')"
+    if len(encoded) > 120000:
+        parts = [encoded[index : index + 48000] for index in range(0, len(encoded), 48000)]
+        transport = {f"CYBER_SFT_BUNDLE_{index}": value for index, value in enumerate(parts)}
+        bundle_expression = (
+            f"''.join(os.environ.pop('CYBER_SFT_BUNDLE_'+str(i)) for i in range({len(parts)}))"
+        )
+    bootstrap = (
+        "import base64,gzip,hashlib,importlib,json,os,pathlib,runpy,sys;"
+        f"b=base64.b64decode({bundle_expression},validate=True);"
+        f"assert hashlib.sha256(b).hexdigest()=={bundle_sha!r};"
+        "v=json.loads(gzip.decompress(b));"
+        "p=pathlib.Path(os.environ['RUN_DIR'])/'.runtime';p.mkdir(parents=True,mode=0o700);"
+        "(p/'sft_runtime.py').write_text(v['runtime']);(p/'plan.json').write_text(v['plan']);"
+        "[((p/n).parent.mkdir(parents=True,exist_ok=True),(p/n).write_text(t)) "
+        "for n,t in v.get('extra_files',{}).items()];"
+        "sys.path.insert(0,str(p));importlib.invalidate_caches();"
+        f"sys.argv=['sft_runtime','--plan',str(p/'plan.json'),'--plan-sha256',{hashlib.sha256(plan_bytes).hexdigest()!r}];"
+        "runpy.run_path(str(p/'sft_runtime.py'),run_name='__main__')"
+    )
+    wandb, execution, recipe = plan["wandb"], plan["execution"], plan["recipe"]
+    return {
+        "name": plan["run_name"],
+        "title": wandb["name"],
+        "run_dir": plan["output_root"],
+        "image": execution["image"],
+        "command": "python -c " + shlex.quote(bootstrap),
+        "workers": recipe["nodes"],
+        "gpus_per_worker": recipe["gpus_per_node"],
+        "resources": execution["resources"],
+        "priority_class": execution["priority"],
+        "requeueIfPreempted": False,
+        "failureAlerts": False,
+        "secrets": ["wandb-api"],
+        "env": {
+            **transport,
+            "PYTHONPATH": str(Path(plan["output_root"]) / ".runtime"),
+            "HF_HUB_OFFLINE": "1",
+            "TRANSFORMERS_OFFLINE": "1",
+            "TOKENIZERS_PARALLELISM": "false",
+            "WANDB_MODE": "online",
+            "WANDB_ENTITY": wandb["entity"],
+            "WANDB_PROJECT": wandb["project"],
+            "WANDB_RUN_ID": wandb["run_id"],
+            "WANDB_NAME": wandb["name"],
+            "WANDB_RUN_GROUP": wandb["group"],
+            "WANDB_TAGS": ",".join(wandb.get("tags", [])),
+            "WANDB_DISABLE_CODE": "true",
+            "WANDB_CONSOLE": "off",
+        },
+    }
 
 
 def preflight(plan: dict) -> dict:

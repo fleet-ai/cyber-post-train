@@ -522,26 +522,6 @@ def test_submit_uses_shared_boundary_and_journal(prepared, monkeypatch):
     assert json.loads(result.stdout)["status"] == "pending"
 
 
-def test_generic_submit_rejects_dev_sft_without_cluster_deadline(prepared, monkeypatch):
-    output, plan, request, _ = prepared
-    plan["schema"] = "cyber_sft_runtime_dense_v1"
-    plan["execution"] = {
-        "cluster_target": "dev",
-        "jobs_api_base_url": "https://api.ft.dev.flt.build",
-        "cleanup_maximum_seconds": 1800,
-    }
-    monkeypatch.setattr(cli, "_prepared", lambda _: (plan, request))
-    monkeypatch.setattr(cli, "_submission_gate", lambda *args: None)
-    monkeypatch.setattr(cli, "_external_action_gate", lambda *args: None)
-    monkeypatch.setattr(
-        cli,
-        "_client_for_plan",
-        lambda *_: pytest.fail("unsafe generic dev SFT submit reached the network"),
-    )
-    result = RUNNER.invoke(cli.app, ["submit", str(output)])
-    assert result.exit_code == 2
-
-
 def test_direct_sft_submit_reuses_preflight_and_has_a_separate_journal(prepared, monkeypatch):
     from cyber_post_train import direct_submit
 

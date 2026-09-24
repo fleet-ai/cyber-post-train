@@ -15,7 +15,7 @@ from types import SimpleNamespace
 import pytest
 
 from cyber_post_train.jobs import digest
-from training import sft, sft_runtime
+from training import sft, sft_dispatch, sft_runtime
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -108,8 +108,8 @@ def test_compile_uses_exact_model_manifest_and_complete_epochs(config, tmp_path)
     request = sft.job_request(plan)
     assert request["workers"] == 1 and request["gpus_per_worker"] == 8
     assert request["priority_class"] == "c1"
-    assert plan["execution"]["cluster_target"] == "prod"
-    assert plan["execution"]["jobs_api_base_url"] == "https://api.ft.flt.build"
+    assert "cluster_target" not in plan["execution"]
+    assert "jobs_api_base_url" not in plan["execution"]
     assert "queue_priority_class" not in request
     assert request["secrets"] == ["wandb-api"]
     assert "image_pull_secrets" not in request
@@ -138,17 +138,10 @@ def test_four_node_262k_full_sft_fails_closed_without_runtime_qualification(conf
         "keep_checkpoints": 3,
         "seed": 42,
     }
-    source["cluster"] = {"priority": "c1", "target": "prod"}
+    source["cluster"] = {"priority": "c1"}
 
     with pytest.raises(ValueError, match="separately qualified long-context runtime"):
-        sft.compile_sft(source, relative_to=tmp_path)
-    source["recipe"]["checkpoint_interval"] = 10
-    with pytest.raises(ValueError, match="intermediate resumable checkpoints"):
-        sft.compile_sft(source, relative_to=tmp_path)
-    source["recipe"]["checkpoint_interval"] = 5
-    source["cluster"]["priority"] = "c2"
-    with pytest.raises(ValueError, match="requires c1"):
-        sft.compile_sft(source, relative_to=tmp_path)
+        sft_dispatch.compiler_for_config(source)
 
 
 def test_four_node_262k_held_shape_cannot_bypass_compile_gate(config, tmp_path):
@@ -170,16 +163,7 @@ def test_four_node_262k_held_shape_cannot_bypass_compile_gate(config, tmp_path):
     plan["recipe"]["max_length"] = 262_144
 
     with pytest.raises(ValueError, match="separately qualified long-context runtime"):
-        sft.job_request(plan)
-
-    plan["recipe"]["checkpoint_interval"] = plan["recipe"]["max_steps"]
-    with pytest.raises(ValueError, match="intermediate resumable checkpoints"):
-        sft.job_request(plan)
-
-    plan["recipe"]["checkpoint_interval"] = 5
-    plan["execution"]["priority"] = "c2"
-    with pytest.raises(ValueError, match="requires c1"):
-        sft.job_request(plan)
+        sft_dispatch.compiler_for_plan(plan)
 
 
 def test_four_node_262k_qualification_packet_is_bounded_and_not_launchable():
@@ -253,33 +237,6 @@ def test_four_node_262k_qualification_packet_is_bounded_and_not_launchable():
         "cleanup_maximum_seconds": 1800,
         "priority": "c1",
     }
-
-
-def test_development_sft_route_requires_exact_cleanup_deadline(config, tmp_path):
-    source, _, _ = config
-    source["cluster"] = {
-        "priority": "c1",
-        "target": "dev",
-        "cleanup_maximum_seconds": 1800,
-    }
-    plan = sft.compile_sft(source, relative_to=tmp_path)
-    assert plan["execution"] == {
-        "image": sft.IMAGE,
-        "priority": "c1",
-        "resources": sft.RESOURCES,
-        "cluster_target": "dev",
-        "jobs_api_base_url": "https://api.ft.dev.flt.build",
-        "cleanup_maximum_seconds": 1800,
-    }
-    for value in ({"target": "dev"}, {"target": "dev", "cleanup_maximum_seconds": 1799}):
-        broken = copy.deepcopy(source)
-        broken["cluster"] = value
-        with pytest.raises(ValueError, match="exactly 1800"):
-            sft.compile_sft(broken, relative_to=tmp_path)
-    broken = copy.deepcopy(source)
-    broken["cluster"] = {"target": "prod", "cleanup_maximum_seconds": 1799}
-    with pytest.raises(ValueError, match="cannot carry"):
-        sft.compile_sft(broken, relative_to=tmp_path)
 
 
 def test_compile_binds_and_enforces_first_checkpoint_recovery_horizon(config, tmp_path):

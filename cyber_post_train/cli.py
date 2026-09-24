@@ -150,8 +150,7 @@ def _external_action_gate(plan: dict, action: str) -> None:
     if field is None:
         raise ValueError("unknown external action")
     if action == "preflight" and isinstance(gate, dict) and "preflight_authorized" not in gate:
-        # Older exact qualification packets authorized their zero-GPU setup
-        # under the submission bit. New packets separate it explicitly.
+        # Older packets authorized zero-GPU setup under the submission bit.
         field = "submission_authorized"
     if not isinstance(gate, dict) or type(gate.get(field)) is not bool:
         raise ValueError(f"{action} blocked by an incomplete qualification gate")
@@ -1185,33 +1184,6 @@ def sft_cpu_preflight_job_create(
         _fail(exc)
 
 
-@app.command("sft-cpu-preflight-job-preview")
-def sft_cpu_preflight_job_preview(
-    directory: Path,
-    context: Annotated[str, typer.Option("--context")],
-    attempt: Annotated[int, typer.Option("--attempt", min=1, max=MAX_ATTEMPT)] = 1,
-) -> None:
-    """Server-render one generic-SFT zero-GPU preflight without creating it."""
-    from .direct_submit import Kubectl, preview_sft_cpu_preflight
-    from .qwen38_lora_sft_preflight import is_qwen38_lora_plan
-
-    try:
-        plan, request = _prepared(directory)
-        _submission_gate(directory, plan, request)
-        _external_action_gate(plan, "preflight")
-        if is_qwen38_lora_plan(plan):
-            raise ValueError("Qwen3.8 LoRA requires its named CPU preflight rail")
-        result = preview_sft_cpu_preflight(
-            directory=directory,
-            source_commit=_clean_source_commit(),
-            attempt=attempt,
-            kubectl=Kubectl(context),
-        )
-        _print(result)
-    except Exception as exc:
-        _fail(exc)
-
-
 @app.command("sft-cpu-preflight-job-collect")
 def sft_cpu_preflight_job_collect(
     directory: Path,
@@ -1343,14 +1315,6 @@ def submit(directory: Path) -> None:
         plan, request = _prepared(directory)
         _submission_gate(directory, plan, request)
         _external_action_gate(plan, "submit")
-        if plan_api_target(plan)[0] == "dev" and plan.get("schema") in {
-            "cyber_sft_runtime_v2",
-            "cyber_sft_runtime_dense_v1",
-        }:
-            raise ValueError(
-                "development SFT requires direct-submit-sft so the cluster enforces "
-                "the immutable 30-minute RayJob deadline"
-            )
         _require_preflight(directory, plan, request)
         # Repeat the SFS check immediately before the API census/preview/POST.
         # A preflight receipt is immutable evidence, not a filesystem lock.
@@ -1389,14 +1353,13 @@ def direct_submit_sft(
         ),
     ] = None,
 ) -> None:
-    """Create one SFT RayJob from a live API preview on its bound cluster.
+    """Create one SFT RayJob when API preview omits only the alert annotation.
 
     This fallback still uses a fresh live Jobs API preview. It removes the
     API-only Fleet credential Secret, injects the required root annotation,
     performs a Kubernetes server dry-run and records a durable create intent.
     It then executes exactly one ``kubectl create`` and never retries, applies
-    or patches. Development plans additionally carry a server-enforced
-    30-minute RayJob deadline; their generic Jobs API route is rejected.
+    or patches. Prefer normal ``submit`` whenever its preview is qualified.
     """
     from .direct_submit import DIRECT_JOURNAL, Kubectl, direct_submit_sft_once
 
@@ -1413,42 +1376,6 @@ def direct_submit_sft(
                 jobs=client,
                 kubectl=Kubectl(context),
                 journal=directory / DIRECT_JOURNAL,
-                output_absence_receipt=output_receipt,
-            )
-        _print(result)
-    except Exception as exc:
-        _fail(exc)
-
-
-@app.command("direct-preview-sft")
-def direct_preview_sft(
-    directory: Path,
-    context: Annotated[str, typer.Option("--context")],
-    output_absence_receipt: Annotated[
-        Path | None,
-        typer.Option(
-            "--output-absence-receipt",
-            help=(
-                "Fresh receipt from `sfs-output-receipt`; required only when this host "
-                "cannot see /mnt/sfs/jobs."
-            ),
-        ),
-    ] = None,
-) -> None:
-    """Prove the exact live SFT render and server dry-run without creating it."""
-    from .direct_submit import Kubectl, direct_preview_sft_once
-
-    try:
-        plan, request = _prepared(directory)
-        _submission_gate(directory, plan, request)
-        _external_action_gate(plan, "preview")
-        output_receipt = _read(output_absence_receipt) if output_absence_receipt else None
-        with _client_for_plan(plan) as client:
-            result = direct_preview_sft_once(
-                plan=plan,
-                request=request,
-                jobs=client,
-                kubectl=Kubectl(context),
                 output_absence_receipt=output_receipt,
             )
         _print(result)

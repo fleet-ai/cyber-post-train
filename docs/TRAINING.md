@@ -103,7 +103,6 @@ wandb:
   tags: [teacher, sft]
 cluster:
   priority: c1
-  target: prod
 ```
 
 Relative manifest paths resolve beside the YAML file. Model and data roots are
@@ -163,67 +162,30 @@ counts. Train and dev are distinct immutable artifacts and task families.
 5. `cyber-post-train status <returned-name>` reads sanitized state. Monitor the
    exact API/Kubernetes UIDs, progress receipts, utilization and checkpoints too.
 
-For a bounded development smoke, prepare a new config with
-`cluster: {priority: c1, target: dev, cleanup_maximum_seconds: 1800}` and use
-`cyber-post-train direct-submit-sft output/my-run --context
-nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb`. The ordinary `submit`
-command fails closed for development SFT because the generic Jobs API does not
-carry a durable deadline. The direct command still starts from a live Jobs API
-preview and then requires a Kubernetes server dry-run of the complete rendered
-RayJob. Before the GPU object is created, it also requires a fresh all-namespace
-GPU census. The direct command first creates one zero-GPU, alert-suppressed,
-c1 cleanup Job with a 30-minute deadline, then binds the RayJob to that exact
-Job UID as a Kubernetes owner. The cleanup Job sleeps for 29 minutes and has a
-zero-second terminal TTL. Its deletion garbage-collects the RayJob even if the
-RayJob remained queued or the submitting laptop exited. The RayJob separately
-has a zero-second terminal TTL and `activeDeadlineSeconds: 1800` for earlier
-terminal or admitted-runtime cleanup. Both objects are server-dry-run and
-create-once; an uncertain create must be reconciled from the durable journal.
-
 The proposed four-node, 262,144-token, full-parameter Qwen3.8 canary is recorded in
-`configs/qualification/qwen38-teacher3k-262k-4node-canary-v1.json`. It is
-deliberately not launchable: the historical parent plan and
-mechanics receipts are now digest-bound in the packet, but they prove only one
-optimizer step and a simple checkpoint path—not a sealed reload or scientific
-acceptance. This source tree ports the seven recovered long-context hooks into
-the isolated `training/sft_262k_runtime.py` variant while leaving the shared SFT
-runtime byte-for-byte unchanged. The exact compiler derives one 4×8, batch-32,
-four-step, pause-after-step-1 candidate from the retained v12 plan and stages
-both runtimes under digest checks. Its packet authorizes read-only preview and
-zero-GPU preflight only; GPU submission remains false. Never turn the held
-packet into a request by hand.
+`configs/qualification/qwen38-teacher3k-262k-4node-canary-v1.json`. It is held,
+not launchable. The exact compiler derives a 4×8, batch-32, four-step candidate
+from the recovered eight-node v12 plan, changes no other scientific setting,
+and stages the recovered long-context hooks in the isolated
+`training/sft_262k_runtime.py` variant. The shared SFT runtime is unchanged.
+It checkpoints every step, keeps two checkpoints, and pauses after step 1.
 
-The production candidate uses the same small Jobs API launch rail as the proven
-eight-node parent. Run `preview` once for operator review; `submit` repeats the
-complete duplicate census and server preview, writes `SUBMISSION.jsonl` before
-its sole POST, and never retries an uncertain POST. Both previews must show the
-root RayJob annotation `fleet.ai/failure-alerts: "off"`, pod priority `c1`,
-queue priority `q1`, four nodes and eight GPUs per node. The runtime watchdog
-then applies its 30-minute startup allowance, 20-minute confirmed-no-progress
-check, eight-hour hard bound and five-minute checkpoint drain.
+The candidate uses the standard production Jobs API rail: one operator preview,
+then a second duplicate census and preview immediately before the sole POST.
+Both rendered previews must prove the root RayJob annotation
+`fleet.ai/failure-alerts: "off"`, c1/q1 priority, four nodes, eight GPUs per
+node, exact image and output. Submission remains false until a tracked zero-GPU
+preflight succeeds, the output is freshly proven absent, and root review passes.
+The existing zero-GPU preflight Job has a 1,800-second deadline and creates no
+GPU allocation. Do not hand-edit the prepared plan or request to bypass these
+gates.
 
-The rendered RayJob has `shutdownAfterJobFinishes: true` and a zero-second
-terminal TTL. Monitor its exact Jobs API name and Kubernetes UIDs. If it fails
-or is confirmed stalled, use one exact Jobs API release, then reconcile API and
-Kubernetes state before any retry. This deliberately avoids a second custom
-resource controller; it does not weaken the fresh output-absence, preflight or
-root-review gates.
-
-After preparing the candidate, these commands perform the required
-non-creating operator preview and zero-GPU preflight preview:
-
-```sh
-uv run cyber-post-train preview /shared/prepared-run
-
-uv run cyber-post-train sft-cpu-preflight-job-preview /shared/prepared-run \
-  --context nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6
-```
-
-The submit command performs the second server preview immediately before its
-sole POST. Neither command above writes a create journal or creates a GPU
-workload. A host without SFS may use the existing bounded, zero-GPU SFS observer
-under the preflight authorization, but that is still an external Job and must
-be operated and collected explicitly.
+After any future authorized POST, monitor the exact API name and Kubernetes UIDs.
+The runtime watchdog applies a 30-minute startup allowance, 20-minute confirmed
+no-progress check, eight-hour hard bound and five-minute checkpoint drain. On a
+confirmed failure or stall, release that exact owned run once through the Jobs
+API and reconcile absence before any successor. No custom resource controller is
+part of this launch rail.
 
 When the submitter does not already run inside the pinned image with the shared
 SFS mount, dense SFT has one tracked zero-GPU preflight Job. Start from a clean
@@ -324,27 +286,24 @@ uv run cyber-post-train sfs-output-job-collect /shared/prepared-run \
 # On the submitter host. Omit the receipt option only when this host sees SFS itself:
 uv run cyber-post-train direct-submit-sft /shared/prepared-run \
   --output-absence-receipt /shared/prepared-run/OUTPUT_ABSENT.json \
-  --context <exact-context-bound-in-the-plan>
+  --context <explicit-production-or-development-context>
 ```
 
 The fallback is deliberately narrow. It fetches a fresh API preview, proves the
 saved request is the current SFT render and needs only the `wandb-api` Secret,
 then rejects warnings or drift in identity, c1/q1 priority, normal suspension,
 release-on-exit, image, command, resources, environment, Secret references, or
-node count. It also requires a fresh cross-namespace GPU census, including the
-planned allocation, under the current ten-node/eighty-GPU project ceiling.
-For SFT only, the fallback accepts exactly the generic
+node count. For SFT only, the fallback accepts exactly the generic production
 GPU selector `workload: fleetai-training-ng-gpu` (with optional
-`kubernetes.io/os: linux`) from the source preview. Under production context
-`nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6` it adds the reviewed pool binding
+`kubernetes.io/os: linux`) from the source preview, and only under Kubernetes
+context `nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6` adds the reviewed
+pool binding
 `topology.nebius.com/gpu-cluster-id: computegpucluster-e04x263hvn91b321fq`
-to every head and worker template. Under the exact development context bound in
-the plan, it preserves the generic GPU selector and installs the zero-GPU
-cleanup owner described above. An unknown or cross-target context, a missing or
-different generic selector, or a pre-bound cluster selector fails before GPU
-creation. The API-server dry-run and persisted post-create readback must retain
-the exact rendered selector, cleanup owner on development, and complete runtime
-surface. This narrow repair does not apply to the LR30 exception and
+to every head and worker template. A development/unknown context, a missing or
+different generic selector, or a pre-bound cluster selector fails before server
+dry-run, journaling, or creation. The API-server dry-run and the persisted
+post-create readback must retain the exact rendered selector and complete
+runtime surface. This narrow repair does not apply to the LR30 exception and
 must be removed when the Jobs API owns the complete rendering contract. Always
 use a fresh create-once run identity; never patch an already-created RayJob. It
 replaces the API's zero UUID/name placeholders with one fresh

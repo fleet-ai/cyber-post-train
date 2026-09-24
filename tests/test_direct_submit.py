@@ -7,7 +7,6 @@ import tarfile
 import time
 from copy import deepcopy
 from dataclasses import replace
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -27,26 +26,19 @@ from cyber_post_train.direct_submit import (
     CPU_SOURCE_ARCHIVE_SHA256_ANNOTATION,
     CPU_SOURCE_COMMIT_ANNOTATION,
     LORA_TRAINER_IMAGE,
-    SFT_DEVELOPMENT_CONTEXT,
-    SFT_DEVELOPMENT_DEADLINE_SECONDS,
-    SFT_DEVELOPMENT_GUARDIAN_SLEEP_SECONDS,
     SFT_PRODUCTION_CONTEXT,
     TRAINING_GPU_CLUSTER_SELECTOR,
     Kubectl,
     collect_sfs_output_check,
     create_sfs_output_check_once,
-    direct_preview_sft_once,
     direct_submit_lr30_qualification_once,
     direct_submit_sft_once,
     render_cpu_checkpoint_seal_pod,
     render_lr30_qualification_rayjob,
-    render_sft_dev_cleanup_guardian,
     render_sft_rayjob,
     validate_checkpoint_seal_step_binding,
     validate_cpu_checkpoint_pod,
-    validate_sft_capacity_precreate,
 )
-from cyber_post_train.gpu_capacity import build_capacity_census
 from cyber_post_train.jobs import JobsError, digest
 from cyber_post_train.lora_cpu_preflight import build_lora_cpu_preflight_package
 from cyber_post_train.lora_cpu_preflight_driver import (
@@ -63,7 +55,6 @@ from training import sft
 
 RUN_ID = "12345678-1234-4234-9234-123456789abc"
 CREATED_UID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
-GUARDIAN_UID = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff"
 SOURCE_COMMIT = "a108edff2062558359cc72ebdfaf5d40cadeb333"
 
 
@@ -81,17 +72,6 @@ def sfs_jobs_root(tmp_path):
 
 def plan():
     return {"schema": "cyber_sft_runtime_dense_v1", "immutable": "synthetic"}
-
-
-def dev_plan():
-    return {
-        **plan(),
-        "execution": {
-            "cluster_target": "dev",
-            "jobs_api_base_url": "https://api.ft.dev.flt.build",
-            "cleanup_maximum_seconds": SFT_DEVELOPMENT_DEADLINE_SECONDS,
-        },
-    }
 
 
 def request():
@@ -544,76 +524,6 @@ def test_render_changes_only_reviewed_identity_secret_and_root_annotation():
     assert proof["manifest_sha256"] == digest(rendered)
 
 
-def test_render_accepts_exact_api_root_alert_off_but_rejects_any_other_value():
-    source = manifest()
-    source["metadata"]["annotations"]["fleet.ai/failure-alerts"] = "off"
-    rendered, proof = render_sft_rayjob(
-        plan(),
-        request(),
-        preview(source),
-        kubernetes_context=SFT_PRODUCTION_CONTEXT,
-        run_id=RUN_ID,
-    )
-    assert rendered["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
-    assert proof["source_root_failure_alerts"] == "off"
-
-    source["metadata"]["annotations"]["fleet.ai/failure-alerts"] = "on"
-    with pytest.raises(JobsError, match="failure-alert annotation is not off"):
-        render_sft_rayjob(
-            plan(),
-            request(),
-            preview(source),
-            kubernetes_context=SFT_PRODUCTION_CONTEXT,
-            run_id=RUN_ID,
-        )
-
-
-def test_dev_render_adds_cluster_enforced_deadline_without_production_selector():
-    source = manifest()
-    rendered, proof = render_sft_rayjob(
-        dev_plan(),
-        request(),
-        preview(source),
-        kubernetes_context=SFT_DEVELOPMENT_CONTEXT,
-        run_id=RUN_ID,
-    )
-    assert rendered["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
-    assert rendered["spec"]["activeDeadlineSeconds"] == SFT_DEVELOPMENT_DEADLINE_SECONDS
-    assert rendered["spec"]["ttlSecondsAfterFinished"] == 0
-    assert proof["active_deadline_seconds"] == SFT_DEVELOPMENT_DEADLINE_SECONDS
-    assert proof["kubernetes_context"] == SFT_DEVELOPMENT_CONTEXT
-    assert proof["bound_gpu_cluster_templates"] == 0
-    assert "gpu_cluster_selector" not in proof
-    assert proof["manifest_sha256"] == digest(rendered)
-    groups = [
-        rendered["spec"]["rayClusterSpec"]["headGroupSpec"],
-        *rendered["spec"]["rayClusterSpec"]["workerGroupSpecs"],
-    ]
-    assert all(
-        group["template"]["spec"]["nodeSelector"] == {"workload": "fleetai-training-ng-gpu"}
-        for group in groups
-    )
-
-
-def test_dev_cleanup_guardian_is_zero_gpu_alert_off_and_creation_bounded():
-    value = render_sft_dev_cleanup_guardian("researcher-sft-12345678")
-    assert value["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
-    assert value["spec"]["activeDeadlineSeconds"] == 1800
-    assert value["spec"]["ttlSecondsAfterFinished"] == 0
-    pod = value["spec"]["template"]["spec"]
-    assert pod["automountServiceAccountToken"] is False
-    assert pod["priorityClassName"] == "c1"
-    [container] = pod["containers"]
-    assert container["command"] == [
-        "python",
-        "-c",
-        f"import time;time.sleep({SFT_DEVELOPMENT_GUARDIAN_SLEEP_SECONDS})",
-    ]
-    assert all(
-        "nvidia.com/gpu" not in container["resources"][field] for field in ("requests", "limits")
-    )
-
-
 def test_lr30_render_is_exact_one_gpu_root_annotated_and_secret_free():
     request_value = lr30.job_request()
     rendered, proof = render_lr30_qualification_rayjob(
@@ -639,6 +549,7 @@ def test_lr30_render_is_exact_one_gpu_root_annotated_and_secret_free():
 @pytest.mark.parametrize(
     "fault",
     [
+        "already-annotated",
         "wrong-priority",
         "wrong-numeric-priority",
         "not-suspended",
@@ -679,7 +590,9 @@ def test_render_fails_closed_on_preview_drift(fault):
     response = preview(obj)
     head = obj["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]
     container = head["spec"]["containers"][0]
-    if fault == "wrong-priority":
+    if fault == "already-annotated":
+        obj["metadata"]["annotations"]["fleet.ai/failure-alerts"] = "off"
+    elif fault == "wrong-priority":
         head["spec"]["priorityClassName"] = "c0"
     elif fault == "wrong-numeric-priority":
         head["spec"]["priority"] = 0
@@ -797,12 +710,21 @@ def test_direct_fallback_is_sft_only_and_proves_no_fleet_secret(plan_value, requ
         )
 
 
-def test_sft_cluster_binding_rejects_context_that_differs_from_plan(tmp_path, sfs_jobs_root):
+@pytest.mark.parametrize(
+    "context",
+    [
+        "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+        "production-context",
+    ],
+)
+def test_sft_gpu_cluster_binding_rejects_unknown_or_development_context_before_network(
+    tmp_path, sfs_jobs_root, context
+):
     jobs, kube = FakeJobs(), FakeKubectl()
-    kube.context = SFT_DEVELOPMENT_CONTEXT
+    kube.context = context
     journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
 
-    with pytest.raises(JobsError, match="differs from the immutable cluster target"):
+    with pytest.raises(JobsError, match="exact production context"):
         direct_submit_sft_once(
             plan=plan(),
             request=request(),
@@ -843,7 +765,6 @@ class FakeKubectl:
         self.fail_create = fail_create
         self.calls = []
         self.created = None
-        self.objects = {}
 
     def list(self, resource):
         self.calls.append(("list", resource))
@@ -858,37 +779,14 @@ class FakeKubectl:
         if self.fail_create:
             raise JobsError("synthetic create uncertainty")
         result = deepcopy(obj)
-        result["metadata"]["uid"] = (
-            GUARDIAN_UID
-            if result.get("kind") == "Job"
-            and result.get("metadata", {}).get("labels", {}).get("app")
-            == "cyber-dev-cleanup-guardian"
-            else CREATED_UID
-        )
-        self.objects[(result["kind"].lower(), result["metadata"]["name"])] = deepcopy(result)
-        if result.get("kind") == "RayJob":
-            self.created = deepcopy(result)
+        result["metadata"]["uid"] = CREATED_UID
+        self.created = deepcopy(result)
         return result
 
     def get_rayjob(self, name):
         self.calls.append(("get", name))
         assert self.created is not None and self.created["metadata"]["name"] == name
         return deepcopy(self.created)
-
-    def get_operator_object(self, resource, name):
-        self.calls.append(("get", resource, name))
-        return deepcopy(self.objects.get((resource, name)))
-
-    def delete_operator_object_uid_once(self, resource, name, uid):
-        self.calls.append(("delete", resource, name, uid))
-        value = self.objects.get((resource, name))
-        assert value is not None and value["metadata"]["uid"] == uid
-        self.objects.pop((resource, name))
-        return {"kind": "Status", "status": "Success"}
-
-    def sft_capacity_census(self, value):
-        self.calls.append(("capacity", value))
-        return {"sha256": "c" * 64}
 
 
 class FakeOutputCheckKubectl(FakeKubectl):
@@ -924,150 +822,7 @@ def test_direct_submit_checks_twice_journals_then_creates_exactly_once(tmp_path,
     assert records[0]["kubernetes_context"] == SFT_PRODUCTION_CONTEXT
     assert records[0]["gpu_cluster_selector"] == TRAINING_GPU_CLUSTER_SELECTOR
     assert records[0]["bound_gpu_cluster_templates"] == 2
-    assert records[0]["capacity_census_sha256"] == "c" * 64
-    assert [call[0] for call in kube.calls].count("capacity") == 1
     assert journal.stat().st_mode & 0o777 == 0o600
-
-
-def test_direct_preview_checks_live_servers_without_creating(sfs_jobs_root):
-    jobs, kube = FakeJobs(), FakeKubectl()
-    result = direct_preview_sft_once(
-        plan=plan(),
-        request=request(),
-        jobs=jobs,
-        kubectl=kube,
-        run_id=RUN_ID,
-        jobs_root=sfs_jobs_root,
-    )
-    assert result["schema"] == "cyber_sft_direct_server_preview_v1"
-    assert result["submitted"] is False
-    assert result["root_failure_alerts"] == "off"
-    assert result["priority_class"] == "c1"
-    assert result["effective_priority"] == 10_000
-    assert result["queue_priority"] == "q1"
-    assert result["queue_name"] == "training-lq"
-    assert (result["nodes"], result["gpus"]) == (2, 16)
-    assert jobs.calls == ["history", ("preview", request()), "history"]
-    assert [call[0] for call in kube.calls].count("list") == 4
-    assert [call[0] for call in kube.calls].count("dry-run") == 1
-    assert [call[0] for call in kube.calls].count("capacity") == 1
-    assert [call[0] for call in kube.calls].count("create") == 0
-    assert not list(sfs_jobs_root.iterdir())
-
-
-def test_direct_preview_rejects_dev_before_any_cluster_call(sfs_jobs_root):
-    jobs, kube = FakeJobs(), FakeKubectl()
-    kube.context = SFT_DEVELOPMENT_CONTEXT
-    with pytest.raises(JobsError, match="production-only"):
-        direct_preview_sft_once(
-            plan=dev_plan(),
-            request=request(),
-            jobs=jobs,
-            kubectl=kube,
-            run_id=RUN_ID,
-            jobs_root=sfs_jobs_root,
-        )
-    assert jobs.calls == [] and kube.calls == []
-
-
-def test_dev_direct_submit_server_dry_runs_and_creates_exact_deadline(tmp_path, sfs_jobs_root):
-    jobs, kube = FakeJobs(), FakeKubectl()
-    kube.context = SFT_DEVELOPMENT_CONTEXT
-    journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
-    result = direct_submit_sft_once(
-        plan=dev_plan(),
-        request=request(),
-        jobs=jobs,
-        kubectl=kube,
-        journal=journal,
-        run_id=RUN_ID,
-        jobs_root=sfs_jobs_root,
-    )
-    assert result["uid"] == CREATED_UID
-    assert result["cleanup_guardian_uid"] == GUARDIAN_UID
-    assert kube.created["spec"]["activeDeadlineSeconds"] == 1800
-    assert kube.created["spec"]["ttlSecondsAfterFinished"] == 0
-    assert kube.created["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
-    assert kube.created["metadata"]["ownerReferences"] == [
-        {
-            "apiVersion": "batch/v1",
-            "kind": "Job",
-            "name": "researcher-sft-12345678-cleanup",
-            "uid": GUARDIAN_UID,
-            "controller": False,
-            "blockOwnerDeletion": False,
-        }
-    ]
-    groups = [
-        kube.created["spec"]["rayClusterSpec"]["headGroupSpec"],
-        *kube.created["spec"]["rayClusterSpec"]["workerGroupSpecs"],
-    ]
-    assert all(
-        TRAINING_GPU_CLUSTER_SELECTOR.keys().isdisjoint(group["template"]["spec"]["nodeSelector"])
-        for group in groups
-    )
-    assert [call[0] for call in kube.calls].count("dry-run") == 2
-    assert [call[0] for call in kube.calls].count("create") == 2
-    assert [call[0] for call in kube.calls].count("capacity") == 1
-    records = [json.loads(line) for line in journal.read_text().splitlines()]
-    assert [row["state"] for row in records] == [
-        "DEV_CLEANUP_GUARDIAN_CREATE_INTENT_DO_NOT_RETRY",
-        "DEV_CLEANUP_GUARDIAN_CREATE_RESPONSE",
-        "KUBECTL_CREATE_INTENT_DO_NOT_RETRY",
-        "KUBECTL_CREATE_RESPONSE",
-    ]
-
-
-def test_dev_guardian_is_released_when_capacity_fails_before_rayjob_intent(tmp_path, sfs_jobs_root):
-    class RejectedCapacity(FakeKubectl):
-        context = SFT_DEVELOPMENT_CONTEXT
-
-        def sft_capacity_census(self, value):
-            self.calls.append(("capacity", value))
-            raise JobsError("synthetic capacity rejection")
-
-    jobs, kube = FakeJobs(), RejectedCapacity()
-    journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
-    with pytest.raises(JobsError, match="capacity rejection"):
-        direct_submit_sft_once(
-            plan=dev_plan(),
-            request=request(),
-            jobs=jobs,
-            kubectl=kube,
-            journal=journal,
-            run_id=RUN_ID,
-            jobs_root=sfs_jobs_root,
-        )
-    assert kube.created is None
-    assert not kube.objects
-    assert [call[0] for call in kube.calls].count("delete") == 1
-    records = [json.loads(line) for line in journal.read_text().splitlines()]
-    assert records[-1]["state"] == "DEV_CLEANUP_GUARDIAN_RELEASE_REQUESTED"
-
-
-def test_sft_capacity_census_binds_planned_topology_and_ten_node_limit():
-    observed_at = "2026-09-24T12:00:00Z"
-
-    def reader(context, **kwargs):
-        assert context == SFT_PRODUCTION_CONTEXT
-        return build_capacity_census(
-            {"items": []},
-            {"items": []},
-            {"items": []},
-            {"items": []},
-            observed_at=observed_at,
-            **kwargs,
-        )
-
-    value = validate_sft_capacity_precreate(
-        {"recipe": {"nodes": 4, "gpus_per_node": 8}},
-        SFT_PRODUCTION_CONTEXT,
-        reader=reader,
-        now=datetime.fromisoformat("2026-09-24T12:00:30+00:00"),
-    )
-    assert value["limits"] == {"nodes": 10, "gpus": 80}
-    assert value["planned"] == {"nodes": 4, "gpus": 32}
-    assert value["qualified"] is True
 
 
 @pytest.mark.parametrize(

@@ -7,11 +7,7 @@ import pytest
 
 from cyber_post_train import sft_cpu_preflight_driver as driver
 from cyber_post_train.cli import _prepare
-from cyber_post_train.direct_submit import (
-    SFT_PRODUCTION_CONTEXT,
-    create_sft_cpu_preflight_once,
-    preview_sft_cpu_preflight,
-)
+from cyber_post_train.direct_submit import create_sft_cpu_preflight_once
 from cyber_post_train.jobs import JobsError, digest
 from cyber_post_train.sft_cpu_preflight_driver import LOG_PREFIX
 from cyber_post_train.sft_cpu_preflight_job import (
@@ -271,7 +267,7 @@ def test_collect_rejects_admission_resource_drift(package):
 
 def test_create_once_server_previews_journals_then_creates(prepared, tmp_path):
     class FakeKubectl:
-        context = SFT_PRODUCTION_CONTEXT
+        context = "prod"
 
         def __init__(self):
             self.created = []
@@ -322,61 +318,4 @@ def test_create_once_server_previews_journals_then_creates(prepared, tmp_path):
             attempt=1,
             kubectl=kubectl,
             journal=journal,
-        )
-
-
-def test_preview_server_checks_without_creating(prepared):
-    class FakeKubectl:
-        context = SFT_PRODUCTION_CONTEXT
-
-        def __init__(self):
-            self.calls = []
-
-        def _cpu_node_inventory(self):
-            self.calls.append("nodes")
-            return node_inventory()
-
-        def list(self, resource):
-            self.calls.append(("list", resource))
-            return {"kind": "List", "items": []}
-
-        def dry_run(self, manifest):
-            self.calls.append("dry-run")
-            return deepcopy(manifest)
-
-        def create_once(self, manifest):
-            pytest.fail("read-only preview attempted a create")
-
-    kubectl = FakeKubectl()
-    result = preview_sft_cpu_preflight(
-        directory=prepared,
-        source_commit=SOURCE_COMMIT,
-        attempt=1,
-        kubectl=kubectl,
-    )
-    assert result["schema"] == "cyber_sft_cpu_preflight_server_preview_v1"
-    assert result["status"] == "passed"
-    assert result["submitted"] is False
-    assert result["gpus"] == 0
-    assert result["root_failure_alerts"] == "off"
-    assert result["priority_class"] == "c1"
-    assert result["queue_priority"] == "q1"
-    assert result["queue_name"] == "training-lq"
-    assert result["effective_priority"] == 10_000
-    assert kubectl.calls == ["nodes", ("list", "jobs.batch"), "dry-run", ("list", "jobs.batch")]
-
-
-def test_preview_rejects_wrong_context_before_cluster_reads(prepared):
-    class FakeKubectl:
-        context = "wrong-context"
-
-        def __getattr__(self, name):
-            pytest.fail(f"context drift reached cluster method {name}")
-
-    with pytest.raises(JobsError, match="context differs"):
-        preview_sft_cpu_preflight(
-            directory=prepared,
-            source_commit=SOURCE_COMMIT,
-            attempt=1,
-            kubectl=FakeKubectl(),
         )
