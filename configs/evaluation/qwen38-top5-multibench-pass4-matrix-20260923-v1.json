@@ -4,10 +4,10 @@
   "prepared_against_main_commit": "0f0bcdb7c6e18fb8a337e287df43bb2188f2899a",
   "status": "prepared_no_launch",
   "launchable": false,
-  "purpose": "Freeze one prospective baseline-plus-five checkpoint comparison before opening Fleet final-test outcomes or using any external benchmark result to choose checkpoints.",
+  "purpose": "Freeze one prospective baseline-plus-five checkpoint comparison without using Fleet confirmation-set outcomes or any external benchmark result to choose checkpoints.",
   "scientific_boundary": {
-    "selection_completed_before_final_test_open": true,
-    "fleet_final_test_outcomes_read": false,
+    "selection_completed_without_using_fleet_confirmation_outcomes": true,
+    "fleet_confirmation_outcomes_used_for_selection": false,
     "webexploitbench_outcomes_used_for_selection": false,
     "cvebench_outcomes_used_for_selection": false,
     "nyu_ctf_outcomes_used_for_selection": false,
@@ -20,6 +20,18 @@
       "pre_frozen_development_evidence"
     ],
     "training_data_eligible": false
+  },
+  "fleet_confirmation_exposure_audit": {
+    "path": "docs/evidence/qwen38-fleet-final8-exposure-audit-20260923.json",
+    "file_sha256": "sha256:3e6b56d0e91560e55240efeaad3b1b660698287961e1eae6bc1b7e2df9d89a05",
+    "receipt_sha256": "sha256:dac348e34529ac0185d6cb9943bf6c7ad13c5b28bedf9fc8542bd7e8a2e59073",
+    "disposition": "historically_exposed_locked_confirmation_set",
+    "all_eight_exact_versions_have_prior_quality_certification_metadata": true,
+    "pre_split_model_comparison_exact_versions_with_accepted_execution": 2,
+    "pre_split_model_comparison_exact_versions_with_only_unstarted_cells": 6,
+    "historical_cells_may_substitute_for_new_matched_cells": false,
+    "selection_outcomes_used": false,
+    "integrity_boundary": "The audit uses task identity and execution-state categories, not prompts, traces, flags, answers, or task-level capability values. An unrelated repository search displayed historical aggregate score-related fields; those values were not queried for, copied, persisted, or used for checkpoint selection."
   },
   "base_model": {
     "artifact_id": "qwen38-27b-base-control",
@@ -49,7 +61,7 @@
       "q38-d32-b16-lr5e6-step300",
       "q38-t3k64-b8-step285",
       "q38-t3k32-lr1-step700",
-      "q38-t3k96-b8-step100"
+      "q38-t3k96-b8-step300"
     ],
     "excluded_examples": {
       "q38-sft32-dense-m1-step600": "Same 32K batch-8 learning-rate-3e-6 treatment as the stronger step-1000 anchor, with fewer accepted supervised tokens.",
@@ -245,8 +257,8 @@
     },
     {
       "rank": 5,
-      "arm_id": "context96_step100",
-      "artifact_id": "q38-t3k96-b8-step100",
+      "arm_id": "context96_step300",
+      "artifact_id": "q38-t3k96-b8-step300",
       "kind": "full_weight_sft",
       "research_question": "Test the longest accepted training context, which is uniquely relevant to long exploit trajectories.",
       "training_config_path": "configs/runs/qwen38-teacher3k-96k-full-b8-lr3e6-v3.json",
@@ -257,24 +269,26 @@
         "microbatch_per_gpu": 1,
         "learning_rate": 0.000003,
         "epochs_planned": 1,
-        "optimizer_step": 100,
+        "optimizer_step": 300,
         "planned_final_step": 856,
-        "supervised_tokens_seen": 6734083
+        "supervised_tokens_seen": 20234966
       },
       "checkpoint": {
-        "path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/checkpoints/global_step_100",
-        "receipt_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/checkpoint_receipts/step-000100.json",
-        "receipt_file_sha256": "sha256:7714e0ce2eb664f6aa25c6c4a9e5475b994fe824ffcb62030f684225101b6058",
-        "receipt_sha256": "sha256:e1dfd6718926f6d19ec5710ed7ba53e753d81526f95dbd8313cc8a72d564e06d"
+        "path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/checkpoints/global_step_300",
+        "receipt_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/checkpoint_receipts/step-000300.json",
+        "receipt_file_sha256": "sha256:c0c146b342b13da64943e6ae8a46b4ca4b4d14b1355e8950aedeed0d58ba5dfd",
+        "receipt_sha256": "sha256:9f53b7a80a8cecef2164e421ec41f9ea3e3ffab673c486828e1d4a059da3cec8"
       },
       "promotion": {
-        "state": "accepted_through_cpu_validation_gpu_reload_absent",
-        "proposed_or_existing_export_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/hf-export-step100-v1",
-        "proposed_reload_receipt_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/chris-q38-t3k96-s100-gpu-check-v1/GPU_CHECK.json",
-        "proposed_stage_path": "/models/chris-q38-t3k96-s100-v1",
-        "proposed_serving_model_id": "chris-q38-t3k96-s100-v1",
+        "state": "native_checkpoint_only",
+        "proposed_export_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/hf-export-step300-v1",
+        "proposed_reload_receipt_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/chris-q38-t3k96-s300-gpu-check-v1/GPU_CHECK.json",
+        "proposed_stage_path": "/models/chris-q38-t3k96-s300-v1",
+        "proposed_serving_model_id": "chris-q38-t3k96-s300-v1",
         "remaining_gates": [
-          "bind_existing_seal_export_and_cpu_validation_receipts_to_exact_digests",
+          "seal_checkpoint_and_prove_source_stability",
+          "create_once_bf16_export",
+          "cpu_exact_layout_and_sidecar_validation",
           "one_gpu_zero_optimizer_update_finite_reload",
           "create_once_immutable_stage",
           "paused_zero_replica_registration",
@@ -282,14 +296,36 @@
         ]
       },
       "fallback": {
-        "artifact_id": "q38-t3k96-b8-step50",
-        "checkpoint_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/checkpoints/global_step_50",
-        "promotion_evidence_path": "docs/evidence/qwen38-current-nonlead-promotion-20260922.json",
-        "export_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/hf-export-step50-v1",
-        "state": "accepted_through_zero_update_gpu_reload_not_staged_or_registered",
-        "proposed_stage_path": "/models/chris-q38-t3k96-s50-v1",
-        "proposed_serving_model_id": "chris-q38-t3k96-s50-v1",
-        "use_only_if": "step100_fails_a_required_promotion_gate"
+        "artifact_id": "q38-t3k96-b8-step100",
+        "state": "accepted_through_cpu_validation_gpu_reload_absent",
+        "checkpoint_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/checkpoints/global_step_100",
+        "checkpoint_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/checkpoint_receipts/step-000100.json",
+        "checkpoint_receipt_file_sha256": "sha256:7714e0ce2eb664f6aa25c6c4a9e5475b994fe824ffcb62030f684225101b6058",
+        "checkpoint_receipt_sha256": "sha256:e1dfd6718926f6d19ec5710ed7ba53e753d81526f95dbd8313cc8a72d564e06d",
+        "seal_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/checkpoint-seals-v1/step-100.json",
+        "seal_file_sha256": "sha256:7215dcd0216e5eb7d1ddd9ae89cfa09c076ea2e5cc85afc4411451626e9d4a26",
+        "seal_receipt_sha256": "sha256:328cdc795f5b107fdc29f8f6324ece89f9df8bc878c3b592616010419aad8194",
+        "export_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/hf-export-step100-v1",
+        "export_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/hf-export-step100-v1/EXPORT.json",
+        "export_receipt_file_sha256": "sha256:af8ab2142a3369932e9eb0e2c3a1da99dabde8e11c481b35c41c1b9f03603c9e",
+        "export_receipt_sha256": "sha256:2de8ce31edf2cb81663657779418581e74cafd719c9273c384a2f652dc8cb2f5",
+        "cpu_check_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/hf-export-step100-v1-cpu-check.json",
+        "cpu_check_file_sha256": "sha256:eb36fd7ac6a8828d44307d06dabb211cf68b27c2fc5139f35308b6ea03be4897",
+        "cpu_check_receipt_sha256": "sha256:166ba0d60b218118c27768d14817c5e4eecacec1e095d52bbae0b1a679f1b635",
+        "proposed_reload_receipt_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/chris-q38-t3k96-s100-gpu-check-v1/GPU_CHECK.json",
+        "proposed_stage_path": "/models/chris-q38-t3k96-s100-v1",
+        "proposed_serving_model_id": "chris-q38-t3k96-s100-v1",
+        "use_only_if": "step300_fails_a_required_promotion_gate",
+        "second_fallback": {
+          "artifact_id": "q38-t3k96-b8-step50",
+          "checkpoint_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/checkpoints/global_step_50",
+          "promotion_evidence_path": "docs/evidence/qwen38-current-nonlead-promotion-20260922.json",
+          "export_path": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3/hf-export-step50-v1",
+          "state": "accepted_through_zero_update_gpu_reload_not_staged_or_registered",
+          "proposed_stage_path": "/models/chris-q38-t3k96-s50-v1",
+          "proposed_serving_model_id": "chris-q38-t3k96-s50-v1",
+          "use_only_if": "step300_and_step100_each_fail_a_required_promotion_gate"
+        }
       }
     }
   ],
@@ -300,7 +336,7 @@
       "b16_step300",
       "context64_step285",
       "lr1_step700",
-      "context96_step100"
+      "context96_step300"
     ],
     "pass_k": 4,
     "independent_pass1_attempt_indices": [
@@ -315,15 +351,10 @@
       "r02",
       "r03"
     ],
-    "shared_controls": {
-      "opencode_version": "1.18.27",
-      "temperature": 0.6,
-      "top_p": 0.95,
-      "context_tokens": 262144,
-      "automatic_compaction": true,
-      "automatic_continuation": true,
+    "cross_arm_controls": {
       "scientific_attempt_retries": 0,
       "same_task_and_attempt_roster_for_every_arm": true,
+      "same_benchmark_specific_harness_context_and_sampling_for_every_arm": true,
       "infrastructure_invalid_is_never_model_failure": true
     },
     "result_policy": "Preserve every terminal cell. Replace or exclude only a predeclared infrastructure-invalid cell symmetrically; never rerun a valid zero. Keep collection separate from scoring where the benchmark supports it."
@@ -338,6 +369,17 @@
       "benchmark_revision": "7f97d87fa8ab728260c0ba9b09b9c8f00bb82ad5",
       "task_order_sha256": "sha256:d491b66885c8a379a887ee792d96ade76ffdc34cbfa3e75f9bc61c6975a29610",
       "harness": "opencode-1.18.27",
+      "sampling": {
+        "temperature": 0.6,
+        "top_p": 0.95,
+        "seed": null,
+        "max_output_tokens": 32768
+      },
+      "context": {
+        "max_context_tokens": 262144,
+        "automatic_compaction": true,
+        "automatic_continuation": true
+      },
       "scoring": "separate_deferred_gpt_judge",
       "attempt_indices": [0, 1, 2, 3],
       "launch_gate": "fresh_model_free_runtime_qualification_plus_route_parity_and_duplicate_absence"
@@ -350,9 +392,30 @@
       "split_file_sha256": "sha256:28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb",
       "split_sha256": "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
       "selection_sha256": "sha256:9623149c4a021bc13ed2cf94ca26e107b30c18816cf3c02d76b5020cab5066f4",
-      "selection_role": "untouched_final_test",
-      "outcomes_state": "sealed_not_read",
+      "selection_role": "historically_exposed_locked_confirmation_set",
+      "outcomes_state": "outcomes_not_used_for_checkpoint_selection",
+      "exposure_audit_path": "docs/evidence/qwen38-fleet-final8-exposure-audit-20260923.json",
+      "exposure_audit_file_sha256": "sha256:3e6b56d0e91560e55240efeaad3b1b660698287961e1eae6bc1b7e2df9d89a05",
+      "exposure_audit_receipt_sha256": "sha256:dac348e34529ac0185d6cb9943bf6c7ad13c5b28bedf9fc8542bd7e8a2e59073",
+      "historical_execution_boundary": {
+        "exact_versions_with_prior_quality_certification_metadata": 8,
+        "exact_versions_with_accepted_pre_split_model_comparison_execution": 2,
+        "exact_versions_with_only_unstarted_pre_split_model_comparison_cells": 6,
+        "historical_cells_reused": 0,
+        "new_matched_outcomes_required": 192
+      },
       "harness": "opencode-1.18.27",
+      "sampling": {
+        "temperature": 0.6,
+        "top_p": 0.95,
+        "max_output_tokens": 32768,
+        "seed_binding": "one_exact_seed_per_independent_pass1_attempt"
+      },
+      "context": {
+        "max_context_tokens": 262144,
+        "automatic_compaction": true,
+        "automatic_continuation": true
+      },
       "seeds": [46, 47, 48, 49],
       "seed_policy": "No earlier final-test seed contract exists. Freeze the first four seeds from the already reviewed independent seed46-to53 development protocol before opening final-test outcomes.",
       "launch_gate": "open_once_for_this_prospectively_frozen_six_arm_finalist_family_after_exact_binding_preview"
@@ -366,6 +429,12 @@
       "protocol_sha256": "sha256:b5e974a4058a97d55c482f07567ef3a68c818b35f72d725358f1a6ce9337d475",
       "source_commit": "332f0ec0fc95c4a4d35fe7458a73969aad1aa1d4",
       "harness": "cvebench_inspect_native-2.1.0",
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": null,
+        "seed": null
+      },
       "scoring": "official_deterministic_exploit_grader",
       "attempt_indices": [0, 1, 2, 3],
       "launch_gate": "model_free_task5_positive_control_then_frozen_remaining_roster"
@@ -379,6 +448,12 @@
       "protocol_file_sha256": "sha256:0cb2be1ab5092851f7b034bc9cc749ea261a836e6f4e8a0ada7b7492d4688cde",
       "source_commit": "1dc13a0dc41a71504f727649679e2b5a6d0cb1b1",
       "harness": "opencode-1.18.27",
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": null,
+        "seed": null
+      },
       "scoring": "pinned_manifest_exact_hidden_flag",
       "attempt_indices": [0, 1, 2, 3],
       "launch_gate": "adapter_and_model_free_runtime_qualification"
@@ -392,6 +467,12 @@
       "protocol_file_sha256": "sha256:0cb2be1ab5092851f7b034bc9cc749ea261a836e6f4e8a0ada7b7492d4688cde",
       "source_commit": "1097a7226eb034d3821208114da38f10b8627ab1",
       "harness": "opencode-1.18.27",
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": null,
+        "seed": null
+      },
       "scoring": "official_exact_flag",
       "attempt_indices": [0, 1, 2, 3],
       "launch_gate": "adapter_and_model_free_runtime_qualification"
@@ -421,7 +502,7 @@
     "routes_created_or_mutated": 0,
     "jobs_created": 0,
     "evaluation_cells_created": 0,
-    "fleet_final_test_outcomes_read": 0
+    "fleet_confirmation_campaigns_created": 0
   },
-  "sha256": "3ba91cd14bd50df42429f5f3f45f6459834edcd567bbba23cb570f1b0b21307b"
+  "sha256": "f4459e4d939f99973ad04ab114b03643073da43b9e767681f375bc0e33685da6"
 }
