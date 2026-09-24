@@ -171,8 +171,7 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
         and recipe["max_length"] == 262_144
     )
     if four_node_262k_full and (
-        recipe["checkpoint_interval"] >= recipe["max_steps"]
-        or recipe["keep_checkpoints"] < 2
+        recipe["checkpoint_interval"] >= recipe["max_steps"] or recipe["keep_checkpoints"] < 2
     ):
         raise ValueError("four-node 262K full SFT requires intermediate resumable checkpoints")
     cluster = config.get("cluster", {})
@@ -335,9 +334,7 @@ def job_request(plan: dict) -> dict:
             recipe.get("checkpoint_interval", 0) >= recipe.get("max_steps", 0)
             or recipe.get("keep_checkpoints", 0) < 2
         ):
-            raise ValueError(
-                "four-node 262K full SFT requires intermediate resumable checkpoints"
-            )
+            raise ValueError("four-node 262K full SFT requires intermediate resumable checkpoints")
         if plan.get("execution", {}).get("priority") != "c1":
             raise ValueError("four-node 262K full SFT requires c1 priority")
         raise ValueError(
