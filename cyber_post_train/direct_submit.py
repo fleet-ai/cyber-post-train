@@ -33,6 +33,7 @@ from .jobs import (
     FAILURE_ALERT_OFF,
     JobsError,
     digest,
+    plan_api_target,
     validate_preview,
     validate_request,
 )
@@ -107,6 +108,15 @@ TRAINING_GPU_CLUSTER_SELECTOR = {
     "topology.nebius.com/gpu-cluster-id": "computegpucluster-e04x263hvn91b321fq",
 }
 SFT_PRODUCTION_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
+SFT_DEVELOPMENT_CONTEXT = "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb"
+SFT_DEVELOPMENT_DEADLINE_SECONDS = 1800
+SFT_DEVELOPMENT_GUARDIAN_SLEEP_SECONDS = 1740
+SFT_DEVELOPMENT_GUARDIAN_IMAGE = (
+    "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:"
+    "9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+)
+SFT_GPU_MAX_NODES = 10
+SFT_GPU_MAX_GPUS = 80
 KUBERNETES_UID_PATTERN = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
 )
@@ -1131,20 +1141,206 @@ def render_sft_rayjob(
 ) -> tuple[dict, dict]:
     """Render the maintained SFT-only direct-create fallback."""
     _assert_sft_contract(plan, request)
-    if kubernetes_context != SFT_PRODUCTION_CONTEXT:
-        raise JobsError("SFT GPU-cluster binding is restricted to the exact production context")
+    target, _ = plan_api_target(plan)
+    expected_context = {
+        "prod": SFT_PRODUCTION_CONTEXT,
+        "dev": SFT_DEVELOPMENT_CONTEXT,
+    }[target]
+    if kubernetes_context != expected_context:
+        raise JobsError("SFT Kubernetes context differs from the immutable cluster target")
+    development = target == "dev"
+    if development and (
+        plan.get("execution", {}).get("cleanup_maximum_seconds")
+        != SFT_DEVELOPMENT_DEADLINE_SECONDS
+    ):
+        raise JobsError("development SFT requires the exact 30-minute deadline")
     manifest, proof = _render_rayjob(
         request,
         preview,
         expected_secrets=[SFT_SECRET],
-        bind_sft_gpu_cluster=True,
+        bind_sft_gpu_cluster=not development,
         run_id=run_id,
     )
+    if development:
+        # This is a second, active-runtime bound.  The create-time bound comes
+        # from the zero-GPU owner Job installed by ``direct_submit_sft_once``.
+        manifest["spec"]["activeDeadlineSeconds"] = SFT_DEVELOPMENT_DEADLINE_SECONDS
+        manifest["spec"]["ttlSecondsAfterFinished"] = 0
+        proof = {
+            **proof,
+            "manifest_sha256": digest(manifest),
+            "active_deadline_seconds": SFT_DEVELOPMENT_DEADLINE_SECONDS,
+        }
     return manifest, {
         **proof,
         "kubernetes_context": kubernetes_context,
-        "gpu_cluster_selector": deepcopy(TRAINING_GPU_CLUSTER_SELECTOR),
+        **(
+            {"gpu_cluster_selector": deepcopy(TRAINING_GPU_CLUSTER_SELECTOR)}
+            if not development
+            else {}
+        ),
     }
+
+
+def render_sft_dev_cleanup_guardian(rayjob_name: str) -> dict:
+    """Render the zero-GPU owner whose deletion bounds one dev RayJob.
+
+    The ordinary Job controller starts its deadline when this unsuspended Job
+    is created, including while its Pod is Pending.  Once the sleeper exits (or
+    the deadline fires), TTL deletion removes this owner and Kubernetes garbage
+    collection removes the owned RayJob.  The RayJob's own zero TTL handles an
+    earlier terminal transition.
+    """
+
+    name = rayjob_name + "-cleanup"
+    if re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", name) is None:
+        raise JobsError("development cleanup guardian name is invalid")
+    labels = {"app": "cyber-dev-cleanup-guardian"}
+    annotations = {
+        FAILURE_ALERT_ANNOTATION: FAILURE_ALERT_OFF,
+        "cyber-post-train.fleet.ai/owned-rayjob": rayjob_name,
+    }
+    return {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": {
+            "name": name,
+            "namespace": NAMESPACE,
+            "labels": labels,
+            "annotations": annotations,
+        },
+        "spec": {
+            "activeDeadlineSeconds": SFT_DEVELOPMENT_DEADLINE_SECONDS,
+            "backoffLimit": 0,
+            "completions": 1,
+            "parallelism": 1,
+            "ttlSecondsAfterFinished": 0,
+            "template": {
+                "metadata": {"labels": labels, "annotations": annotations},
+                "spec": {
+                    "automountServiceAccountToken": False,
+                    "priorityClassName": "c1",
+                    "restartPolicy": "Never",
+                    "securityContext": {
+                        "runAsNonRoot": True,
+                        "runAsUser": 65532,
+                        "runAsGroup": 65532,
+                    },
+                    "tolerations": [
+                        {
+                            "effect": "NoSchedule",
+                            "key": "workload",
+                            "operator": "Equal",
+                            "value": "fleetai-training-ng-gpu",
+                        }
+                    ],
+                    "containers": [
+                        {
+                            "name": "cleanup-deadline",
+                            "image": SFT_DEVELOPMENT_GUARDIAN_IMAGE,
+                            "command": [
+                                "python",
+                                "-c",
+                                (
+                                    "import time;time.sleep("
+                                    f"{SFT_DEVELOPMENT_GUARDIAN_SLEEP_SECONDS})"
+                                ),
+                            ],
+                            "resources": {
+                                "requests": {"cpu": "10m", "memory": "64Mi"},
+                                "limits": {"cpu": "100m", "memory": "128Mi"},
+                            },
+                            "securityContext": {
+                                "allowPrivilegeEscalation": False,
+                                "capabilities": {"drop": ["ALL"]},
+                            },
+                        }
+                    ],
+                },
+            },
+        },
+    }
+
+
+def validate_sft_dev_cleanup_guardian(
+    value: dict,
+    rayjob_name: str,
+    *,
+    require_uid: bool,
+) -> dict:
+    """Validate the complete effective guardian behavior before ownership."""
+
+    expected = render_sft_dev_cleanup_guardian(rayjob_name)
+    try:
+        metadata = value["metadata"]
+        spec = value["spec"]
+        pod = spec["template"]["spec"]
+        [container] = pod["containers"]
+        resources = container["resources"]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise JobsError("development cleanup guardian is malformed") from exc
+    if (
+        value.get("apiVersion") != "batch/v1"
+        or value.get("kind") != "Job"
+        or metadata.get("name") != expected["metadata"]["name"]
+        or metadata.get("namespace") != NAMESPACE
+        or metadata.get("labels") != expected["metadata"]["labels"]
+        or metadata.get("annotations") != expected["metadata"]["annotations"]
+        or spec.get("activeDeadlineSeconds") != SFT_DEVELOPMENT_DEADLINE_SECONDS
+        or spec.get("backoffLimit") != 0
+        or spec.get("completions") != 1
+        or spec.get("parallelism") != 1
+        or spec.get("ttlSecondsAfterFinished") != 0
+        or pod.get("automountServiceAccountToken") is not False
+        or pod.get("priorityClassName") != "c1"
+        or pod.get("restartPolicy") != "Never"
+        or pod.get("securityContext") != expected["spec"]["template"]["spec"]["securityContext"]
+        or pod.get("tolerations") != expected["spec"]["template"]["spec"]["tolerations"]
+        or container.get("name") != "cleanup-deadline"
+        or container.get("image") != SFT_DEVELOPMENT_GUARDIAN_IMAGE
+        or container.get("command")
+        != ["python", "-c", f"import time;time.sleep({SFT_DEVELOPMENT_GUARDIAN_SLEEP_SECONDS})"]
+        or container.get("securityContext")
+        != expected["spec"]["template"]["spec"]["containers"][0]["securityContext"]
+        or resources
+        != {
+            "requests": {"cpu": "10m", "memory": "64Mi"},
+            "limits": {"cpu": "100m", "memory": "128Mi"},
+        }
+        or any(
+            "nvidia.com/gpu" in resources.get(boundary, {})
+            for boundary in ("requests", "limits")
+        )
+    ):
+        raise JobsError("development cleanup guardian behavior changed")
+    uid = metadata.get("uid")
+    if require_uid and KUBERNETES_UID_PATTERN.fullmatch(str(uid)) is None:
+        raise JobsError("development cleanup guardian omitted its immutable UID")
+    return value
+
+
+def bind_sft_dev_cleanup_owner(manifest: dict, guardian: dict) -> dict:
+    """Bind one rendered RayJob to the exact create-returned guardian UID."""
+
+    rayjob = deepcopy(manifest)
+    guardian_name = guardian.get("metadata", {}).get("name")
+    guardian_uid = guardian.get("metadata", {}).get("uid")
+    if (
+        KUBERNETES_UID_PATTERN.fullmatch(str(guardian_uid)) is None
+        or guardian_name != rayjob.get("metadata", {}).get("name", "") + "-cleanup"
+    ):
+        raise JobsError("development cleanup guardian identity is invalid")
+    rayjob["metadata"]["ownerReferences"] = [
+        {
+            "apiVersion": "batch/v1",
+            "kind": "Job",
+            "name": guardian_name,
+            "uid": guardian_uid,
+            "controller": False,
+            "blockOwnerDeletion": False,
+        }
+    ]
+    return rayjob
 
 
 def render_lr30_qualification_rayjob(
@@ -1232,6 +1428,85 @@ def validate_direct_dev_gpu_reload_precreate(
         or not 0 <= age <= DIRECT_DEV_GPU_CAPACITY_MAX_AGE_SECONDS
     ):
         raise JobsError("direct dev GPU reload capacity census is stale or incomplete")
+    return census
+
+
+def validate_sft_capacity_precreate(
+    plan: dict,
+    context: str,
+    *,
+    reader: Callable[..., dict] | None = None,
+    now: datetime | None = None,
+) -> dict:
+    """Require one fresh all-namespace census for the planned SFT allocation."""
+
+    recipe = plan.get("recipe", {})
+    nodes = recipe.get("nodes")
+    gpus_per_node = recipe.get("gpus_per_node")
+    if (
+        type(nodes) is not int
+        or type(gpus_per_node) is not int
+        or nodes <= 0
+        or gpus_per_node <= 0
+        or context not in {SFT_PRODUCTION_CONTEXT, SFT_DEVELOPMENT_CONTEXT}
+    ):
+        raise JobsError("direct SFT capacity request is invalid")
+    planned = {"nodes": nodes, "gpus": nodes * gpus_per_node}
+    reader = live_capacity_census if reader is None else reader
+    try:
+        census = reader(
+            context,
+            owner_prefixes=DEV_GPU_OWNER_PREFIXES,
+            max_nodes=SFT_GPU_MAX_NODES,
+            max_gpus=SFT_GPU_MAX_GPUS,
+            planned_nodes=planned["nodes"],
+            planned_gpus=planned["gpus"],
+        )
+    except CapacityError as exc:
+        raise JobsError("direct SFT cross-namespace capacity census failed") from exc
+    if not isinstance(census, dict):
+        raise JobsError("direct SFT capacity census is invalid")
+    try:
+        observed = datetime.fromisoformat(str(census.get("observed_at")).replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise JobsError("direct SFT capacity timestamp is invalid") from exc
+    observed_now = now or datetime.now(UTC)
+    if observed.tzinfo is None or observed_now.tzinfo is None:
+        raise JobsError("direct SFT capacity timestamp is invalid")
+    current = census.get("current")
+    projected = census.get("projected")
+    role_counts = current.get("role_pod_counts") if isinstance(current, dict) else None
+    age = (observed_now.astimezone(UTC) - observed.astimezone(UTC)).total_seconds()
+    if (
+        census.get("sha256")
+        != digest({key: value for key, value in census.items() if key != "sha256"})
+        or census.get("schema") != "cyber_project_gpu_capacity_census_v1"
+        or census.get("scope")
+        != {
+            "kubernetes_namespaces": "all",
+            "owner_prefixes": list(DEV_GPU_OWNER_PREFIXES),
+            "ownership_labels": ROLE_LABELS,
+        }
+        or census.get("limits") != {"nodes": SFT_GPU_MAX_NODES, "gpus": SFT_GPU_MAX_GPUS}
+        or census.get("planned") != planned
+        or census.get("qualified") is not True
+        or census.get("problems") != []
+        or not isinstance(current, dict)
+        or not isinstance(projected, dict)
+        or not isinstance(role_counts, dict)
+        or role_counts.get("unclassified") != 0
+        or type(current.get("nodes")) is not int
+        or type(current.get("gpus")) is not int
+        or projected
+        != {
+            "nodes": current["nodes"] + planned["nodes"],
+            "gpus": current["gpus"] + planned["gpus"],
+        }
+        or projected["nodes"] > SFT_GPU_MAX_NODES
+        or projected["gpus"] > SFT_GPU_MAX_GPUS
+        or not 0 <= age <= DIRECT_DEV_GPU_CAPACITY_MAX_AGE_SECONDS
+    ):
+        raise JobsError("direct SFT capacity census is stale or incomplete")
     return census
 
 
@@ -1412,6 +1687,9 @@ class Kubectl:
         if direct_dev_reload:
             self._require_direct_dev_gpu_reload_output(response)
         return response
+
+    def sft_capacity_census(self, plan: dict) -> dict:
+        return validate_sft_capacity_precreate(plan, self.context)
 
     @staticmethod
     def _require_direct_dev_gpu_reload_output(manifest: dict) -> None:
@@ -2066,6 +2344,7 @@ def _direct_submit_once(
     renderer: Any,
     run_id: str | None = None,
     output_absence_gate: Callable[[], dict] | None = None,
+    capacity_gate: Callable[[], dict] | None = None,
     require_readback: bool = False,
 ) -> dict:
     """Preview, prove, journal and issue exactly one direct Kubernetes create."""
@@ -2096,6 +2375,7 @@ def _direct_submit_once(
         [kubectl.list("rayjobs.ray.io"), kubectl.list("jobs.batch")], request, proof
     )
     output_absence_proof = output_absence_gate() if output_absence_gate is not None else None
+    capacity_proof = capacity_gate() if capacity_gate is not None else None
     _write_intent(
         journal,
         {
@@ -2119,6 +2399,11 @@ def _direct_submit_once(
             **(
                 {"output_absence_receipt_sha256": output_absence_proof["sha256"]}
                 if output_absence_proof is not None
+                else {}
+            ),
+            **(
+                {"capacity_census_sha256": capacity_proof["sha256"]}
+                if capacity_proof is not None
                 else {}
             ),
         },
@@ -2159,6 +2444,164 @@ def _direct_submit_once(
     return result
 
 
+def _direct_submit_dev_sft_once(
+    *,
+    plan: dict,
+    request: dict,
+    jobs: Any,
+    kubectl: Kubectl,
+    journal: Path,
+    renderer: Any,
+    output_absence_gate: Callable[[], dict],
+    run_id: str | None,
+) -> dict:
+    """Create a dev SFT RayJob owned by a create-time cleanup guardian."""
+
+    if journal.exists() or journal.is_symlink():
+        raise JobsError("direct-create journal already exists; reconcile, never retry")
+    output_absence_gate()
+    _assert_api_unique(jobs.all_runs(), request)
+    preview = jobs.raw_preview(request)
+    manifest, proof = renderer(plan, request, preview, run_id=run_id)
+    inventories = [kubectl.list("rayjobs.ray.io"), kubectl.list("jobs.batch")]
+    _assert_kubernetes_unique(inventories, request, proof)
+    guardian = render_sft_dev_cleanup_guardian(proof["name"])
+    _assert_output_check_job_absent(inventories[1], guardian["metadata"]["name"])
+    validate_sft_dev_cleanup_guardian(
+        kubectl.dry_run(guardian), proof["name"], require_uid=False
+    )
+
+    _assert_api_unique(jobs.all_runs(), request)
+    inventories = [kubectl.list("rayjobs.ray.io"), kubectl.list("jobs.batch")]
+    _assert_kubernetes_unique(inventories, request, proof)
+    _assert_output_check_job_absent(inventories[1], guardian["metadata"]["name"])
+    output_absence = output_absence_gate()
+    _write_intent(
+        journal,
+        {
+            "state": "DEV_CLEANUP_GUARDIAN_CREATE_INTENT_DO_NOT_RETRY",
+            "request_sha256": digest(request),
+            "plan_sha256": digest(plan),
+            "preview_manifest_sha256": proof["preview_manifest_sha256"],
+            "guardian_manifest_sha256": digest(guardian),
+            "guardian_name": guardian["metadata"]["name"],
+            "rayjob_name": proof["name"],
+            "run_id": proof["run_id"],
+            "namespace": NAMESPACE,
+            "kubernetes_context": kubectl.context,
+            "output_absence_receipt_sha256": output_absence["sha256"],
+        },
+    )
+    created_guardian = kubectl.create_once(guardian)
+    validate_sft_dev_cleanup_guardian(created_guardian, proof["name"], require_uid=True)
+    guardian_uid = created_guardian["metadata"]["uid"]
+    _append_journal(
+        journal,
+        {
+            "state": "DEV_CLEANUP_GUARDIAN_CREATE_RESPONSE",
+            "name": guardian["metadata"]["name"],
+            "uid": guardian_uid,
+        },
+    )
+
+    rayjob_intent = False
+    try:
+        live_guardian = kubectl.get_operator_object(
+            "job", guardian["metadata"]["name"]
+        )
+        if live_guardian is None:
+            raise JobsError("development cleanup guardian disappeared before RayJob create")
+        validate_sft_dev_cleanup_guardian(live_guardian, proof["name"], require_uid=True)
+        if live_guardian["metadata"]["uid"] != guardian_uid:
+            raise JobsError("development cleanup guardian UID changed")
+        manifest = bind_sft_dev_cleanup_owner(manifest, created_guardian)
+        proof = {
+            **proof,
+            "manifest_sha256": digest(manifest),
+            "cleanup_guardian_name": guardian["metadata"]["name"],
+            "cleanup_guardian_uid": guardian_uid,
+        }
+        _assert_created_identity(
+            kubectl.dry_run(manifest),
+            proof,
+            request,
+            manifest,
+            require_uid=False,
+        )
+        _assert_api_unique(jobs.all_runs(), request)
+        _assert_kubernetes_unique(
+            [kubectl.list("rayjobs.ray.io"), kubectl.list("jobs.batch")],
+            request,
+            proof,
+        )
+        output_absence = output_absence_gate()
+        capacity = kubectl.sft_capacity_census(plan)
+        _append_journal(
+            journal,
+            {
+                "state": "KUBECTL_CREATE_INTENT_DO_NOT_RETRY",
+                "request_sha256": digest(request),
+                "plan_sha256": digest(plan),
+                "preview_manifest_sha256": proof["preview_manifest_sha256"],
+                "manifest_sha256": proof["manifest_sha256"],
+                "run_id": proof["run_id"],
+                "name": proof["name"],
+                "namespace": NAMESPACE,
+                "kubernetes_context": kubectl.context,
+                "cleanup_guardian_name": guardian["metadata"]["name"],
+                "cleanup_guardian_uid": guardian_uid,
+                "capacity_census_sha256": capacity["sha256"],
+                "output_absence_receipt_sha256": output_absence["sha256"],
+            },
+        )
+        rayjob_intent = True
+        created = kubectl.create_once(manifest)
+        _assert_created_identity(
+            created,
+            proof,
+            request,
+            manifest,
+            require_uid=True,
+        )
+        readback = kubectl.get_rayjob(proof["name"])
+        _assert_created_identity(
+            readback,
+            proof,
+            request,
+            manifest,
+            require_uid=True,
+        )
+        if readback["metadata"]["uid"] != created["metadata"]["uid"]:
+            raise JobsError("persisted RayJob UID differs from the create response")
+    except BaseException:
+        if not rayjob_intent:
+            kubectl.delete_operator_object_uid_once(
+                "job", guardian["metadata"]["name"], guardian_uid
+            )
+            _append_journal(
+                journal,
+                {
+                    "state": "DEV_CLEANUP_GUARDIAN_RELEASE_REQUESTED",
+                    "name": guardian["metadata"]["name"],
+                    "uid": guardian_uid,
+                },
+            )
+        raise
+    result = {
+        "name": proof["name"],
+        "run_id": proof["run_id"],
+        "namespace": NAMESPACE,
+        "uid": readback["metadata"]["uid"],
+        "manifest_sha256": proof["manifest_sha256"],
+        "cleanup_guardian_name": guardian["metadata"]["name"],
+        "cleanup_guardian_uid": guardian_uid,
+        "submitted": True,
+        "transport": "direct-kubectl-create",
+    }
+    _append_journal(journal, {"state": "KUBECTL_CREATE_RESPONSE", **result})
+    return result
+
+
 def direct_submit_sft_once(
     *,
     plan: dict,
@@ -2172,8 +2615,13 @@ def direct_submit_sft_once(
 ) -> dict:
     """Create one source-bound SFT RayJob through the maintained fallback."""
     _assert_sft_contract(plan, request)
-    if kubectl.context != SFT_PRODUCTION_CONTEXT:
-        raise JobsError("direct SFT submission is restricted to the exact production context")
+    target, _ = plan_api_target(plan)
+    expected_context = {
+        "prod": SFT_PRODUCTION_CONTEXT,
+        "dev": SFT_DEVELOPMENT_CONTEXT,
+    }[target]
+    if kubectl.context != expected_context:
+        raise JobsError("direct SFT context differs from the immutable cluster target")
     from training.sft_dispatch import compiler_for_plan
 
     if compiler_for_plan(plan).job_request(plan) != request:
@@ -2190,7 +2638,7 @@ def direct_submit_sft_once(
         except ValueError as exc:
             raise JobsError(str(exc)) from None
 
-    def render_for_production(
+    def render_for_target(
         selected_plan: dict,
         selected_request: dict,
         selected_preview: dict,
@@ -2205,15 +2653,27 @@ def direct_submit_sft_once(
             run_id=run_id,
         )
 
+    if target == "dev":
+        return _direct_submit_dev_sft_once(
+            plan=plan,
+            request=request,
+            jobs=jobs,
+            kubectl=kubectl,
+            journal=journal,
+            renderer=render_for_target,
+            run_id=run_id,
+            output_absence_gate=output_absence_gate,
+        )
     return _direct_submit_once(
         plan=plan,
         request=request,
         jobs=jobs,
         kubectl=kubectl,
         journal=journal,
-        renderer=render_for_production,
+        renderer=render_for_target,
         run_id=run_id,
         output_absence_gate=output_absence_gate,
+        capacity_gate=lambda: kubectl.sft_capacity_census(plan),
         require_readback=True,
     )
 

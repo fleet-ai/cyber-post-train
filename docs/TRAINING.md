@@ -103,6 +103,7 @@ wandb:
   tags: [teacher, sft]
 cluster:
   priority: c1
+  target: prod
 ```
 
 Relative manifest paths resolve beside the YAML file. Model and data roots are
@@ -161,6 +162,36 @@ counts. Train and dev are distinct immutable artifacts and task families.
    a differently named copy to retry.
 5. `cyber-post-train status <returned-name>` reads sanitized state. Monitor the
    exact API/Kubernetes UIDs, progress receipts, utilization and checkpoints too.
+
+For a bounded development smoke, prepare a new config with
+`cluster: {priority: c1, target: dev, cleanup_maximum_seconds: 1800}` and use
+`cyber-post-train direct-submit-sft output/my-run --context
+nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb`. The ordinary `submit`
+command fails closed for development SFT because the generic Jobs API does not
+carry a durable deadline. The direct command still starts from a live Jobs API
+preview and then requires a Kubernetes server dry-run of the complete rendered
+RayJob. Before the GPU object is created, it also requires a fresh all-namespace
+GPU census. The direct command first creates one zero-GPU, alert-suppressed,
+c1 cleanup Job with a 30-minute deadline, then binds the RayJob to that exact
+Job UID as a Kubernetes owner. The cleanup Job sleeps for 29 minutes and has a
+zero-second terminal TTL. Its deletion garbage-collects the RayJob even if the
+RayJob remained queued or the submitting laptop exited. The RayJob separately
+has a zero-second terminal TTL and `activeDeadlineSeconds: 1800` for earlier
+terminal or admitted-runtime cleanup. Both objects are server-dry-run and
+create-once; an uncertain create must be reconciled from the durable journal.
+
+The proposed four-node, 262,144-token, full-parameter Qwen3.8 canary is recorded in
+`configs/qualification/qwen38-teacher3k-262k-4node-canary-v1.json`. It is
+deliberately not launchable from current `main`: the historical parent plan and
+mechanics receipts are now digest-bound in the packet, but they prove only one
+optimizer step and a simple checkpoint path—not a sealed reload or scientific
+acceptance. Current `main` does not contain that parent's exact chunked
+long-context runtime, though the packet now preserves the exact full immutable
+image reference recovered from durable history. The generic compiler and launch-time renderer
+therefore fail closed for that exact shape. Port and test only the recovered
+runtime hooks without changing that image binding, and change the qualification
+packet in a reviewed successor; never turn this held packet into a request by
+hand.
 
 When the submitter does not already run inside the pinned image with the shared
 SFS mount, dense SFT has one tracked zero-GPU preflight Job. Start from a clean
@@ -261,24 +292,27 @@ uv run cyber-post-train sfs-output-job-collect /shared/prepared-run \
 # On the submitter host. Omit the receipt option only when this host sees SFS itself:
 uv run cyber-post-train direct-submit-sft /shared/prepared-run \
   --output-absence-receipt /shared/prepared-run/OUTPUT_ABSENT.json \
-  --context <explicit-production-or-development-context>
+  --context <exact-context-bound-in-the-plan>
 ```
 
 The fallback is deliberately narrow. It fetches a fresh API preview, proves the
 saved request is the current SFT render and needs only the `wandb-api` Secret,
 then rejects warnings or drift in identity, c1/q1 priority, normal suspension,
 release-on-exit, image, command, resources, environment, Secret references, or
-node count. For SFT only, the fallback accepts exactly the generic production
+node count. It also requires a fresh cross-namespace GPU census, including the
+planned allocation, under the current ten-node/eighty-GPU project ceiling.
+For SFT only, the fallback accepts exactly the generic
 GPU selector `workload: fleetai-training-ng-gpu` (with optional
-`kubernetes.io/os: linux`) from the source preview, and only under Kubernetes
-context `nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6` adds the reviewed
-pool binding
+`kubernetes.io/os: linux`) from the source preview. Under production context
+`nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6` it adds the reviewed pool binding
 `topology.nebius.com/gpu-cluster-id: computegpucluster-e04x263hvn91b321fq`
-to every head and worker template. A development/unknown context, a missing or
-different generic selector, or a pre-bound cluster selector fails before server
-dry-run, journaling, or creation. The API-server dry-run and the persisted
-post-create readback must retain the exact rendered selector and complete
-runtime surface. This narrow repair does not apply to the LR30 exception and
+to every head and worker template. Under the exact development context bound in
+the plan, it preserves the generic GPU selector and installs the zero-GPU
+cleanup owner described above. An unknown or cross-target context, a missing or
+different generic selector, or a pre-bound cluster selector fails before GPU
+creation. The API-server dry-run and persisted post-create readback must retain
+the exact rendered selector, cleanup owner on development, and complete runtime
+surface. This narrow repair does not apply to the LR30 exception and
 must be removed when the Jobs API owns the complete rendering contract. Always
 use a fresh create-once run identity; never patch an already-created RayJob. It
 replaces the API's zero UUID/name placeholders with one fresh

@@ -1311,6 +1311,15 @@ def submit(directory: Path) -> None:
         plan, request = _prepared(directory)
         _submission_gate(directory, plan, request)
         _external_action_gate(plan, "submit")
+        if (
+            plan_api_target(plan)[0] == "dev"
+            and plan.get("schema")
+            in {"cyber_sft_runtime_v2", "cyber_sft_runtime_dense_v1"}
+        ):
+            raise ValueError(
+                "development SFT requires direct-submit-sft so the cluster enforces "
+                "the immutable 30-minute RayJob deadline"
+            )
         _require_preflight(directory, plan, request)
         # Repeat the SFS check immediately before the API census/preview/POST.
         # A preflight receipt is immutable evidence, not a filesystem lock.
@@ -1349,13 +1358,14 @@ def direct_submit_sft(
         ),
     ] = None,
 ) -> None:
-    """Create one SFT RayJob when API preview omits only the alert annotation.
+    """Create one SFT RayJob from a live API preview on its bound cluster.
 
     This fallback still uses a fresh live Jobs API preview. It removes the
     API-only Fleet credential Secret, injects the required root annotation,
     performs a Kubernetes server dry-run and records a durable create intent.
     It then executes exactly one ``kubectl create`` and never retries, applies
-    or patches. Prefer normal ``submit`` whenever its preview is qualified.
+    or patches. Development plans additionally carry a server-enforced
+    30-minute RayJob deadline; their generic Jobs API route is rejected.
     """
     from .direct_submit import DIRECT_JOURNAL, Kubectl, direct_submit_sft_once
 

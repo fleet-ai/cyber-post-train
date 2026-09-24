@@ -17,7 +17,14 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
-from cyber_post_train.jobs import canonical_gzip, digest, quantity, validate_request
+from cyber_post_train.jobs import (
+    API_URLS,
+    canonical_gzip,
+    digest,
+    plan_api_target,
+    quantity,
+    validate_request,
+)
 
 from .models import bound_model
 from .sft_runtime import (
@@ -156,8 +163,41 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
     recipe["max_steps"] = (
         math.ceil(datasets["train"]["rows"] / recipe["batch_size"]) * recipe["epochs"]
     )
+    four_node_262k_full = (
+        bound["repo"] == "Qwen/Qwen3.8-27B"
+        and "lora" not in config
+        and recipe["nodes"] == 4
+        and recipe["gpus_per_node"] == 8
+        and recipe["max_length"] == 262_144
+    )
+    if four_node_262k_full and (
+        recipe["checkpoint_interval"] >= recipe["max_steps"]
+        or recipe["keep_checkpoints"] < 2
+    ):
+        raise ValueError("four-node 262K full SFT requires intermediate resumable checkpoints")
     cluster = config.get("cluster", {})
-    _known(cluster, {"priority", "resources"}, "cluster")
+    _known(
+        cluster,
+        {"priority", "resources", "target", "cleanup_maximum_seconds"},
+        "cluster",
+    )
+    cluster_target = cluster.get("target", "prod")
+    if cluster_target not in API_URLS:
+        raise ValueError("cluster target must be dev or prod")
+    cleanup_maximum_seconds = cluster.get("cleanup_maximum_seconds")
+    if cluster_target == "dev" and cleanup_maximum_seconds != 1800:
+        raise ValueError("development SFT requires exactly 1800 cleanup seconds")
+    if cluster_target == "prod" and cleanup_maximum_seconds is not None:
+        raise ValueError("production SFT cannot carry a development cleanup deadline")
+    if cluster_target == "dev" and cluster.get("priority", "c1") != "c1":
+        raise ValueError("development SFT cleanup supervision requires c1 priority")
+    if four_node_262k_full and cluster.get("priority", "c1") != "c1":
+        raise ValueError("four-node 262K full SFT requires c1 priority")
+    if four_node_262k_full:
+        raise ValueError(
+            "four-node 262K full SFT requires the separately qualified long-context "
+            "runtime and recovered parent packet"
+        )
     runtime = Path(__file__).with_name("sft_runtime.py").read_bytes()
     plan = {
         "schema": (
@@ -179,6 +219,13 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
             "image": IMAGE,
             "priority": cluster.get("priority", "c1"),
             "resources": {**RESOURCES, **cluster.get("resources", {})},
+            "cluster_target": cluster_target,
+            "jobs_api_base_url": API_URLS[cluster_target],
+            **(
+                {"cleanup_maximum_seconds": cleanup_maximum_seconds}
+                if cluster_target == "dev"
+                else {}
+            ),
         },
     }
     if "checkpoint_recovery_horizon_seconds" in config:
@@ -269,6 +316,34 @@ def job_request(plan: dict) -> dict:
     This avoids a separate GPU or cluster Job just to copy a Python script.
     The bundle is checked before unpacking into a create-once owned directory.
     """
+    target, _ = plan_api_target(plan)
+    cleanup_maximum_seconds = plan.get("execution", {}).get("cleanup_maximum_seconds")
+    if target == "dev" and cleanup_maximum_seconds != 1800:
+        raise ValueError("development SFT requires exactly 1800 cleanup seconds")
+    if target == "prod" and cleanup_maximum_seconds is not None:
+        raise ValueError("production SFT cannot carry a development cleanup deadline")
+    recipe = plan.get("recipe", {})
+    held_four_node_262k_full = (
+        plan.get("model", {}).get("repo") == "Qwen/Qwen3.8-27B"
+        and "lora" not in plan
+        and recipe.get("nodes") == 4
+        and recipe.get("gpus_per_node") == 8
+        and recipe.get("max_length") == 262_144
+    )
+    if held_four_node_262k_full:
+        if (
+            recipe.get("checkpoint_interval", 0) >= recipe.get("max_steps", 0)
+            or recipe.get("keep_checkpoints", 0) < 2
+        ):
+            raise ValueError(
+                "four-node 262K full SFT requires intermediate resumable checkpoints"
+            )
+        if plan.get("execution", {}).get("priority") != "c1":
+            raise ValueError("four-node 262K full SFT requires c1 priority")
+        raise ValueError(
+            "four-node 262K full SFT requires the separately qualified long-context "
+            "runtime and recovered parent packet"
+        )
     # ``plan_sha256`` is attached only inside the runtime after the staged plan
     # file has been verified.  A prepared/submitted plan containing that field
     # would hash different bytes when the runtime attaches its real file digest.
