@@ -115,9 +115,9 @@
   },
   "scored_adapter": {
     "status": "code_complete_remote_credential_isolation_qualification_pending",
-    "shared_source_sha256": "sha256:ee6187966e62d380d63b53d8d8e4e97388df5321fa91af1501acff1f29e9cbb5",
+    "shared_source_sha256": "sha256:14c67c230897819aba5cc5376fe6d81e763bae0a34ea7577deec8c11d4864e13",
     "source_files": {
-      "evals/external_ctf/opencode_scored.py": "sha256:7cf6ebcdbc85f4a1106fd7b8bf07d0c9c24cb6c38a8fcbcc3917b714d048cfd3",
+      "evals/external_ctf/opencode_scored.py": "sha256:0209eb230867ba05c005d4fa9280aa00068a27d5dfb38d653173bc3dc373a0d2",
       "evals/external_ctf/external_proxy.py": "sha256:7d474b3921b65d8bd2f16c33b244b178429aadf8fbfb8a33859b79c8c85bbd05",
       "evals/fleet/fixed_proxy.py": "sha256:a65270cb021cbc8e2fe9b00d901b4b70e9ddc98dd58d93e9f695b1768dfb984d"
     },
@@ -383,5 +383,5 @@
     "prompts_traces_flags_answers_private_scores_and_secrets_included": false,
     "results_remain_sealed_until_a_complete_predeclared_matched_aggregate": true
   },
-  "template_sha256": "sha256:eaea6a530e7326e92338163b40d69afaf74be925586b0bf38d52e264c99f77f6"
+  "template_sha256": "sha256:a4dbb9c5d51300a1e30b01a4ebd985f72ead8bc488e94b598ca0e2cf9e30dbc8"
 }
