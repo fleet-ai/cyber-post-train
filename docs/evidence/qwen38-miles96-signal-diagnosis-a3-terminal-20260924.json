@@ -1,0 +1,70 @@
+{
+  "classification": "operational-gate",
+  "cleanup": {
+    "config_map_absent": false,
+    "job_absent": false,
+    "pod_absent": false,
+    "uid_preconditioned_cleanup_at": null,
+    "workload_absent": false
+  },
+  "config_map": {
+    "name": "chris-q38-m96-signal-a2-diagnosis-a3-code",
+    "uid": "a3792351-5de6-4d25-81cb-acc7ae2843bc"
+  },
+  "execution": {
+    "exit_code": 0,
+    "finished_at": "2026-09-24T06:42:18Z",
+    "private_contents_exposed": false,
+    "restart_count": 0
+  },
+  "job": {
+    "name": "chris-q38-m96-signal-a2-diagnosis-a3",
+    "status": "Complete",
+    "uid": "18603b20-0266-4f37-95cc-81318c7a9a74"
+  },
+  "packet": {
+    "bundle_sha256": "sha256:4bf89f67d3ca2143a677372b068da0bbdd7a8d8e12448f9a14a15491142f0f78",
+    "file_sha256": "sha256:bfcf7a438ba7eb236ceb1e7b204566c1aa894667a9d98e1aa97284d264ccb492",
+    "internal_sha256": "sha256:a6b03d562741a40e177e3179354fa730d8e05126de60d12897349ec40ef72fd7",
+    "normalized_server_preview_sha256": "sha256:bcdceae3b7af6c83d36fa1b8394a8bc0731678e91d42012526b60c1c6fbb90ac",
+    "source_sha256": "sha256:abc4600a59fbac680dd4e153ad1b866d370683f67135d563d2c91b754634550f"
+  },
+  "pod": {
+    "image_id": "ghcr.io/astral-sh/uv@sha256:85d4cb1afa769a7338e095b927bee941cf5ec92266c7424b3f6c0f2748567248",
+    "name": "chris-q38-m96-signal-a2-diagnosis-a3-5hgkh",
+    "uid": "869df313-6d66-4952-a1d4-642b862a8ed6"
+  },
+  "predicate_receipt": {
+    "complete_contract_count": 0,
+    "episode_count": 8,
+    "failed_predicate_counts": {
+      "authority_task_identity": 8,
+      "authority_verifier_identity": 8,
+      "binding_model_revision": 0,
+      "binding_served_model": 0,
+      "binding_task_identity": 0,
+      "binding_verifier_identity": 0,
+      "completed_termination": 8,
+      "exact_cleanup": 0,
+      "execution_identity_equal": 0,
+      "execution_identity_present": 0,
+      "finite_unit_reward": 0,
+      "result_reward_equal": 0,
+      "result_task_identity": 0
+    },
+    "receipt_sha256": "sha256:1275c09fd6c934af27040f2ac83a07426a6f25f387f9ad5bbdf356b715afb006"
+  },
+  "private_instance_ids_prompts_traces_rewards_scores_or_credentials_included": false,
+  "resources": {
+    "failure_alerts": "off",
+    "gpus": 0,
+    "priority": "c1/q1"
+  },
+  "reward_variation_conclusion": "not_established",
+  "schema": "cyber_qwen38_miles96_signal_diagnosis_terminal_v3",
+  "sha256": "sha256:036a926ad3624667f79b71249dcc3c523f12eb9ecdd3187f34d9feea6ab631ad",
+  "workload": {
+    "name": "job-chris-q38-m96-signal-a2-diagnosis-a3-aad20",
+    "uid": "2fca39c7-b0d9-44d7-a24b-2ce5a1a07d28"
+  }
+}
