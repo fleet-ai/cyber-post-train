@@ -88,3 +88,46 @@ def test_layout_rejects_index_header_disagreement(tmp_path):
         assert "index/header key mismatch" in str(exc)
     else:
         raise AssertionError("layout mismatch was accepted")
+
+
+def test_export_validation_binds_exact_identity_and_payload(tmp_path):
+    base, export = tmp_path / "base", tmp_path / "export"
+    base.mkdir()
+    export.mkdir()
+    for name in audit.SIDECARS:
+        (base / name).write_text(name)
+        (export / name).write_text(name)
+    (export / "payload.bin").write_bytes(b"payload")
+    files = {
+        path.name: {"bytes": path.stat().st_size, "sha256": audit.sha(path)}
+        for path in export.iterdir()
+    }
+    receipt = {
+        "schema": "cyber_native_checkpoint_hf_export_v1",
+        "optimizer_step": 1000,
+        "optimizer_steps_executed": 0,
+        "dtype": "BF16",
+        "all_output_tensors_reopened_equal": True,
+        "source_inventory_sizes_mtimes_unchanged": True,
+        "trained_tensors": 1184,
+        "restored_base_tensors": sorted(audit.FROZEN_MTP_KEYS),
+        "sidecars": {name: audit.sha(export / name) for name in audit.SIDECARS},
+        "files": files,
+    }
+    receipt["receipt_sha256"] = audit.hashlib.sha256(audit.canonical(receipt)).hexdigest()
+    receipt_path = export / "EXPORT.json"
+    receipt_path.write_text(json.dumps(receipt))
+    identity = (
+        audit.sha(receipt_path),
+        receipt["receipt_sha256"],
+        audit.hashlib.sha256(audit.canonical(files)).hexdigest(),
+    )
+    result = audit.validate_export(export, base, "step1000", identity)
+    assert result["payload_files_verified"] == len(files)
+    (export / "payload.bin").write_bytes(b"tampered")
+    try:
+        audit.validate_export(export, base, "step1000", identity)
+    except ValueError as exc:
+        assert "payload digest mismatch" in str(exc)
+    else:
+        raise AssertionError("tampered payload was accepted")

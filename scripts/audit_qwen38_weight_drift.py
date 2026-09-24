@@ -27,6 +27,31 @@ SIDECARS = (
 )
 LAYER = re.compile(r"(?:^|\.)layers\.(\d+)\.")
 CHUNK_ELEMENTS = 2_000_000
+FROZEN_MTP_KEYS = {
+    "mtp.fc.weight",
+    "mtp.layers.0.input_layernorm.weight",
+    "mtp.layers.0.mlp.down_proj.weight",
+    "mtp.layers.0.mlp.gate_proj.weight",
+    "mtp.layers.0.mlp.up_proj.weight",
+    "mtp.layers.0.post_attention_layernorm.weight",
+    "mtp.layers.0.self_attn.k_norm.weight",
+    "mtp.layers.0.self_attn.k_proj.weight",
+    "mtp.layers.0.self_attn.o_proj.weight",
+    "mtp.layers.0.self_attn.q_norm.weight",
+    "mtp.layers.0.self_attn.q_proj.weight",
+    "mtp.layers.0.self_attn.v_proj.weight",
+    "mtp.norm.weight",
+    "mtp.pre_fc_norm_embedding.weight",
+    "mtp.pre_fc_norm_hidden.weight",
+}
+REQUIRED_TRAINED_CATEGORIES = {
+    "embedding",
+    "lm_head",
+    "self_attention",
+    "linear_attention",
+    "mlp",
+    "normalization",
+}
 
 
 def canonical(value) -> bytes:
@@ -185,24 +210,49 @@ def empty_stats() -> dict:
     }
 
 
-def add(stats: dict, ref: np.ndarray, candidate: np.ndarray) -> None:
-    stats["elements"] += int(ref.size)
-    stats["changed_elements"] += int(np.count_nonzero(ref != candidate))
-    stats["reference_zero_elements"] += int(np.count_nonzero((ref & 0x7FFF) == 0))
-    stats["candidate_zero_elements"] += int(np.count_nonzero((candidate & 0x7FFF) == 0))
-    left = (ref.astype(np.uint32) << 16).view(np.float32).astype(np.float64)
-    right = (candidate.astype(np.uint32) << 16).view(np.float32).astype(np.float64)
+def chunk_metrics(
+    ref: np.ndarray,
+    candidate: np.ndarray,
+    left: np.ndarray,
+    right: np.ndarray,
+) -> dict:
     diff = right - left
     finite = np.isfinite(left) & np.isfinite(right)
-    stats["nonfinite"] += int(finite.size - np.count_nonzero(finite))
+    result = {
+        "elements": int(ref.size),
+        "changed_elements": int(np.count_nonzero(ref != candidate)),
+        "reference_zero_elements": int(np.count_nonzero((ref & 0x7FFF) == 0)),
+        "candidate_zero_elements": int(np.count_nonzero((candidate & 0x7FFF) == 0)),
+        "sum_abs": 0.0,
+        "sum_sq": 0.0,
+        "reference_sum_sq": 0.0,
+        "max_abs": 0.0,
+        "nonfinite": int(finite.size - np.count_nonzero(finite)),
+    }
     if np.any(finite):
         selected = diff[finite]
         reference = left[finite]
         absolute = np.abs(selected)
-        stats["sum_abs"] += float(np.sum(absolute, dtype=np.float64))
-        stats["sum_sq"] += float(np.sum(selected * selected, dtype=np.float64))
-        stats["reference_sum_sq"] += float(np.sum(reference * reference, dtype=np.float64))
-        stats["max_abs"] = max(stats["max_abs"], float(np.max(absolute)))
+        result["sum_abs"] = float(np.sum(absolute, dtype=np.float64))
+        result["sum_sq"] = float(np.sum(selected * selected, dtype=np.float64))
+        result["reference_sum_sq"] = float(np.sum(reference * reference, dtype=np.float64))
+        result["max_abs"] = float(np.max(absolute))
+    return result
+
+
+def add(stats: dict, metrics: dict) -> None:
+    for key in (
+        "elements",
+        "changed_elements",
+        "reference_zero_elements",
+        "candidate_zero_elements",
+        "sum_abs",
+        "sum_sq",
+        "reference_sum_sq",
+        "nonfinite",
+    ):
+        stats[key] += metrics[key]
+    stats["max_abs"] = max(stats["max_abs"], metrics["max_abs"])
 
 
 def finish(stats: dict) -> dict:
@@ -270,19 +320,32 @@ def audit_drift(base: dict, exports: list[tuple[str, dict]]) -> dict:
                     if len(raw) != length:
                         raise ValueError("short tensor payload read")
                     arrays[label] = np.frombuffer(raw, dtype="<u2")
+                floats = {
+                    label: (value.astype(np.uint32) << 16).view(np.float32).astype(np.float64)
+                    for label, value in arrays.items()
+                }
                 for pair in pairs:
                     left, right = arrays[pair[0]], arrays[pair[1]]
-                    changed = bool(np.any(left != right))
-                    tensor_changed[pair] |= changed
-                    tensor_reference_all_zero[pair] &= bool(np.all((left & 0x7FFF) == 0))
-                    tensor_all_zero[pair] &= bool(np.all((right & 0x7FFF) == 0))
+                    metrics = chunk_metrics(
+                        left,
+                        right,
+                        floats[pair[0]],
+                        floats[pair[1]],
+                    )
+                    tensor_changed[pair] |= metrics["changed_elements"] > 0
+                    tensor_reference_all_zero[pair] &= (
+                        metrics["reference_zero_elements"] == metrics["elements"]
+                    )
+                    tensor_all_zero[pair] &= (
+                        metrics["candidate_zero_elements"] == metrics["elements"]
+                    )
                     for bucket in (
                         stats[pair]["global"],
                         stats[pair]["categories"][group],
                         stats[pair]["layers"][layer] if layer is not None else None,
                     ):
                         if bucket is not None:
-                            add(bucket, left, right)
+                            add(bucket, metrics)
                 remaining -= length
                 offset += length
             for pair in pairs:
@@ -326,6 +389,7 @@ def audit_drift(base: dict, exports: list[tuple[str, dict]]) -> dict:
 
 def interpret_drift(drift: dict, labels: list[str]) -> dict:
     issues = []
+    warnings = []
     observations = {}
     previous = "base"
     for label in labels:
@@ -352,6 +416,16 @@ def interpret_drift(drift: dict, labels: list[str]) -> dict:
             issues.append(f"{label}: no trained tensor differs from frozen base")
         if adjacent_nonaux <= 0:
             issues.append(f"{label}: no trained tensor differs from previous checkpoint")
+        for group in sorted(REQUIRED_TRAINED_CATEGORIES & set(categories)):
+            if categories[group]["changed_tensors"] <= 0:
+                warnings.append(f"{label}: trained category {group} has no change from frozen base")
+        if (
+            base_pair["layer_summary"]["layers_with_changed_tensors"]
+            != base_pair["layer_summary"]["layers"]
+        ):
+            warnings.append(
+                f"{label}: at least one transformer layer has no change from frozen base"
+            )
         if global_stats["nonfinite_values"]:
             issues.append(f"{label}: nonfinite BF16 values observed")
         if global_stats["new_candidate_all_zero_tensors"]:
@@ -359,6 +433,7 @@ def interpret_drift(drift: dict, labels: list[str]) -> dict:
         previous = label
     return {
         "structural_issues": issues,
+        "diagnostic_warnings": warnings,
         "all_structural_weight_checks_pass": not issues,
         "checkpoints": observations,
     }
@@ -402,7 +477,12 @@ def validate_base(base: Path, weights_path: Path, lock_path: Path) -> dict:
     }
 
 
-def validate_export(root: Path, base: Path, label: str) -> dict:
+def validate_export(
+    root: Path,
+    base: Path,
+    label: str,
+    expected_identity: tuple[str, str, str] | None,
+) -> dict:
     receipt_path = root / "EXPORT.json"
     receipt = strict_json(receipt_path)
     unsigned = {key: value for key, value in receipt.items() if key != "receipt_sha256"}
@@ -415,9 +495,36 @@ def validate_export(root: Path, base: Path, label: str) -> dict:
         or receipt.get("all_output_tensors_reopened_equal") is not True
         or receipt.get("source_inventory_sizes_mtimes_unchanged") is not True
         or receipt.get("trained_tensors") != 1184
-        or len(receipt.get("restored_base_tensors", [])) != 15
+        or set(receipt.get("restored_base_tensors", [])) != FROZEN_MTP_KEYS
     ):
         raise ValueError(f"incomplete export receipt for {label}")
+    files = receipt.get("files")
+    if not isinstance(files, dict) or not files:
+        raise ValueError(f"missing payload inventory for {label}")
+    actual = {path.name for path in root.iterdir() if path.name != "EXPORT.json"}
+    if actual != set(files):
+        raise ValueError(f"payload inventory mismatch for {label}")
+    for name, expected in files.items():
+        path = root / name
+        if (
+            not isinstance(expected, dict)
+            or set(expected) != {"bytes", "sha256"}
+            or path.stat().st_size != expected["bytes"]
+            or sha(path) != expected["sha256"]
+        ):
+            raise ValueError(f"payload digest mismatch for {label}/{name}")
+    payload_manifest_sha256 = hashlib.sha256(canonical(files)).hexdigest()
+    file_sha256 = sha(receipt_path)
+    if (
+        expected_identity
+        and (
+            file_sha256,
+            receipt["receipt_sha256"],
+            payload_manifest_sha256,
+        )
+        != expected_identity
+    ):
+        raise ValueError(f"accepted export identity mismatch for {label}")
     sidecars = {}
     for name in SIDECARS:
         base_sha, export_sha = sha(base / name), sha(root / name)
@@ -426,8 +533,10 @@ def validate_export(root: Path, base: Path, label: str) -> dict:
         sidecars[name] = export_sha
     return {
         "optimizer_step": receipt["optimizer_step"],
-        "receipt_file_sha256": sha(receipt_path),
+        "receipt_file_sha256": file_sha256,
         "receipt_sha256": receipt["receipt_sha256"],
+        "payload_manifest_sha256": payload_manifest_sha256,
+        "payload_files_verified": len(files),
         "trained_tensors": receipt["trained_tensors"],
         "restored_base_tensors": len(receipt["restored_base_tensors"]),
         "sidecars_match_base": len(sidecars),
@@ -530,19 +639,34 @@ def main() -> None:
     parser.add_argument("--weights-manifest", type=Path, required=True)
     parser.add_argument("--model-lock", type=Path, required=True)
     parser.add_argument("--export", action="append", required=True, help="LABEL=PATH")
+    parser.add_argument(
+        "--expected-export",
+        action="append",
+        default=[],
+        help="LABEL=RECEIPT_FILE_SHA256,RECEIPT_SHA256,PAYLOAD_MANIFEST_SHA256",
+    )
     parser.add_argument("--checkpoint", type=Path)
     args = parser.parse_args()
     exports = []
     for item in args.export:
         label, raw = item.split("=", 1)
         exports.append((label, Path(raw)))
+    expected_exports = {}
+    for item in args.expected_export:
+        label, raw = item.split("=", 1)
+        values = tuple(raw.split(","))
+        if len(values) != 3 or label in expected_exports:
+            raise ValueError("invalid or duplicate expected export identity")
+        expected_exports[label] = values
+    if expected_exports and set(expected_exports) != {label for label, _ in exports}:
+        raise ValueError("expected export identity labels differ from export labels")
     base_layout, base_layout_facts = layout(args.base)
     layouts, layout_facts, receipts = [], {}, {}
     for label, root in exports:
         current, facts = layout(root)
         layouts.append((label, current))
         layout_facts[label] = facts
-        receipts[label] = validate_export(root, args.base, label)
+        receipts[label] = validate_export(root, args.base, label, expected_exports.get(label))
     drift = audit_drift(base_layout, layouts)
     interpretation = interpret_drift(drift, [label for label, _ in layouts])
     result = {
