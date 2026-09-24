@@ -16,6 +16,24 @@ from scripts import finalize_qwen38_skyrl_prod11_fast3_launch as finalizer
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _mock_reviewed_merge_identities(monkeypatch: pytest.MonkeyPatch) -> None:
+    gate = json.loads((ROOT / finalizer.LAUNCH_GATE_PATH).read_bytes())
+    by_commit = {item["commit"]: item for item in gate["merge_evidence"].values()}
+    monkeypatch.setattr(
+        finalizer, "_merge_identity", lambda commit: copy.deepcopy(by_commit[commit])
+    )
+
+    def reviewed_ancestry(command, *, cwd, check):
+        assert command[:3] == ["git", "merge-base", "--is-ancestor"]
+        assert command[3] in by_commit
+        assert command[4] == "HEAD"
+        assert cwd == finalizer.LAUNCHER_ROOT
+        assert check is False
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(finalizer.subprocess, "run", reviewed_ancestry)
+
+
 def _at(value: datetime) -> str:
     return value.strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -293,7 +311,10 @@ def test_fast3_retry_policy_is_bounded_and_never_retries_an_episode(tmp_path: Pa
         finalizer._retry_policy(path)
 
 
-def test_fast3_append_only_launch_gate_closes_only_merged_blockers() -> None:
+def test_fast3_append_only_launch_gate_closes_only_merged_blockers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _mock_reviewed_merge_identities(monkeypatch)
     parent_path = ROOT / "configs/qualification/qwen38-rl-reward-canary-port-v9.json"
     gate_path = ROOT / finalizer.LAUNCH_GATE_PATH
     parent = json.loads(parent_path.read_bytes())
@@ -351,7 +372,9 @@ def test_fast3_source_head_is_exact_accepted_merge_before_git_access() -> None:
 
 def test_fast3_append_only_launch_gate_rejects_plan_or_authority_drift(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _mock_reviewed_merge_identities(monkeypatch)
     parent = json.loads(
         (ROOT / "configs/qualification/qwen38-rl-reward-canary-port-v9.json").read_bytes()
     )
