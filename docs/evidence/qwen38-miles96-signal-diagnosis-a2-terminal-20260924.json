@@ -1,11 +1,11 @@
 {
   "classification": "signal-contract-not-qualified",
   "cleanup": {
-    "config_map_absent": false,
-    "job_absent": false,
-    "pod_absent": false,
-    "uid_preconditioned_cleanup_at": null,
-    "workload_absent": false
+    "config_map_absent": true,
+    "job_absent": true,
+    "pod_absent": true,
+    "uid_preconditioned_cleanup_at": "2026-09-24T06:38:53Z",
+    "workload_absent": true
   },
   "config_map": {
     "name": "chris-q38-m96-signal-a2-diagnosis-a2-code",
@@ -44,7 +44,7 @@
   },
   "reward_variation_conclusion": "not_established",
   "schema": "cyber_qwen38_miles96_signal_diagnosis_terminal_v2",
-  "sha256": "sha256:0346b573f145cd09eef483bd6a40767be0a1851b70eacf28e892050a25957663",
+  "sha256": "sha256:d21d3b5c88ed5fc928595b45ad81883802663a0d84846bda95485f017c2219e8",
   "workload": {
     "name": "job-chris-q38-m96-signal-a2-diagnosis-a2-bc023",
     "uid": "bf2ad9ae-239d-40b1-ac4c-020acc15b29e"
