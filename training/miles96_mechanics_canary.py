@@ -45,15 +45,15 @@ PREPARED_MODEL_SCHEMA = "cyber_qwen38_miles96_prepared_model_inventory_v1"
 TASK_SIGNAL_EVIDENCE_SCHEMA = "cyber_qwen38_miles96_task_signal_evidence_v1"
 IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:"
-    "ee273bee346ad8e1cea63d18026b2bc5703bbd2e14d3c65efbbd74f19854874a"
+    "5bdf98161971959295b24efa54d0ad91445e6d6e409d9f1384cb886992dbb064"
 )
-# This is the source commit used to build the pinned 0.10.9 image.  The later
-# 0.10.10 source exists in Theseus, but its changelog explicitly says that no
-# image was built.  Never claim 0.10.10 for the 0.10.9 image below.
-THESEUS_COMMIT = "224d6b81cb698f4785fb16123314583b981493f3"
+# The reviewed source integration and the exact source commit used to build
+# the immutable image are both recorded: a merge commit is not a build pin.
+THESEUS_COMMIT = "68da13aa9c226d1bfed0ad59b990b99321d44239"
+IMAGE_SOURCE_COMMIT = "d23116f018cb9213f0a3ee6c228d213abcd85d80"
 MILES_COMMIT = "9e178ca16839b0600155f3927f57ce0670b8f453"
-FTI_VERSION = "0.10.9"
-RUN_FLEET_SHA256 = "340be7e1d1976fdd5f42f1ed934c07ae8aa98cb520d9af21bda2933ddd146faa"
+FTI_VERSION = "0.10.27"
+RUN_FLEET_SHA256 = "ae82e3f03d14c81e52009bc2cbff857d9e844baf07a9d82d8266608cb8cba2b1"
 FTI_COMMON_SHA256 = "0a6801afe0cea5e4c0b6a53ffe07c083cc7e3691cf231dff460889e79c1626b0"
 FTI_CLIENT_RECORDING_SHA256 = "41292533ec356a51a722c2c98f92bdfd98c56fdce429537a816957bf7172e9dc"
 MILES_INFERENCE_ROLLOUT_SHA256 = "96e3cba12ae033527e823ed3dd8cb43c31d244775756ecf0bab4ad81eb4f06a4"
@@ -199,6 +199,7 @@ def build_plan(
             "recipe": RECIPE,
             "image": IMAGE,
             "theseus_commit": THESEUS_COMMIT,
+            "image_source_commit": IMAGE_SOURCE_COMMIT,
             "miles_commit": MILES_COMMIT,
             "fti_version": FTI_VERSION,
             "run_fleet_sha256": RUN_FLEET_SHA256,
@@ -320,6 +321,7 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "recipe": RECIPE,
         "image": IMAGE,
         "theseus_commit": THESEUS_COMMIT,
+        "image_source_commit": IMAGE_SOURCE_COMMIT,
         "miles_commit": MILES_COMMIT,
         "fti_version": FTI_VERSION,
         "run_fleet_sha256": RUN_FLEET_SHA256,
@@ -628,8 +630,8 @@ def native_arguments(plan: dict[str, Any]) -> list[str]:
     extra = " ".join(
         (
             "--num-rollout 1",
-            # FTI 0.10.9 defaults to two candidate prompt groups.  This
-            # mechanics canary deliberately collects exactly one group of
+            # The maintained recipe deliberately over-samples at normal
+            # scale.  This mechanics canary collects exactly one group of
             # eight episodes, so bind the Miles override explicitly.
             "--over-sampling-batch-size 1",
             "--save-interval 1",

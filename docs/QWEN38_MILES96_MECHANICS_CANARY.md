@@ -17,16 +17,18 @@ Miles adapter:
 
 | Item | Bound value |
 | --- | --- |
-| Theseus source used to build the image | `224d6b81cb698f4785fb16123314583b981493f3` |
-| Trainer image | `miles-trainer@sha256:ee273bee346ad8e1cea63d18026b2bc5703bbd2e14d3c65efbbd74f19854874a` |
-| FTI version | `0.10.9` |
+| Reviewed Theseus integration | `68da13aa9c226d1bfed0ad59b990b99321d44239` |
+| Exact image build source | `d23116f018cb9213f0a3ee6c228d213abcd85d80` |
+| Trainer image | `miles-trainer@sha256:5bdf98161971959295b24efa54d0ad91445e6d6e409d9f1384cb886992dbb064` |
+| FTI version | `0.10.27` |
 | Miles source | `9e178ca16839b0600155f3927f57ce0670b8f453` |
 | Recipe | `qwen3.8-27b`: one node, eight GPUs, TP4/CP2, 96K context |
 | Historical mechanics reference | `fleet-ai/dataminer_v2@10afa8d064bb3dd1c11c50768590e432dfa69097`, recipe `v004` |
 
-The image above is the built 0.10.9 image.  Theseus 0.10.10 exists as source,
-but its own changelog says no image was built for that version, so this canary
-must not claim 0.10.10.  The runtime checks the installed FTI version and the
+The image above is the built 0.10.27 image.  The plan records both the reviewed
+integration commit and the exact earlier commit used to build the image; it
+does not pretend that the merge commit produced the image.  The runtime checks
+the installed FTI version and the
 exact SHA-256 of `run_fleet.py`, the V1 task-session implementation, and the V1
 rollout implementation before it writes a training row or starts the trainer.
 It also checks the exact Miles inference-rollout, HTTP-client, and Megatron
@@ -60,8 +62,8 @@ distributed run with the primary's policy alone.
 
 - One eight-GPU node at `c1` priority.
 - One task prompt with eight independent samples.  The launcher explicitly
-  sets Miles's over-sampling batch size to one; 0.10.9 otherwise asks for two
-  candidate prompt groups and can run as many as sixteen episodes in one
+  sets Miles's over-sampling batch size to one; the maintained recipe otherwise
+  over-samples candidate prompt groups and can run more than eight episodes in one
   candidate wave.  A later wave is allowed only when the maintained filter
   rejects the first group for lacking valid reward variation.
 - A group is eligible for an update only when none of its attempts aborted and
