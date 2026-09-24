@@ -35,6 +35,14 @@ PROXY_SOURCE = Path(__file__).with_name("fixed_proxy.py")
 if not PROXY_SOURCE.is_file():
     PROXY_SOURCE = Path(__file__).parents[1] / "fleet/fixed_proxy.py"
 PROXY_ENTRYPOINT = Path(__file__).with_name("external_proxy.py")
+REAL_CREDENTIAL_ENVIRONMENT_NAMES = frozenset(
+    {
+        *rt.MODEL_CREDENTIALS,
+        "APOLLO_FLEET_API_KEY",
+        "TENSORLAKE_API_KEY",
+    }
+)
+LOCAL_PROXY_PLACEHOLDER = "local-proxy-only"
 
 
 class ScoredAdapterError(RuntimeError):
@@ -154,6 +162,8 @@ def _proxy(sandbox: rt.Sandbox, *, credential: str, model: str, requests: int, o
 def qualify_credential_boundary(protocol: dict[str, Any]) -> dict[str, Any]:
     """Prove on Linux that only the fixed proxy receives the provider secret."""
     rt.require_docker_linux_amd64()
+    if any(os.environ.get(name) for name in REAL_CREDENTIAL_ENVIRONMENT_NAMES):
+        raise ScoredAdapterError("credential_boundary_ambient_credential_present")
     harnesses = {
         protocol["benchmarks"][name]["harness"]["image_id"]
         for name in (nyu_adapter.BENCHMARK, cy_source.BENCHMARK)
@@ -214,6 +224,13 @@ def qualify_credential_boundary(protocol: dict[str, Any]) -> dict[str, Any]:
             "challenge",
             "--network",
             network,
+            "--read-only",
+            "--cap-drop",
+            "ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--tmpfs",
+            "/tmp:rw,noexec,nosuid,size=16m",
             "--entrypoint",
             "python",
             PROXY_IMAGE,
@@ -228,12 +245,26 @@ def qualify_credential_boundary(protocol: dict[str, Any]) -> dict[str, Any]:
         proxy_env = rows[proxy]["Config"].get("Env") or []
         agent_env = rows[agent]["Config"].get("Env") or []
         challenge_env = rows[challenge]["Config"].get("Env") or []
+        agent_credentials = {
+            name: value
+            for item in agent_env
+            for name, separator, value in (item.partition("="),)
+            if separator and name in REAL_CREDENTIAL_ENVIRONMENT_NAMES
+        }
+        challenge_credentials = {
+            name: value
+            for item in challenge_env
+            for name, separator, value in (item.partition("="),)
+            if separator and name in REAL_CREDENTIAL_ENVIRONMENT_NAMES
+        }
         if (
             set(rows[proxy]["NetworkSettings"]["Networks"]) != {"bridge", network}
             or set(rows[challenge]["NetworkSettings"]["Networks"]) != {network}
             or not any(item == f"FIXED_AUTH_VALUE=Bearer {sentinel}" for item in proxy_env)
-            or any(sentinel in item or item.startswith("FLEET_API_KEY=") for item in agent_env)
-            or any(sentinel in item or item.startswith("FLEET_API_KEY=") for item in challenge_env)
+            or agent_credentials != {"OPENAI_API_KEY": LOCAL_PROXY_PLACEHOLDER}
+            or challenge_credentials
+            or any(sentinel in item for item in agent_env)
+            or any(sentinel in item for item in challenge_env)
             or any(
                 mount.get("Destination") == "/var/run/docker.sock"
                 for row in rows.values()
@@ -265,10 +296,19 @@ def qualify_credential_boundary(protocol: dict[str, Any]) -> dict[str, Any]:
         "harness_image_id": harness,
         "provider_calls": 0,
         "model_requests": 0,
+        "scoring_calls": 0,
+        "credential_environment_names_checked": sorted(REAL_CREDENTIAL_ENVIRONMENT_NAMES),
+        "ambient_real_credential_present": False,
         "provider_credential_location": "fixed_proxy_only",
-        "agent_provider_credential_present": False,
-        "challenge_provider_credential_present": False,
+        "fixed_proxy_sentinel_occurrences": 1,
+        "agent_sentinel_occurrences": 0,
+        "challenge_sentinel_occurrences": 0,
+        "agent_real_model_or_scoring_credential_present": False,
+        "challenge_real_model_or_scoring_credential_present": False,
+        "agent_local_proxy_placeholder_present": True,
+        "tensorlake_management_credential_forwarded": False,
         "agent_docker_socket_present": False,
+        "challenge_docker_socket_present": False,
         "cleanup_verified": True,
         "contains_credentials_prompts_flags_solutions_traces_or_scores": False,
     }
