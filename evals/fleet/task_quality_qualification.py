@@ -41,6 +41,10 @@ ATTEMPTED_CATALOG_SCHEMA = "cyber_task_quality_qualification_attempted_catalog_v
 AGGREGATE_SCHEMA = "cyber_task_quality_qualification_aggregate_receipt_v1"
 CLEANUP_RESOLUTION_SCHEMA = "cyber_task_quality_cleanup_resolution_v1"
 CLEANUP_AGGREGATE_SCHEMA = "cyber_task_quality_cleanup_aggregate_v1"
+PROVISION_RESPONSE_SCHEMA = "cyber_task_quality_provision_response_v1"
+INSTANCE_BINDING_SCHEMA = "cyber_task_quality_instance_binding_v1"
+PROVISION_RECEIPT_SCHEMA = "cyber_task_quality_provision_receipt_v1"
+LINKED_PROVISION_RECEIPT_SCHEMA = "cyber_task_quality_provision_receipt_v2"
 PACKAGED_SOURCE_SCHEMA = "cyber_task_quality_packaged_source_attestation_v1"
 INVENTORY_SCHEMA = "fleet_current_production_blackbox_inventory_v1"
 COVERAGE_SCHEMA = "fleet_current_blackbox_training_coverage_v1"
@@ -229,24 +233,45 @@ def sealed(value: dict[str, Any]) -> dict[str, Any]:
     return {**body, "sha256": digest(body)}
 
 
-def _write_once(path: Path, value: dict[str, Any]) -> None:
+def _fsync_directory(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _mkdir_once_durable(path: Path) -> None:
+    path.mkdir(mode=0o700)
+    _fsync_directory(path)
+    _fsync_directory(path.parent)
+
+
+def _write_once_atomic(path: Path, value: dict[str, Any]) -> None:
+    """Publish complete private bytes atomically without replacing an existing receipt."""
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    temporary = path.parent / f".{path.name}.tmp-{os.getpid()}-{uuid.uuid4().hex}"
     payload = json.dumps(value, sort_keys=True, indent=2).encode() + b"\n"
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
         with os.fdopen(descriptor, "wb") as stream:
             descriptor = -1
             stream.write(payload)
             stream.flush()
             os.fsync(stream.fileno())
-    finally:
+        os.link(temporary, path)
+        _fsync_directory(path.parent)
+        temporary.unlink()
+        _fsync_directory(path.parent)
+    except BaseException:
         if descriptor >= 0:
             os.close(descriptor)
-    directory = os.open(path.parent, os.O_RDONLY)
-    try:
-        os.fsync(directory)
-    finally:
-        os.close(directory)
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def _write_once(path: Path, value: dict[str, Any]) -> None:
+    _write_once_atomic(path, value)
 
 
 def _read(path: Path, label: str) -> dict[str, Any]:
@@ -1083,10 +1108,347 @@ def _failure(error: BaseException, *, phase: str) -> dict[str, Any]:
     return value
 
 
+def _provision_response(
+    binding: dict[str, Any],
+    config: dict[str, Any],
+    *,
+    provision_intent: dict[str, Any],
+    request_id: str,
+    instance_id: str,
+    evidence_run_id: str,
+) -> dict[str, Any]:
+    return sealed(
+        {
+            "schema": PROVISION_RESPONSE_SCHEMA,
+            "binding_sha256": binding["binding_sha256"],
+            "provision_intent_sha256": provision_intent["sha256"],
+            "request_id": request_id,
+            "run_id": config["run_id"],
+            "instance_id": instance_id,
+            "evidence_run_id": evidence_run_id,
+            "task_key": binding["task_key"],
+            "task_version_id": binding["task_version_id"],
+            "request_body_sha256": provision_intent["request_body_sha256"],
+            "response_binding_verified": True,
+        }
+    )
+
+
+def _load_provision_response(
+    path: Path,
+    *,
+    binding: dict[str, Any],
+    config: dict[str, Any],
+    provision_intent: dict[str, Any],
+    request_id: str,
+) -> dict[str, Any]:
+    receipt = _read(path, path.name)
+    _sealed(receipt, PROVISION_RESPONSE_SCHEMA, "provision response")
+    try:
+        self_hosted._instance_identifier(receipt.get("instance_id"))  # noqa: SLF001
+    except RuntimeError as error:
+        raise QualificationError("provision response has an invalid instance ID") from error
+    expected = {
+        "schema",
+        "binding_sha256",
+        "provision_intent_sha256",
+        "request_id",
+        "run_id",
+        "instance_id",
+        "evidence_run_id",
+        "task_key",
+        "task_version_id",
+        "request_body_sha256",
+        "response_binding_verified",
+        "sha256",
+    }
+    if (
+        set(receipt) != expected
+        or receipt.get("binding_sha256") != binding["binding_sha256"]
+        or receipt.get("provision_intent_sha256") != provision_intent["sha256"]
+        or receipt.get("request_id") != request_id
+        or receipt.get("run_id") != config["run_id"]
+        or receipt.get("task_key") != binding["task_key"]
+        or receipt.get("task_version_id") != binding["task_version_id"]
+        or receipt.get("request_body_sha256") != provision_intent["request_body_sha256"]
+        or receipt.get("response_binding_verified") is not True
+        or UUID.fullmatch(str(receipt.get("evidence_run_id"))) is None
+    ):
+        raise QualificationError("provision response differs from the cleanup target")
+    return receipt
+
+
+def _validate_running_instance(
+    instance: dict[str, Any], *, binding: dict[str, Any], instance_id: str
+) -> None:
+    if (
+        instance.get("instance_id") != instance_id
+        or instance.get("team_id") != EXPECTED_TEAM_ID
+        or instance.get("env_key") != binding["environment"]["id"]
+        or instance.get("version") != binding["environment"]["version"]
+        or instance.get("status") != "running"
+        or instance.get("terminated_at") is not None
+        or not isinstance((instance.get("urls") or {}).get("root"), str)
+    ):
+        raise QualificationError("provisioned environment differs from the exact task binding")
+
+
+def _instance_binding(
+    binding: dict[str, Any],
+    config: dict[str, Any],
+    *,
+    provision_response: dict[str, Any],
+) -> dict[str, Any]:
+    return sealed(
+        {
+            "schema": INSTANCE_BINDING_SCHEMA,
+            "binding_sha256": binding["binding_sha256"],
+            "provision_response_sha256": provision_response["sha256"],
+            "request_id": provision_response["request_id"],
+            "run_id": config["run_id"],
+            "instance_id": provision_response["instance_id"],
+            "evidence_run_id": provision_response["evidence_run_id"],
+            "task_key": binding["task_key"],
+            "task_version_id": binding["task_version_id"],
+            "fleet_team_id": EXPECTED_TEAM_ID,
+            "env_key": binding["environment"]["id"],
+            "environment_version": binding["environment"]["version"],
+            "status": "running",
+            "terminated": False,
+            "root_url_present": True,
+            "cleanup_only": True,
+            "create_claim_verified": False,
+        }
+    )
+
+
+def _load_instance_binding(
+    path: Path,
+    *,
+    binding: dict[str, Any],
+    config: dict[str, Any],
+    provision_response: dict[str, Any],
+    request_id: str,
+) -> dict[str, Any]:
+    receipt = _read(path, path.name)
+    _sealed(receipt, INSTANCE_BINDING_SCHEMA, "instance binding")
+    try:
+        self_hosted._instance_identifier(receipt.get("instance_id"))  # noqa: SLF001
+    except RuntimeError as error:
+        raise QualificationError("instance binding has an invalid instance ID") from error
+    expected = {
+        "schema",
+        "binding_sha256",
+        "provision_response_sha256",
+        "request_id",
+        "run_id",
+        "instance_id",
+        "evidence_run_id",
+        "task_key",
+        "task_version_id",
+        "fleet_team_id",
+        "env_key",
+        "environment_version",
+        "status",
+        "terminated",
+        "root_url_present",
+        "cleanup_only",
+        "create_claim_verified",
+        "sha256",
+    }
+    if (
+        set(receipt) != expected
+        or receipt.get("binding_sha256") != binding["binding_sha256"]
+        or receipt.get("provision_response_sha256") != provision_response["sha256"]
+        or receipt.get("request_id") != request_id
+        or receipt.get("run_id") != config["run_id"]
+        or receipt.get("instance_id") != provision_response["instance_id"]
+        or receipt.get("evidence_run_id") != provision_response["evidence_run_id"]
+        or receipt.get("task_key") != binding["task_key"]
+        or receipt.get("task_version_id") != binding["task_version_id"]
+        or receipt.get("fleet_team_id") != EXPECTED_TEAM_ID
+        or receipt.get("env_key") != binding["environment"]["id"]
+        or receipt.get("environment_version") != binding["environment"]["version"]
+        or receipt.get("status") != "running"
+        or receipt.get("terminated") is not False
+        or receipt.get("root_url_present") is not True
+        or receipt.get("cleanup_only") is not True
+        or receipt.get("create_claim_verified") is not False
+    ):
+        raise QualificationError("instance binding differs from the cleanup target")
+    return receipt
+
+
+def _load_provision_receipt(
+    path: Path,
+    *,
+    binding: dict[str, Any],
+    request_id: str,
+    provision_response: dict[str, Any] | None,
+    instance_binding: dict[str, Any] | None,
+) -> dict[str, Any]:
+    receipt = _read(path, path.name)
+    common = {
+        "schema",
+        "request_id",
+        "instance_id",
+        "evidence_run_id",
+        "task_version_id",
+        "sha256",
+    }
+    if receipt.get("schema") == PROVISION_RECEIPT_SCHEMA:
+        _sealed(receipt, PROVISION_RECEIPT_SCHEMA, "legacy provision receipt")
+        if set(receipt) != common or provision_response is not None or instance_binding is not None:
+            raise QualificationError("legacy provision receipt has linked staged evidence")
+    elif receipt.get("schema") == LINKED_PROVISION_RECEIPT_SCHEMA:
+        _sealed(receipt, LINKED_PROVISION_RECEIPT_SCHEMA, "linked provision receipt")
+        if (
+            set(receipt) != common | {"provision_response_sha256", "instance_binding_sha256"}
+            or provision_response is None
+            or instance_binding is None
+            or receipt.get("provision_response_sha256") != provision_response["sha256"]
+            or receipt.get("instance_binding_sha256") != instance_binding["sha256"]
+            or receipt.get("instance_id") != provision_response["instance_id"]
+            or receipt.get("instance_id") != instance_binding["instance_id"]
+            or receipt.get("evidence_run_id") != provision_response["evidence_run_id"]
+        ):
+            raise QualificationError("linked provision receipt is incomplete or inconsistent")
+    else:
+        raise QualificationError("provision receipt has an unsupported schema")
+    if (
+        receipt.get("task_version_id") != binding["task_version_id"]
+        or receipt.get("request_id") != request_id
+    ):
+        raise QualificationError("provision receipt request/task binding changed")
+    self_hosted._instance_identifier(receipt.get("instance_id"))  # noqa: SLF001
+    if UUID.fullmatch(str(receipt.get("evidence_run_id"))) is None:
+        raise QualificationError("provision receipt has an invalid evidence run ID")
+    return receipt
+
+
+def _load_local_provision_evidence(
+    directory: Path,
+    *,
+    binding: dict[str, Any],
+    config: dict[str, Any],
+    provision_intent: dict[str, Any],
+    request_id: str,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
+    provision_response_path = directory / "PROVISION_RESPONSE.json"
+    instance_binding_path = directory / "INSTANCE_BINDING.json"
+    provision_receipt_path = directory / "PROVISION_RECEIPT.json"
+    provision_response = (
+        _load_provision_response(
+            provision_response_path,
+            binding=binding,
+            config=config,
+            provision_intent=provision_intent,
+            request_id=request_id,
+        )
+        if provision_response_path.is_file()
+        else None
+    )
+    if instance_binding_path.is_file() and provision_response is None:
+        raise QualificationError("instance binding has no exact provision response")
+    instance_binding = (
+        _load_instance_binding(
+            instance_binding_path,
+            binding=binding,
+            config=config,
+            provision_response=provision_response,
+            request_id=request_id,
+        )
+        if instance_binding_path.is_file() and provision_response is not None
+        else None
+    )
+    provision_receipt = (
+        _load_provision_receipt(
+            provision_receipt_path,
+            binding=binding,
+            request_id=request_id,
+            provision_response=provision_response,
+            instance_binding=instance_binding,
+        )
+        if provision_receipt_path.is_file()
+        else None
+    )
+    return provision_response, instance_binding, provision_receipt
+
+
+def _load_local_cleanup_control_instance(
+    directory: Path,
+    *,
+    binding: dict[str, Any],
+    config: dict[str, Any],
+    request_id: str,
+) -> tuple[str | None, str | None]:
+    instance_ids: set[str] = set()
+    recovery_instance_id: str | None = None
+    for name, schema in (
+        ("CLEANUP_INTENT.json", "cyber_task_quality_cleanup_intent_v1"),
+        ("CLEANUP_RECEIPT.json", "cyber_task_quality_cleanup_receipt_v1"),
+        ("CLEANUP_RECOVERY_INTENT.json", "cyber_task_quality_cleanup_recovery_intent_v1"),
+    ):
+        path = directory / name
+        if not path.is_file():
+            continue
+        receipt = _read(path, name)
+        _sealed(receipt, schema, name)
+        instance_id = self_hosted._instance_identifier(receipt.get("instance_id"))  # noqa: SLF001
+        if name == "CLEANUP_INTENT.json":
+            if (
+                set(receipt) != {"schema", "instance_id", "delete_attempts", "sha256"}
+                or receipt.get("delete_attempts") != 1
+            ):
+                raise QualificationError("cleanup intent binding is invalid")
+        elif name == "CLEANUP_RECEIPT.json":
+            if (
+                set(receipt)
+                != {
+                    "schema",
+                    "instance_id",
+                    "terminated",
+                    "terminated_at",
+                    "sha256",
+                }
+                or receipt.get("terminated") is not True
+                or not isinstance(receipt.get("terminated_at"), str)
+                or not receipt["terminated_at"]
+            ):
+                raise QualificationError("initial cleanup receipt binding is invalid")
+        elif (
+            set(receipt) != {"schema", "binding_sha256", "request_id", "instance_id", "sha256"}
+            or receipt.get("binding_sha256") != binding["binding_sha256"]
+            or receipt.get("request_id") != request_id
+        ):
+            raise QualificationError("cleanup recovery intent binding is invalid")
+        else:
+            recovery_instance_id = instance_id
+        instance_ids.add(instance_id)
+    cancellation_path = directory / "CREATE_CLAIM_CANCELLATION_INTENT.json"
+    if cancellation_path.is_file():
+        cancellation = _read(cancellation_path, cancellation_path.name)
+        _sealed(
+            cancellation,
+            "cyber_task_quality_create_claim_cancellation_intent_v1",
+            "create claim cancellation intent",
+        )
+        if (
+            set(cancellation) != {"schema", "binding_sha256", "request_id", "run_id", "sha256"}
+            or cancellation.get("binding_sha256") != binding["binding_sha256"]
+            or cancellation.get("request_id") != request_id
+            or cancellation.get("run_id") != config["run_id"]
+        ):
+            raise QualificationError("create claim cancellation intent binding is invalid")
+    if len(instance_ids) > 1:
+        raise QualificationError("cleanup control receipts bind different instances")
+    return next(iter(instance_ids), None), recovery_instance_id
+
+
 def qualify_one(
     binding: dict[str, Any], *, wave_id: str, directory: Path, api_key: str
 ) -> dict[str, Any]:
-    directory.mkdir(mode=0o700)
+    _mkdir_once_durable(directory)
     config = _config(binding, wave_id)
     _write_once(
         directory / "CELL_INTENT.json",
@@ -1134,17 +1496,18 @@ def qualify_one(
 
         phase = "provisioning"
         request_id = self_hosted.provisioning_request_id(config)
+        provision_intent = sealed(
+            {
+                "schema": "cyber_task_quality_provision_intent_v1",
+                "run_id": config["run_id"],
+                "task_version_id": binding["task_version_id"],
+                "request_id": request_id,
+                "request_body_sha256": digest({}),
+            }
+        )
         _write_once(
             directory / "PROVISION_INTENT.json",
-            sealed(
-                {
-                    "schema": "cyber_task_quality_provision_intent_v1",
-                    "run_id": config["run_id"],
-                    "task_version_id": binding["task_version_id"],
-                    "request_id": request_id,
-                    "request_body_sha256": digest({}),
-                }
-            ),
+            provision_intent,
         )
         unbound_mutation = True
         rollout_instance = self_hosted._request(  # noqa: SLF001
@@ -1157,42 +1520,63 @@ def qualify_one(
         validated_instance_id, evidence_run_id = self_hosted.validate_rollout_instance_response(
             config, rollout_instance
         )
+        provision_response = _provision_response(
+            binding,
+            config,
+            provision_intent=provision_intent,
+            request_id=request_id,
+            instance_id=validated_instance_id,
+            evidence_run_id=evidence_run_id,
+        )
+        _write_once_atomic(directory / "PROVISION_RESPONSE.json", provision_response)
         unbound_mutation = False
         instance = self_hosted._request(  # noqa: SLF001
             client, "GET", f"/v1/env/instances/{validated_instance_id}"
         )
-        if (
-            instance.get("instance_id") != validated_instance_id
-            or instance.get("team_id") != EXPECTED_TEAM_ID
-            or instance.get("env_key") != binding["environment"]["id"]
-            or instance.get("version") != binding["environment"]["version"]
-            or instance.get("status") != "running"
-            or instance.get("terminated_at") is not None
-            or not isinstance((instance.get("urls") or {}).get("root"), str)
-        ):
-            raise QualificationError("provisioned environment differs from the exact task binding")
-        create_claim = _claim(client, request_id=request_id, config=config)
+        _validate_running_instance(instance, binding=binding, instance_id=validated_instance_id)
+        instance_binding = _instance_binding(
+            binding,
+            config,
+            provision_response=provision_response,
+        )
+        _write_once_atomic(
+            directory / "INSTANCE_BINDING.json",
+            instance_binding,
+        )
+        instance_id = validated_instance_id
+        evidence["environment_started"] = True
+        try:
+            create_claim = _claim(client, request_id=request_id, config=config)
+        except self_hosted.FleetRequestError as error:
+            if error.status_code != 404:
+                instance_id = None
+            raise
+        except BaseException:
+            instance_id = None
+            raise
         if (
             create_claim.get("state") != "materialized"
             or create_claim.get("instance_id") != validated_instance_id
         ):
+            instance_id = None
             raise QualificationError("provisioned instance differs from its exact create claim")
-        # Inline cleanup is authorized only after both the response and the
-        # live instance/readback claim prove this exact Fleet-owned request.
-        instance_id = validated_instance_id
-        _write_once(
+        # Probe/scoring work remains blocked until the create claim matches.
+        # Cleanup was separately authorized by the exact response/readback
+        # chain before this claim lookup.
+        _write_once_atomic(
             directory / "PROVISION_RECEIPT.json",
             sealed(
                 {
-                    "schema": "cyber_task_quality_provision_receipt_v1",
+                    "schema": LINKED_PROVISION_RECEIPT_SCHEMA,
                     "request_id": request_id,
                     "instance_id": instance_id,
                     "evidence_run_id": evidence_run_id,
                     "task_version_id": binding["task_version_id"],
+                    "provision_response_sha256": provision_response["sha256"],
+                    "instance_binding_sha256": instance_binding["sha256"],
                 }
             ),
         )
-        evidence["environment_started"] = True
 
         phase = "tool_probe"
         token = self_hosted._request(client, "GET", "/v1/runner-auth/token")  # noqa: SLF001
@@ -1308,7 +1692,7 @@ def qualify_one(
         phase = "cleanup"
         if instance_id is not None:
             try:
-                _write_once(
+                _write_once_atomic(
                     directory / "CLEANUP_INTENT.json",
                     sealed(
                         {
@@ -1327,7 +1711,7 @@ def qualify_one(
                 ):
                     raise QualificationError("instance delete returned no termination evidence")
                 cleanup_complete = True
-                _write_once(
+                _write_once_atomic(
                     directory / "CLEANUP_RECEIPT.json",
                     sealed(
                         {
@@ -1407,7 +1791,7 @@ def execute_plan(plan: dict[str, Any], root: Path, *, api_key: str) -> dict[str,
     )
     _write_once(root / "RUN_INTENT.json", intent)
     cells_root = root / "cells"
-    cells_root.mkdir(mode=0o700)
+    _mkdir_once_durable(cells_root)
     with _client(api_key) as client:
         _account(client)
     terminals: list[tuple[dict[str, Any], dict[str, Any]]] = []
@@ -1559,7 +1943,7 @@ def _intent_once_or_exact(path: Path, body: dict[str, Any]) -> dict[str, Any]:
         if observed != expected:
             raise QualificationError(f"{path.name} differs from the exact cleanup target")
         return observed
-    _write_once(path, expected)
+    _write_once_atomic(path, expected)
     return expected
 
 
@@ -1600,6 +1984,24 @@ def _claim(client: httpx.Client, *, request_id: str, config: dict[str, Any]) -> 
     return value
 
 
+def _confirm_bound_cleanup_claim(
+    client: httpx.Client,
+    *,
+    request_id: str,
+    config: dict[str, Any],
+    instance_id: str,
+) -> str:
+    try:
+        claim = _claim(client, request_id=request_id, config=config)
+    except self_hosted.FleetRequestError as error:
+        if error.status_code == 404:
+            return "absent"
+        raise
+    if claim.get("state") != "materialized" or claim.get("instance_id") != instance_id:
+        raise QualificationError("create-request claim contradicts the exact instance binding")
+    return "materialized_same_instance"
+
+
 def _cleanup_resolution(
     directory: Path,
     *,
@@ -1625,7 +2027,72 @@ def _cleanup_resolution(
         if observed != receipt:
             raise QualificationError("cleanup resolution differs from the exact target")
         return observed
-    _write_once(path, receipt)
+    _write_once_atomic(path, receipt)
+    return receipt
+
+
+def _load_cleanup_resolution(
+    path: Path,
+    *,
+    binding: dict[str, Any],
+    request_id: str | None,
+) -> dict[str, Any]:
+    receipt = _read(path, path.name)
+    _sealed(receipt, CLEANUP_RESOLUTION_SCHEMA, "cleanup resolution")
+    fields = {
+        "schema",
+        "binding_sha256",
+        "request_id",
+        "instance_id",
+        "resolution",
+        "instance_live_after",
+        "resumable_exact_target_only",
+        "sha256",
+    }
+    historical_fields = fields | {"independent_absence_evidence_sha256"}
+    if (
+        frozenset(receipt) not in {frozenset(fields), frozenset(historical_fields)}
+        or receipt.get("binding_sha256") != binding["binding_sha256"]
+        or receipt.get("request_id") != request_id
+        or receipt.get("instance_live_after") is not False
+        or receipt.get("resumable_exact_target_only") is not True
+    ):
+        raise QualificationError("cleanup resolution differs from the exact target")
+    resolution = receipt.get("resolution")
+    instance_id = receipt.get("instance_id")
+    no_instance = {
+        "no_provision_attempt",
+        "claim_failed_without_instance",
+        "claim_cancelled_without_instance",
+        "independent_claim_absent_and_exact_run_empty",
+    }
+    with_instance = {
+        "response_bound_instance_already_absent",
+        "initial_delete_terminated",
+        "instance_already_absent",
+        "instance_already_terminated",
+        "recovery_delete_terminated",
+    }
+    if resolution in no_instance:
+        if instance_id is not None:
+            raise QualificationError("cleanup resolution unexpectedly binds an instance")
+    elif resolution in with_instance:
+        try:
+            self_hosted._instance_identifier(instance_id)  # noqa: SLF001
+        except RuntimeError as error:
+            raise QualificationError("cleanup resolution has an invalid instance ID") from error
+    else:
+        raise QualificationError("cleanup resolution has an unsupported outcome")
+    if resolution == "no_provision_attempt" and request_id is not None:
+        raise QualificationError("cleanup resolution omits a known provision request")
+    if resolution != "no_provision_attempt" and request_id is None:
+        raise QualificationError("cleanup resolution has no provision request")
+    historical_digest = receipt.get("independent_absence_evidence_sha256")
+    if resolution == "independent_claim_absent_and_exact_run_empty":
+        if set(receipt) != historical_fields or not SHA256.fullmatch(str(historical_digest)):
+            raise QualificationError("historical cleanup resolution evidence is invalid")
+    elif set(receipt) != fields:
+        raise QualificationError("cleanup resolution has unexpected historical evidence")
     return receipt
 
 
@@ -1634,15 +2101,25 @@ def cleanup_one(
 ) -> dict[str, Any]:
     """Resolve one exact create claim/instance without replaying qualification."""
     resolution_path = directory / "CLEANUP_RESOLUTION.json"
-    if resolution_path.is_file():
-        resolution = _read(resolution_path, resolution_path.name)
-        _sealed(resolution, CLEANUP_RESOLUTION_SCHEMA, "cleanup resolution")
-        if resolution.get("binding_sha256") != binding["binding_sha256"]:
-            raise QualificationError("cleanup resolution binding changed")
-        return resolution
-
     provision_intent_path = directory / "PROVISION_INTENT.json"
     if not provision_intent_path.is_file():
+        provision_dependent_artifacts = {
+            "PROVISION_RESPONSE.json",
+            "INSTANCE_BINDING.json",
+            "PROVISION_RECEIPT.json",
+            "CLEANUP_INTENT.json",
+            "CLEANUP_RECEIPT.json",
+            "CLEANUP_RECOVERY_INTENT.json",
+            "CREATE_CLAIM_CANCELLATION_INTENT.json",
+        }
+        if any((directory / name).exists() for name in provision_dependent_artifacts):
+            raise QualificationError("provision evidence has no exact provision intent")
+        if resolution_path.is_file():
+            return _load_cleanup_resolution(
+                resolution_path,
+                binding=binding,
+                request_id=None,
+            )
         return _cleanup_resolution(
             directory,
             binding=binding,
@@ -1660,26 +2137,100 @@ def cleanup_one(
         or provision_intent.get("request_id") != request_id
     ):
         raise QualificationError("provision intent differs from the cleanup target")
+    provision_response, instance_binding, provision_receipt = _load_local_provision_evidence(
+        directory,
+        binding=binding,
+        config=config,
+        provision_intent=provision_intent,
+        request_id=request_id,
+    )
+    cleanup_control_instance, cleanup_recovery_instance = _load_local_cleanup_control_instance(
+        directory,
+        binding=binding,
+        config=config,
+        request_id=request_id,
+    )
+    local_instance = provision_receipt or instance_binding or provision_response
+    expected_instances = {
+        instance_id
+        for instance_id in (
+            local_instance["instance_id"] if local_instance is not None else None,
+            cleanup_control_instance,
+        )
+        if instance_id is not None
+    }
+    if len(expected_instances) > 1:
+        raise QualificationError("provision and cleanup evidence bind different instances")
+    if resolution_path.is_file():
+        resolution = _load_cleanup_resolution(
+            resolution_path,
+            binding=binding,
+            request_id=request_id,
+        )
+        if expected_instances and resolution.get("instance_id") not in expected_instances:
+            raise QualificationError(
+                "cleanup resolution differs from the exact locally bound instance"
+            )
+        return resolution
 
     client = _client(api_key)
     try:
         _account(client)
-        provision_receipt_path = directory / "PROVISION_RECEIPT.json"
+        instance_binding_path = directory / "INSTANCE_BINDING.json"
         instance_id: str | None = None
-        if provision_receipt_path.is_file():
-            provision_receipt = _read(provision_receipt_path, provision_receipt_path.name)
-            _sealed(
-                provision_receipt,
-                "cyber_task_quality_provision_receipt_v1",
-                "provision receipt",
-            )
-            if (
-                provision_receipt.get("task_version_id") != binding["task_version_id"]
-                or provision_receipt.get("request_id") != request_id
-            ):
-                raise QualificationError("provision receipt request/task binding changed")
+        if provision_receipt is not None:
             instance_id = self_hosted._instance_identifier(  # noqa: SLF001
                 provision_receipt.get("instance_id")
+            )
+        elif instance_binding is not None:
+            instance_id = instance_binding["instance_id"]
+            _confirm_bound_cleanup_claim(
+                client,
+                request_id=request_id,
+                config=config,
+                instance_id=instance_id,
+            )
+        elif provision_response is not None:
+            instance_id = provision_response["instance_id"]
+            observed = _optional_instance(client, instance_id)
+            if observed is None:
+                claim_state = _confirm_bound_cleanup_claim(
+                    client,
+                    request_id=request_id,
+                    config=config,
+                    instance_id=instance_id,
+                )
+                if claim_state != "absent":
+                    raise QualificationError(
+                        "response-bound instance is absent but its create claim is materialized"
+                    )
+                return _cleanup_resolution(
+                    directory,
+                    binding=binding,
+                    request_id=request_id,
+                    instance_id=instance_id,
+                    resolution="response_bound_instance_already_absent",
+                )
+            _validate_running_instance(observed, binding=binding, instance_id=instance_id)
+            instance_binding = _instance_binding(
+                binding,
+                config,
+                provision_response=provision_response,
+            )
+            _write_once_atomic(instance_binding_path, instance_binding)
+            _confirm_bound_cleanup_claim(
+                client,
+                request_id=request_id,
+                config=config,
+                instance_id=instance_id,
+            )
+        elif cleanup_recovery_instance is not None:
+            instance_id = cleanup_recovery_instance
+            _confirm_bound_cleanup_claim(
+                client,
+                request_id=request_id,
+                config=config,
+                instance_id=instance_id,
             )
         else:
             claim = _claim(client, request_id=request_id, config=config)
@@ -1881,7 +2432,8 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
     root = Path(args.private_base) / (
         f"task-quality-{args.wave_id}-{plan['sha256'].removeprefix('sha256:')[:12]}"
     )
-    root.mkdir(mode=0o700, parents=True, exist_ok=False)
+    root.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _mkdir_once_durable(root)
     _write_once(root / "PLAN.json", plan)
     return {
         "schema": "cyber_task_quality_qualification_prepare_receipt_v1",

@@ -16,10 +16,6 @@ def _load(path: Path) -> dict:
     return value
 
 
-def _file_sha256(path: Path) -> str:
-    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def test_packet_is_self_digested_and_binds_exact_inputs():
     packet = _load(PACKET)
     assert packet["sha256"] == qualification.digest(
@@ -27,9 +23,10 @@ def test_packet_is_self_digested_and_binds_exact_inputs():
     )
     for binding in packet["inputs"].values():
         path = ROOT / binding["path"]
-        assert _file_sha256(path) == binding["file_sha256"]
+        source = path.read_bytes()
+        assert "sha256:" + hashlib.sha256(source).hexdigest() == binding["file_sha256"]
         if "logical_sha256" in binding:
-            assert _load(path)["sha256"] == binding["logical_sha256"]
+            assert json.loads(source)["sha256"] == binding["logical_sha256"]
 
 
 def test_packet_candidate_is_the_exact_deterministic_lineage_join():

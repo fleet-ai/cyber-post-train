@@ -198,8 +198,15 @@ def _cell_inputs(
         or provision_intent.get("request_id") != request_id
     ):
         raise RecoveryError("cell evidence differs from its frozen binding")
-    if (directory / "PROVISION_RECEIPT.json").exists():
-        raise RecoveryError("cells with a provision receipt require the normal cleanup path")
+    if any(
+        (directory / artifact).exists()
+        for artifact in (
+            "PROVISION_RESPONSE.json",
+            "INSTANCE_BINDING.json",
+            "PROVISION_RECEIPT.json",
+        )
+    ):
+        raise RecoveryError("cells with provision evidence require the normal cleanup path")
     return directory, config, request_id, terminal["sha256"]
 
 
@@ -279,7 +286,7 @@ def _write_cell_resolution(
     evidence_path = directory / RECOVERY_EVIDENCE_FILE
     existing_evidence = _validated_existing_evidence(evidence_path, evidence)
     if existing_evidence is None:
-        qualification._write_once(evidence_path, evidence)  # noqa: SLF001
+        qualification._write_once_atomic(evidence_path, evidence)  # noqa: SLF001
     else:
         evidence = existing_evidence
 
@@ -297,7 +304,7 @@ def _write_cell_resolution(
     )
     resolution_path = directory / "CLEANUP_RESOLUTION.json"
     if not resolution_path.exists():
-        qualification._write_once(resolution_path, resolution)  # noqa: SLF001
+        qualification._write_once_atomic(resolution_path, resolution)  # noqa: SLF001
     else:
         observed = qualification._read(resolution_path, resolution_path.name)  # noqa: SLF001
         if observed != resolution:

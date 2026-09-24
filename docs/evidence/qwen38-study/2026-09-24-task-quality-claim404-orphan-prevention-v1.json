@@ -1,0 +1,55 @@
+{
+  "incident": {
+    "cell_terminal_receipt_sha256": "sha256:0ca2f49f7a2e58c19e55f7931e498b07915f0dd947cc3df328fb2eb621b59686",
+    "create_claim_http_status": 404,
+    "create_claim_method": "GET",
+    "environment_instance_readback_validated": true,
+    "model_calls": 0,
+    "operation_aggregate_receipt_sha256": "sha256:f934cf22bf50e153e24aeb5ac8a42cd9b61437a1ca49d019a76695f685fd2a40",
+    "provision_response_validated": true,
+    "qualification_status": "infrastructure_invalid",
+    "task_runtime_qualified": false
+  },
+  "privacy": {
+    "answers_included": false,
+    "credentials_included": false,
+    "flags_included": false,
+    "numeric_scores_included": false,
+    "prompts_included": false,
+    "task_identity_included": false,
+    "traces_included": false
+  },
+  "remaining_boundary": {
+    "claim_or_request_id_reconciliation_required_if_process_dies_before_response_receipt_publication": true,
+    "local_code_can_eliminate_post_success_pre_receipt_window": false,
+    "window": "provision POST accepted remotely before the validated response is durably published"
+  },
+  "release": {
+    "environment_cleanup_receipt_sha256": "sha256:80736413a3ff1ef95b8be5ba629fd95237a9809470441d400d9c06e8b96b7067",
+    "exact_environment_instance_terminated": true,
+    "exact_kubernetes_objects_absent": true,
+    "kubernetes_cleanup_receipt_sha256": "sha256:23edbf1b91610c3d0390f15bd5d292dd7ea27847f94cc817d51cf230aa499392",
+    "peer_environment_touched": false,
+    "qualification_replayed": false
+  },
+  "repair": {
+    "all_controller_receipts_atomic_no_replace": true,
+    "bare_cleanup_intent_or_receipt_never_authorizes_response_loss_delete": true,
+    "cell_directory_entries_fsynced_before_mutation": true,
+    "cleanup_resolution_cross_bound_to_local_provision_evidence": true,
+    "cleanup_resolution_cross_bound_to_local_cleanup_controls": true,
+    "create_claim_still_required_before_tools_scoring_or_ingest": true,
+    "instance_binding_is_cleanup_only": true,
+    "instance_binding_receipt": "INSTANCE_BINDING.json",
+    "instance_binding_schema": "cyber_task_quality_instance_binding_v1",
+    "provision_response_receipt": "PROVISION_RESPONSE.json",
+    "provision_response_schema": "cyber_task_quality_provision_response_v1",
+    "provision_staged_evidence_without_intent_fails_closed": true,
+    "response_only_recovery_requires_fresh_exact_instance_readback": true,
+    "recovery_intent_restart_requires_absent_or_same_instance_claim": true,
+    "semantic_receipt_mismatch_fails_before_delete": true,
+    "delete_not_repeated_after_restart_observes_absence_or_termination": true
+  },
+  "schema": "cyber_task_quality_claim404_orphan_prevention_evidence_v1",
+  "sha256": "sha256:0a7b63722d8ad79abed6436961b065e95ce12440b7d1c384655e32289e043e3e"
+}
