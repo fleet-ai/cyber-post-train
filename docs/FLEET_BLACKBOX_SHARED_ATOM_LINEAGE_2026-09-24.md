@@ -16,8 +16,9 @@ Artifacts:
 - [transitive shared-atom census](../configs/data/fleet-blackbox-shared-atom-lineage-census-20260924-v1.json)
 - [unchanged no-extension split](../configs/data/fleet-blackbox-lineage-safe-split-20260924-v2.json)
 - [qualification decision](evidence/qwen38-study/2026-09-24-fleet-blackbox-qa33-lineage-qualification-v1.json)
+- [corrected aggregate ceilings](evidence/qwen38-study/2026-09-24-fleet-blackbox-heldout-component-ceilings-v1.json)
 
-Reproduce the three derived artifacts exactly with:
+Reproduce the four derived artifacts exactly with:
 
 ```sh
 uv run python -m training.fleet_blackbox_atom_lineage_expansion
@@ -78,6 +79,18 @@ The exact teacher3k comparison adds one useful checkpoint-specific result:
 
 This does not qualify any task. It only prevents a later evaluator from calling
 an exposed task held out for that checkpoint.
+
+## Corrected expansion ceilings
+
+The 33 exact candidate versions are only 26 transitive components. The earlier
+optimistic 108-family / 36-heldout projection assumed all 33 were distinct; the
+correct proportional population is 101 components with 34 heldout. Separately,
+36 remains the conditional Teacher3K leakage-only maximum: clean20 plus all 16
+unexposed singleton candidates after complete zero-model qualification.
+
+The full distinction between qualified-now, absolute lineage-only, and
+representative ceilings is recorded in
+[`FLEET_BLACKBOX_HELDOUT_COMPONENT_CEILINGS_2026-09-24.md`](FLEET_BLACKBOX_HELDOUT_COMPONENT_CEILINGS_2026-09-24.md).
 
 ## Split result
 
