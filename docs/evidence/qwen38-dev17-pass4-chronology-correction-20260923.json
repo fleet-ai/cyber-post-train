@@ -1,0 +1,49 @@
+{
+  "schema": "cyber_qwen38_dev17_pass4_sanitized_chronology_correction_v1",
+  "recorded_at": "2026-09-24T05:02:46Z",
+  "status": "corrected_without_rewriting_original_evidence",
+  "correction": {
+    "classification": "evidence_metadata_timestamp_only",
+    "description": "A manually entered time in the original local selection-boundary receipt was inaccurate. The ordering below comes from the Git commit and the preserved file write times, and is the authoritative ordering.",
+    "original_evidence_mutated": false,
+    "metrics_changed": false,
+    "selected_checkpoints_changed": false
+  },
+  "authoritative_order": [
+    {
+      "event": "six_arm_checkpoint_plan_committed",
+      "time_utc": "2026-09-24T04:45:55Z",
+      "binding": "fleet-ai/cyber-post-train@731ef08d261e84a5e248d5964d38a2b839703a0f"
+    },
+    {
+      "event": "selection_boundary_final_bytes_written",
+      "time_utc": "2026-09-24T04:52:32Z",
+      "source_file_sha256": "sha256:be469c0849213b04ff69f646b96dfb5286b78bc28ee839ea5b401c7a40e01996",
+      "source_self_sha256": "sha256:5b78600ee835f6ffc2e0d112f2f3e95e8615b7d19aa588c4c2bb9999369c8520"
+    },
+    {
+      "event": "independently_reviewed_aggregation_program_written",
+      "time_utc": "2026-09-24T04:54:12Z",
+      "program_sha256": "sha256:ffa35634e3c0c9d6aabb1397c4108454b62e9439380b2892bd454efefda96f1b"
+    },
+    {
+      "event": "aggregate_receipt_written_after_authorized_score_opening",
+      "time_utc": "2026-09-24T04:55:55Z",
+      "source_file_sha256": "sha256:ac35d8a8c7a39f195936791ef9cb1c5b7bd7c0d4804b0745e561517456220eb2",
+      "source_self_sha256": "sha256:396960f989685aaa270507742d3b971b38691a61d0e08baac61de3babb8ccf25"
+    }
+  ],
+  "scientific_effect": {
+    "checkpoint_plan_predated_score_opening": true,
+    "evaluation_outcomes_used_for_checkpoint_selection": false,
+    "authorized_arms_or_seeds_changed": false,
+    "aggregate_metrics_changed": false
+  },
+  "source_correction_receipt_file_sha256": "sha256:d36b7e952ffb3f53dd6035583c267338cb9ecf74626ddabd079e0d17bff95cc1",
+  "privacy": {
+    "per_task_results_included": false,
+    "private_run_identifiers_included": false,
+    "prompts_responses_flags_or_traces_included": false
+  },
+  "sha256": "sha256:eb7d46d1b95eb1a956bc4b1e837e54ba9c5e52a989dbb623a3b13bce1c671835"
+}
