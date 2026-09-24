@@ -1,11 +1,11 @@
 {
   "classification": "operational-gate",
   "cleanup": {
-    "config_map_absent": false,
-    "job_absent": false,
-    "pod_absent": false,
-    "uid_preconditioned_cleanup_at": null,
-    "workload_absent": false
+    "config_map_absent": true,
+    "job_absent": true,
+    "pod_absent": true,
+    "uid_preconditioned_cleanup_at": "2026-09-24T06:31:35Z",
+    "workload_absent": true
   },
   "config_map": {
     "name": "chris-q38-m96-signal-a2-header-a1-code",
@@ -47,7 +47,7 @@
     "priority": "c1/q1"
   },
   "schema": "cyber_qwen38_miles96_signal_header_terminal_v1",
-  "sha256": "sha256:8273acfd960b9909b505c485f95ff7c943fedf9151f5efc79746ddd57bee1023",
+  "sha256": "sha256:67d3fad9fa3a9fd96d8d66d10144241400a2b77f16d9e958cf525ca9d9f0d9c3",
   "workload": {
     "name": "job-chris-q38-m96-signal-a2-header-a1-00a9f",
     "uid": "5cc0dcfe-43b4-4ca9-a777-51143ee195b6"
