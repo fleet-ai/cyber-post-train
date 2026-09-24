@@ -239,7 +239,12 @@ def _packet(tmp_path: Path) -> Path:
         "kind": "ConfigMap",
         "metadata": {"name": CONFIG_MAP_NAME, "namespace": NAMESPACE},
         "immutable": True,
-        "data": {"config.json": config_text, "heldout.json": config_text, "run.sh": "true\n"},
+        "data": {
+            "config.json": config_text,
+            "heldout.json": config_text,
+            "task-set.json": json.dumps(task_set, sort_keys=True),
+            "run.sh": "true\n",
+        },
     }
     job = {
         "apiVersion": "batch/v1",
@@ -264,6 +269,7 @@ def _packet(tmp_path: Path) -> Path:
                             "name": "evaluator",
                             "env": [
                                 {"name": "EVAL_CONFIG_NAME", "value": "heldout.json"},
+                                {"name": "EVAL_TASK_SET_NAME", "value": "task-set.json"},
                                 {"name": "EVAL_OUTPUT", "value": OUTPUT_ROOT},
                                 {"name": "EVAL_DATABASE", "value": DATABASE},
                             ],
@@ -360,6 +366,42 @@ def _reseal_packet(packet: Path, raw: dict[str, Any]) -> None:
     _write_json(packet, raw)
 
 
+def _retarget_task_set(packet: Path, task_set_name: str) -> None:
+    raw = json.loads(packet.read_text())
+    old_task_set = packet.parent / raw["files"]["task_set"]["path"]
+    new_task_set = packet.parent / task_set_name
+    old_task_set.rename(new_task_set)
+    config_path = packet.parent / raw["files"]["evaluation_config"]["path"]
+    config = json.loads(config_path.read_text())
+    config["task_set"] = task_set_name
+    _write_json(config_path, config)
+    config_text = json.dumps(config, sort_keys=True, separators=(",", ":"))
+    config_map_path = packet.parent / raw["files"]["config_map"]["path"]
+    config_map = yaml.safe_load(config_map_path.read_text())
+    config_map["data"].update(
+        {
+            "config.json": config_text,
+            "heldout.json": config_text,
+            "run.sh": (
+                ROOT / "evals/fleet/scripts/run_qwen38_dev17_single_arm_v3.sh"
+            ).read_text(),
+        }
+    )
+    config_map_path.write_text(yaml.safe_dump(config_map), encoding="utf-8")
+    job_path = packet.parent / raw["files"]["job"]["path"]
+    job = yaml.safe_load(job_path.read_text())
+    environment = job["spec"]["template"]["spec"]["containers"][0]["env"]
+    next(item for item in environment if item["name"] == "EVAL_TASK_SET_NAME")["value"] = (
+        task_set_name
+    )
+    job_path.write_text(yaml.safe_dump(job), encoding="utf-8")
+    raw["files"]["evaluation_config"]["sha256"] = _sha(config_path)
+    raw["files"]["task_set"] = {"path": task_set_name, "sha256": _sha(new_task_set)}
+    raw["files"]["config_map"]["sha256"] = _sha(config_map_path)
+    raw["files"]["job"]["sha256"] = _sha(job_path)
+    _reseal_packet(packet, raw)
+
+
 def _enable_rollout_database(packet: Path) -> None:
     raw = json.loads(packet.read_text())
     job_path = packet.parent / raw["files"]["job"]["path"]
@@ -402,6 +444,23 @@ def test_non_database_job_is_unaffected_by_postgres_client_label_gate(tmp_path):
     package = launch.build_package(_packet(tmp_path))
 
     assert launch.require_postgres_client_label(package.job, label="test Job") is False
+
+
+@pytest.mark.parametrize("task_set_name", ["dev13.json", "final7.json"])
+def test_rendered_bundle_installs_configured_task_set_basename(tmp_path, task_set_name):
+    packet = _packet(tmp_path)
+    _retarget_task_set(packet, task_set_name)
+
+    package = launch.build_package(packet)
+    environment = launch._container_environment(  # noqa: SLF001
+        package.job["spec"]["template"]["spec"]["containers"][0]
+    )
+    script = package.config_map["data"]["run.sh"]
+
+    assert package.evaluation_config["task_set"] == task_set_name
+    assert environment["EVAL_TASK_SET_NAME"] == task_set_name
+    assert '"$root/configs/evaluation/$EVAL_TASK_SET_NAME"' in script
+    assert "qwen38-fresh75-fleet-dev17-task-set-v1.json" not in script
 
 
 def test_stale_postgres_client_label_on_non_database_job_fails_render(tmp_path):

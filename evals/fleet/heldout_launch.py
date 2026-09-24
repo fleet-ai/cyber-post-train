@@ -808,7 +808,13 @@ def build_package(packet_path: Path) -> Package:
     if config.get("training_data_eligible") is not False:
         raise HeldoutLaunchError("held-out evaluator config must be training-data ineligible")
     task_set = config.get("task_set")
-    if not isinstance(task_set, str) or not task_set:
+    if (
+        not isinstance(task_set, str)
+        or not task_set
+        or Path(task_set).name != task_set
+        or environment.get("EVAL_TASK_SET_NAME") != task_set
+        or not isinstance(data.get("task-set.json"), str)
+    ):
         raise HeldoutLaunchError("evaluation config task set is invalid")
     configured_task_set = (packet.files["evaluation_config"].parent / task_set).resolve()
     if configured_task_set != packet.files["task_set"]:

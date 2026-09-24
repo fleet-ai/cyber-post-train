@@ -247,6 +247,54 @@ def _route_ready(package: heldout_launch.Package) -> dict[str, Any]:
         return evaluate.check_route(route, model, client)
 
 
+class _AbsentDatabase:
+    def __init__(self, database: str) -> None:
+        self.database = database
+
+    def exists(self, database: str) -> bool:
+        if database != self.database:
+            raise AdapterError("cluster-side database-absence evidence name differs")
+        return False
+
+
+def _cluster_duplicate_absence(
+    path: Path,
+    *,
+    bindings: dict[str, Any],
+    group_id: str,
+    package: heldout_launch.Package,
+) -> tuple[Callable[[str], bool], _AbsentDatabase]:
+    evidence = _read(path)
+    unsigned = {key: value for key, value in evidence.items() if key != "sha256"}
+    group = evidence.get("groups", {}).get(group_id, {})
+    packet = package.packet
+    if (
+        evidence.get("schema") != "cyber_fleet_cluster_duplicate_gate_binding_v1"
+        or evidence.get("sha256") != _digest(unsigned)
+        or evidence.get("date_utc") != datetime.now(UTC).date().isoformat()
+        or evidence.get("bindings_sha256") != bindings["sha256"]
+        or evidence.get("source_gate_receipt_sha256")
+        != bindings["budget"]["census_receipt_sha256"]
+        or not isinstance(group, dict)
+        or group.get("packet_sha256") != bindings["groups"][group_id]["packet_sha256"]
+        or group.get("job_name") != packet.job_name
+        or group.get("config_map_name") != packet.config_map_name
+        or group.get("output_root") != packet.output_root
+        or group.get("database") != packet.database
+        or group.get("evaluation_identity_sha256") != packet.identity_sha256
+        or group.get("sfs_output_absent") is not True
+        or group.get("database_absent") is not True
+    ):
+        raise AdapterError("cluster-side duplicate-gate evidence differs from this source Job")
+
+    def output_exists(output_root: str) -> bool:
+        if output_root != packet.output_root:
+            raise AdapterError("cluster-side output-absence evidence path differs")
+        return False
+
+    return output_exists, _AbsentDatabase(packet.database)
+
+
 def _budget(
     binding: dict[str, Any],
     group_id: str,
@@ -348,6 +396,7 @@ def run_action(
     readiness_receipt: Path | None = None,
     launch_receipt: Path | None = None,
     terminal_receipt: Path | None = None,
+    duplicate_gate_evidence: Path | None = None,
     cluster: heldout_launch.Cluster | None = None,
     database: heldout_launch.Database | None = None,
     route_check: Callable[[heldout_launch.Package], dict[str, Any]] = _route_ready,
@@ -360,6 +409,18 @@ def run_action(
     root = _group_root(packet_path, group_id)
     cluster = cluster or heldout_launch.KubectlCluster(context)
     database = database or heldout_launch.PostgresDatabase()
+    duplicate_absence = (
+        _cluster_duplicate_absence(
+            duplicate_gate_evidence,
+            bindings=bindings,
+            group_id=group_id,
+            package=package,
+        )
+        if duplicate_gate_evidence is not None
+        else None
+    )
+    output_exists = duplicate_absence[0] if duplicate_absence else None
+    duplicate_database = duplicate_absence[1] if duplicate_absence else database
 
     if phase == "score":
         collection_path = terminal_receipt or (
@@ -455,7 +516,10 @@ def run_action(
                     root=budget_root,
                     reserve=False,
                 )
-                heldout_launch.duplicate_census(package, cluster=cluster, database=database)
+                census_kwargs = {"output_exists": output_exists} if output_exists else {}
+                heldout_launch.duplicate_census(
+                    package, cluster=cluster, database=duplicate_database, **census_kwargs
+                )
         except LookupError:
             return _receipt(
                 target,
@@ -499,11 +563,13 @@ def run_action(
             if root.is_symlink():
                 raise AdapterError("Fleet source group path must not be a symlink")
             root.mkdir(mode=0o700, parents=True, exist_ok=True)
+            launch_kwargs = {"output_exists": output_exists} if output_exists else {}
             result = heldout_launch.launch_once(
                 source_packet,
                 cluster=cluster,
-                database=database,
+                database=duplicate_database,
                 journal=root / "create-intent.jsonl",
+                **launch_kwargs,
             )
             unsigned = {
                 "schema": "cyber_fleet_source_launch_v1",
@@ -623,6 +689,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--readiness-receipt", type=Path)
     parser.add_argument("--launch-receipt", type=Path)
     parser.add_argument("--terminal-receipt", type=Path)
+    parser.add_argument("--duplicate-gate-evidence", type=Path)
     args = parser.parse_args(argv)
     result = run_action(
         action=args.action,
@@ -634,6 +701,7 @@ def main(argv: list[str] | None = None) -> None:
         readiness_receipt=args.readiness_receipt,
         launch_receipt=args.launch_receipt,
         terminal_receipt=args.terminal_receipt,
+        duplicate_gate_evidence=args.duplicate_gate_evidence,
     )
     _write_once(args.receipt, result)
 

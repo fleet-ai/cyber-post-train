@@ -189,6 +189,53 @@ def test_daily_used_plus_reserved_gate_is_atomic_and_idempotent(tmp_path: Path) 
         )
 
 
+def test_cluster_output_absence_is_bound_to_exact_source_group(tmp_path: Path) -> None:
+    _, bindings = _campaign(tmp_path)
+    packet = SimpleNamespace(
+        job_name="heldout-base-seed46",
+        config_map_name="heldout-base-seed46-code",
+        output_root="/mnt/sfs/jobs/heldout-base-seed46",
+        database="heldout_base_seed46",
+        identity_sha256="sha256:" + "4" * 64,
+    )
+    evidence = {
+        "schema": "cyber_fleet_cluster_duplicate_gate_binding_v1",
+        "date_utc": datetime.now(UTC).date().isoformat(),
+        "bindings_sha256": bindings["sha256"],
+        "source_gate_plan_sha256": "sha256:" + "5" * 64,
+        "source_gate_terminal_file_sha256": "sha256:" + "6" * 64,
+        "source_gate_terminal_sha256": "sha256:" + "7" * 64,
+        "source_gate_receipt_sha256": bindings["budget"]["census_receipt_sha256"],
+        "packet_set_sha256": "sha256:" + "8" * 64,
+        "groups": {
+            "base-seed46": {
+                "packet_sha256": PACKET_SHA,
+                "job_name": packet.job_name,
+                "config_map_name": packet.config_map_name,
+                "output_root": packet.output_root,
+                "database": packet.database,
+                "evaluation_identity_sha256": packet.identity_sha256,
+                "sfs_output_absent": True,
+                "database_absent": True,
+            }
+        },
+    }
+    evidence["sha256"] = adapter._digest(evidence)  # noqa: SLF001
+    path = _write(tmp_path / "duplicate-gate.json", evidence)
+    check, database = adapter._cluster_duplicate_absence(  # noqa: SLF001
+        path,
+        bindings=bindings,
+        group_id="base-seed46",
+        package=SimpleNamespace(packet=packet),
+    )
+    assert check(packet.output_root) is False
+    assert database.exists(packet.database) is False
+    with pytest.raises(adapter.AdapterError):
+        check("/mnt/sfs/jobs/another-output")
+    with pytest.raises(adapter.AdapterError):
+        database.exists("another_database")
+
+
 def test_unready_route_defers_without_duplicate_or_create(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
