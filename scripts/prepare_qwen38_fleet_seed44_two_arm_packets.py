@@ -57,6 +57,8 @@ SOURCE_FILES = {
     "exact_pass4_universe.py": ROOT / "evals/fleet/exact_pass4_universe.py",
     "fixed_proxy.py": ROOT / "evals/fleet/fixed_proxy.py",
     "model_artifact.py": ROOT / "evals/fleet/model_artifact.py",
+    "model_artifact_v2.py": ROOT / "evals/fleet/model_artifact_v2.py",
+    "model_artifact_v3.py": ROOT / "evals/fleet/model_artifact_v3.py",
     "opencode_self_hosted.py": ROOT / "evals/fleet/opencode_self_hosted.py",
     "rollout_campaign.py": ROOT / "evals/fleet/rollout_campaign.py",
     "rollout_ledger.py": ROOT / "evals/fleet/rollout_ledger.py",
@@ -629,6 +631,13 @@ def _prepare_arm(
             f"{arm_id} local SFS model requires a staged artifact binding before render"
         )
     actual_source_files = source_files or SOURCE_FILES
+    run_script = actual_source_files.get("run.sh")
+    if run_script is None:
+        raise ValueError(f"{arm_id} run script is not staged")
+    run_text = run_script.read_text(encoding="utf-8")
+    for dependency in ("model_artifact_v2.py", "model_artifact_v3.py"):
+        if f"/bootstrap/{dependency}" in run_text and dependency not in actual_source_files:
+            raise ValueError(f"{arm_id} runtime dependency {dependency} is not staged")
     if artifact_binding is not None:
         artifact = _read_json(checkpoint_path, f"{arm_id} model artifact packet")
         schema = artifact.get("schema")
@@ -639,11 +648,9 @@ def _prepare_arm(
             required.update({"model_artifact_v2.py", "model_artifact_v3.py"})
         elif schema != "cyber_fleet_eval_model_artifact_packet_v1":
             raise ValueError(f"{arm_id} model artifact packet schema is unsupported")
-        run_script = actual_source_files.get("run.sh")
         if (
             not required.issubset(actual_source_files)
-            or run_script is None
-            or "/bootstrap/model-artifact.json" not in run_script.read_text(encoding="utf-8")
+            or "/bootstrap/model-artifact.json" not in run_text
         ):
             raise ValueError(f"{arm_id} artifact validator/runtime files are not staged")
     directory.mkdir(mode=0o700)
