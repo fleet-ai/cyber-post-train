@@ -1,0 +1,55 @@
+{
+  "classification": "operational-gate",
+  "cleanup": {
+    "config_map_absent": false,
+    "job_absent": false,
+    "pod_absent": false,
+    "uid_preconditioned_cleanup_at": null,
+    "workload_absent": false
+  },
+  "config_map": {
+    "name": "chris-q38-m96-signal-a2-header-a1-code",
+    "uid": "4951b780-2b37-4b8b-a43f-dd03436f3bbb"
+  },
+  "execution": {
+    "exit_code": 0,
+    "finished_at": "2026-09-24T06:28:16Z",
+    "private_reward_or_trace_content_read": false,
+    "restart_count": 0
+  },
+  "header_receipt": {
+    "plan_matches": true,
+    "receipt_sha256": "sha256:28c40a00680becbb9d44fa18f230e8b9c70069b887425f59236643c75f663075",
+    "schema_matches": true,
+    "self_digest_matches": false,
+    "terminal_file_sha256": "sha256:13c3c04d51ec3c56c8820395cddd7c414f363ba162acba4575ffcdfa810093ca"
+  },
+  "job": {
+    "name": "chris-q38-m96-signal-a2-header-a1",
+    "status": "Complete",
+    "uid": "96dc5778-11a8-4e64-b61e-27f87a8b8f9f"
+  },
+  "packet": {
+    "bundle_sha256": "sha256:32ac35d125e715f8dcf876c37079c637cefcbdbff8216a5118cf069cf606b299",
+    "file_sha256": "sha256:8b850fcbdc96bc0b2650963266cd62b3be5b8d1411578d62d9719002e262ed62",
+    "internal_sha256": "sha256:236488f68856209ecf930a78247f765c551f726fdab37632966a5081c8641542",
+    "normalized_server_preview_sha256": "sha256:d715c01b7bc34b0cf94ee8acf9bd5646f4dea05693e588d6eb60cac8bf2c4efb"
+  },
+  "pod": {
+    "image_id": "ghcr.io/astral-sh/uv@sha256:85d4cb1afa769a7338e095b927bee941cf5ec92266c7424b3f6c0f2748567248",
+    "name": "chris-q38-m96-signal-a2-header-a1-nqnwc",
+    "uid": "9288d0b2-02d5-4a82-a0c0-cdfdf2d11f5a"
+  },
+  "private_instance_ids_prompts_traces_rewards_scores_or_credentials_included": false,
+  "resources": {
+    "failure_alerts": "off",
+    "gpus": 0,
+    "priority": "c1/q1"
+  },
+  "schema": "cyber_qwen38_miles96_signal_header_terminal_v1",
+  "sha256": "sha256:8273acfd960b9909b505c485f95ff7c943fedf9151f5efc79746ddd57bee1023",
+  "workload": {
+    "name": "job-chris-q38-m96-signal-a2-header-a1-00a9f",
+    "uid": "5cc0dcfe-43b4-4ca9-a777-51143ee195b6"
+  }
+}
