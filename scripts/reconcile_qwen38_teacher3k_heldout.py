@@ -16,7 +16,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).parents[1]
 SUBJECT_RE = re.compile(r"(?:^|_)blackbox-([0-9a-f]{24})(?=__|_)")
 LEGACY_ALIASES = {

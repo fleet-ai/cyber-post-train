@@ -4,7 +4,6 @@ import hashlib
 import json
 from pathlib import Path
 
-
 ROOT = Path(__file__).parents[1]
 LINEAGE = ROOT / "configs/data/qwen38-teacher3k-training-lineage-map-20260924-v1.json"
 PROTOCOL = (
