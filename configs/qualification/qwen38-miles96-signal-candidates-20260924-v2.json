@@ -1,6 +1,6 @@
 {
   "schema": "cyber_qwen38_miles96_signal_candidate_packet_v2",
-  "sha256": "sha256:ab8d7129d8bedccba84752db8db5f3fb81b99b537ffdddd89b890c52dba1417f",
+  "sha256": "sha256:a56dfafa0ff5702e6ffe3afd6583d219a283c880313070f83d44cdb0829cda67",
   "launchable": false,
   "state": "read_only_candidate_authority",
   "purpose": "Freeze the score-blind identity, lineage, and ordering of task7317 plus the next three zero-update signal candidates. Fresh live GETs and all operational launch gates remain mandatory.",
@@ -11,6 +11,10 @@
     "f294",
     "2c50"
   ],
+  "fleet_team": {
+    "id": "a1025f0b-ad67-49fc-a023-51800ab43e84",
+    "name": "fleet"
+  },
   "authorities": {
     "task_set": {
       "path": "configs/data/qwen38-skyrl-production-task-set-v1.json",
@@ -58,6 +62,7 @@
       "file_sha256": "sha256:e4a3c4fb5b5c34cdaf64ec568eb31fcc0d55a63cc0a134808db348c65d7b6858",
       "raw_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
       "openai_projection_sha256": "sha256:9c3ad657a76c11423cdd1f543abb0d5363420dd4aae6244a2de73bb58913ce20",
+      "transform_source_sha256": "sha256:0524f19dcc886b20d17b39c21bd6417f537423eec6ef2359487fc3911dad441c",
       "ordered_tools": [
         "bash",
         "submit_report"
@@ -110,6 +115,11 @@
         "prompt_sha256": "sha256:399858ca5eacbef7d3a4079c8dd966419e87aa8e303fda34e1964528e05f1559",
         "env_variables_sha256": "sha256:2193a1282a06c3873fc3fddd0ed2ea52716040aaa07d292d90168a7b5bdd6eb6",
         "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
         "cyber_contract_sha256": "sha256:b5956db74109cf61630b0def682f855d337042b2c7547aeac08adaf3d956f8b2"
       },
       "environment": {
@@ -118,13 +128,15 @@
         "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
         "data_id": "fakelook-cyber-gen",
         "data_version": "v0.0.2",
-        "runtime_seed_content_sha256": "a82704e9234d6c22355f72beb22203df3bd502a3237531a718625a4505f1c82d"
+        "runtime_seed_content_sha256": "a82704e9234d6c22355f72beb22203df3bd502a3237531a718625a4505f1c82d",
+        "ttl_seconds": 32400
       },
       "verifier": {
         "id": "d02d8fe4-9ea0-4c0c-916a-10db357f5fb5",
         "version_id": "928e5c13-b15a-412d-a037-fbed7389572a",
         "version": 1,
-        "sha256": "69186bf09e5f1db90263a22f22c3d7960581495480cc7f739d07f888d2e3845b"
+        "sha256": "69186bf09e5f1db90263a22f22c3d7960581495480cc7f739d07f888d2e3845b",
+        "function_name": "verify"
       },
       "lineage": {
         "application": "fakelook",
@@ -166,6 +178,11 @@
         "prompt_sha256": "sha256:db6e5c9d7c5c9d5ef81db8dbb51d1821229e1c6338848f197c05666f2afd3e39",
         "env_variables_sha256": "sha256:2ed82768fb4035d20a6b4d0ac7fc50fd669683b0749498b829402d5be37447d7",
         "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
         "cyber_contract_sha256": "sha256:b5956db74109cf61630b0def682f855d337042b2c7547aeac08adaf3d956f8b2"
       },
       "environment": {
@@ -174,13 +191,15 @@
         "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
         "data_id": "cultivacore",
         "data_version": "v0.0.61",
-        "runtime_seed_content_sha256": "49ded86cb98d5bfd9423c1924c8357a662aace79b82049088e0fc20ee2cff48e"
+        "runtime_seed_content_sha256": "49ded86cb98d5bfd9423c1924c8357a662aace79b82049088e0fc20ee2cff48e",
+        "ttl_seconds": 32400
       },
       "verifier": {
         "id": "5d8aa19b-4939-474a-8985-f6a2cf078d90",
         "version_id": "ca77b41a-60dc-4e0a-93d6-2d0326bc9853",
         "version": 1,
-        "sha256": "2e197c54e8614c0a6415d564db5f7672e890fec22a6db53919dd73ac6fe78fd7"
+        "sha256": "2e197c54e8614c0a6415d564db5f7672e890fec22a6db53919dd73ac6fe78fd7",
+        "function_name": "verify"
       },
       "lineage": {
         "application": "fira",
@@ -222,6 +241,11 @@
         "prompt_sha256": "sha256:61bcc61236247c7bda0146ca95767e6ec1e433c81d4ae29177c80ca6abef1fd3",
         "env_variables_sha256": "sha256:01259cc3028c23cc92afc904bb03b4a294b2ac16fb14c85d7cecd1b3a8afa9d8",
         "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
         "cyber_contract_sha256": "sha256:b5956db74109cf61630b0def682f855d337042b2c7547aeac08adaf3d956f8b2"
       },
       "environment": {
@@ -230,13 +254,15 @@
         "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
         "data_id": "commercial",
         "data_version": "v0.0.9",
-        "runtime_seed_content_sha256": "2f6fcfbf89379caf57171c00120d6adab99efde23e2fc81c42a4a6dac4b39272"
+        "runtime_seed_content_sha256": "2f6fcfbf89379caf57171c00120d6adab99efde23e2fc81c42a4a6dac4b39272",
+        "ttl_seconds": 32400
       },
       "verifier": {
         "id": "3c92bffc-acef-45e0-8525-b53b3ddbb435",
         "version_id": "e99e97eb-5ad6-49d6-bcd9-40cedb863c97",
         "version": 1,
-        "sha256": "545519808df26fa0e2379d4a0f880cd413853e4f5ca1b961cd74bbd8c2a61f08"
+        "sha256": "545519808df26fa0e2379d4a0f880cd413853e4f5ca1b961cd74bbd8c2a61f08",
+        "function_name": "verify"
       },
       "lineage": {
         "application": "current",
@@ -278,6 +304,11 @@
         "prompt_sha256": "sha256:399858ca5eacbef7d3a4079c8dd966419e87aa8e303fda34e1964528e05f1559",
         "env_variables_sha256": "sha256:75ca8285db90228fe22b43e44a1faf6f8d267f166ba2a3d83d234b9f3da73ee0",
         "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
         "cyber_contract_sha256": "sha256:b5956db74109cf61630b0def682f855d337042b2c7547aeac08adaf3d956f8b2"
       },
       "environment": {
@@ -286,13 +317,15 @@
         "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
         "data_id": "fakelook-cyber-gen",
         "data_version": "v0.0.2",
-        "runtime_seed_content_sha256": "bec4caeff7b335c99b37ad695ac1362e49b7bfbd01eae07907ef8181d9134c26"
+        "runtime_seed_content_sha256": "bec4caeff7b335c99b37ad695ac1362e49b7bfbd01eae07907ef8181d9134c26",
+        "ttl_seconds": 32400
       },
       "verifier": {
         "id": "36494e12-6036-4167-ae13-76dc4a48520c",
         "version_id": "b0738f59-3dd6-464b-b7f6-633cab4496b4",
         "version": 1,
-        "sha256": "c7efdabebd6da31e6e7a5ffb8d55523e20ee52c919523bfb7cf3d5bc8b62e1f6"
+        "sha256": "c7efdabebd6da31e6e7a5ffb8d55523e20ee52c919523bfb7cf3d5bc8b62e1f6",
+        "function_name": "verify"
       },
       "lineage": {
         "application": "fakelook",
@@ -346,17 +379,19 @@
       "task.prompt_sha256",
       "task.env_variables_sha256",
       "task.output_json_schema_sha256",
-      "task.cyber_contract_sha256",
+      "task.cyber_contract",
       "environment.id",
       "environment.version",
       "environment.version_id",
       "environment.data_id",
       "environment.data_version",
       "environment.runtime_seed_content_sha256",
+      "environment.ttl_seconds",
       "verifier.id",
       "verifier.version_id",
       "verifier.version",
-      "verifier.sha256"
+      "verifier.sha256",
+      "verifier.function_name"
     ],
     "required_runtime_checks": [
       "fresh_live_task_get_matches_every_exact_candidate_field",

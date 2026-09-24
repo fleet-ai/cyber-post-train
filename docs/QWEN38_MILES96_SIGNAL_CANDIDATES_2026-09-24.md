@@ -72,11 +72,14 @@ make it a valid Teacher3K held-out result.
 ## Exact live checks still required
 
 The packet freezes the expected task, environment, data, verifier, lineage,
-and ordered-tool identities. A launcher must still repeat a fresh task GET no
-more than 900 seconds before use and compare every listed field exactly. At
-session open it must also prove that the raw tools are exactly `bash` followed
-by `submit_report`, including their schemas, and that the FTI/OpenAI projection
-matches the sealed projected digest.
+and ordered-tool identities. This includes the exact cyber contract, the
+32,400-second environment lifetime, the verifier entry point (`verify`), and
+the pinned source digest of the raw-to-OpenAI tool transformation. A launcher
+must still repeat a fresh task GET no more than 900 seconds before use and
+compare every listed field exactly. At session open it must also prove that the
+raw tools are exactly `bash` followed by `submit_report`, including their
+schemas, and that the FTI/OpenAI projection matches the sealed projected
+digest.
 
 Operational checks are intentionally outside this task-selection packet. A
 launch still needs fresh duplicate and output-absence checks, capacity proof,

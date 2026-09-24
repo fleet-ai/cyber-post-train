@@ -6,6 +6,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKET = ROOT / "configs/qualification/qwen38-miles96-signal-candidates-20260924-v2.json"
+CYBER_CONTRACT = {
+    "evidence_schema": "1.0.0",
+    "submission_protocol": "2.0.0",
+    "verifier_contract": "3.0.0",
+}
+TOOL_TRANSFORM_SOURCE_SHA256 = (
+    "sha256:0524f19dcc886b20d17b39c21bd6417f537423eec6ef2359487fc3911dad441c"
+)
+LIVE_BINDING_SHA256 = {
+    "7317": "sha256:af41b09f5523214d153208e5a76b2b91caeebd9e6b3e49906d39de49844c7541",
+    "0756": "sha256:200074c210072b1691927db9eef0d53af300c3a492380dc16dff5835323de84b",
+    "f294": "sha256:08990cecfa0f6f5ff7183533e957fe2049357d67baffb29e22afed855a379874",
+    "2c50": "sha256:5a5a7303dd594575b107c16e75025275560e710373f051a22b3375859e4d9d8f",
+}
 
 
 def _load(path: str | Path):
@@ -55,6 +69,7 @@ def test_packet_and_source_authorities_are_sealed() -> None:
                 for tool in source
             ]
             assert authority["openai_projection_sha256"] == _canonical_sha(projected)
+            assert authority["transform_source_sha256"] == TOOL_TRANSFORM_SOURCE_SHA256
             assert authority["ordered_tools"] == [tool["name"] for tool in source]
         elif "self_sha256" in authority:
             source_body = dict(source)
@@ -121,8 +136,12 @@ def test_candidate_order_and_exact_current_bindings() -> None:
 
         runtime = _one(eligible, key="task_version_id", value=version)
         assert runtime["task_key"] == key
-        assert runtime["environment"] == env
-        assert runtime["verifier"] == verifier
+        assert runtime["environment"] == {
+            field: value for field, value in env.items() if field != "ttl_seconds"
+        }
+        assert runtime["verifier"] == {
+            field: value for field, value in verifier.items() if field != "function_name"
+        }
         assert (
             runtime["current_binding_sha256"]
             == candidate["static_binding"]["current_inventory_binding_sha256"]
@@ -166,6 +185,52 @@ def test_candidate_order_and_exact_current_bindings() -> None:
         teacher = _one(teacher_rows, key="task_key", value=key)
         assert version in {row["task_version_id"] for row in teacher["versions"]}
         assert lineage["teacher3k_training_exposed"] is True
+
+
+def test_all_candidates_reconstruct_exact_phase1_live_binding() -> None:
+    packet = _load(PACKET)
+    assert packet["fleet_team"] == {
+        "id": "a1025f0b-ad67-49fc-a023-51800ab43e84",
+        "name": "fleet",
+    }
+
+    for candidate in packet["candidates"]:
+        task = {
+            field: candidate["task"][field]
+            for field in (
+                "key",
+                "version_id",
+                "prompt_sha256",
+                "env_variables_sha256",
+                "output_json_schema_sha256",
+            )
+        }
+        task["cyber_contract"] = CYBER_CONTRACT
+        live_binding = {
+            "task": task,
+            "environment": candidate["environment"],
+            "verifier": candidate["verifier"],
+        }
+
+        assert candidate["task"]["cyber_contract"] == CYBER_CONTRACT
+        assert candidate["task"]["cyber_contract_sha256"] == _canonical_sha(CYBER_CONTRACT)
+        assert candidate["environment"]["ttl_seconds"] == 32400
+        assert candidate["verifier"]["function_name"] == "verify"
+        expected = LIVE_BINDING_SHA256[candidate["id"]]
+        assert candidate["static_binding"]["expected_live_binding_sha256"] == expected
+        assert _canonical_sha(live_binding) == expected
+
+
+def test_jit_gate_requires_every_phase1_live_binding_field() -> None:
+    gate = _load(PACKET)["fresh_live_jit_gate"]
+    required = set(gate["required_exact_fields"])
+    assert {
+        "fleet_team_id",
+        "task.cyber_contract",
+        "environment.ttl_seconds",
+        "verifier.function_name",
+    } <= required
+    assert "task.cyber_contract_sha256" not in required
 
 
 def test_no_selected_group_or_component_crosses_split_roles() -> None:
