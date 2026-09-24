@@ -140,9 +140,7 @@ def build(args: argparse.Namespace) -> None:
         for row in sorted(metadata, key=lambda item: item["task_version_id"]):
             pair = (task_key, row["task_version_id"])
             atoms = sorted(
-                atom["locator"]
-                for atom in row.get("atom_sources", [])
-                if atom.get("locator")
+                atom["locator"] for atom in row.get("atom_sources", []) if atom.get("locator")
             )
             resolution = "fleet_api_exact_atom_metadata"
             if not atoms and len(sibling_atoms) == 1:
@@ -161,9 +159,7 @@ def build(args: argparse.Namespace) -> None:
                 "supervised_tokens": sum(int(item["supervised_tokens"]) for item in sessions),
                 "atom_lineages": atoms,
                 "lineage_resolution": resolution,
-                "task_graph_source_locators": sorted(
-                    {row["task_graph_source_locator"]} - {None}
-                ),
+                "task_graph_source_locators": sorted({row["task_graph_source_locator"]} - {None}),
             }
             versions.append(version)
             version_rows.append({"task_key": task_key, **version})
@@ -181,7 +177,8 @@ def build(args: argparse.Namespace) -> None:
                     {atom for item in versions for atom in item["atom_lineages"]}
                 ),
                 "lineage_status": (
-                    "reviewed" if all(item["lineage_resolution"] != "unproven" for item in versions)
+                    "reviewed"
+                    if all(item["lineage_resolution"] != "unproven" for item in versions)
                     else "unproven"
                 ),
                 "versions": versions,
@@ -196,14 +193,12 @@ def build(args: argparse.Namespace) -> None:
     if manifest_task_counts != {len(key_rows)}:
         raise ValueError("manifest selected-task count does not match lineage map")
     selection_digests = {
-        value["catalog_provenance"]["source_selection_file_sha256"]
-        for value in manifest_values
+        value["catalog_provenance"]["source_selection_file_sha256"] for value in manifest_values
     }
     if len(selection_digests) != 1:
         raise ValueError("32K/64K/96K manifests do not bind one source selection")
     if {
-        value["catalog_provenance"]["source_selection_file_sha256"]
-        for value in manifest_values
+        value["catalog_provenance"]["source_selection_file_sha256"] for value in manifest_values
     } != {file_digest(source_path)}:
         raise ValueError("source selection file does not match corpus manifests")
     if any(
@@ -245,8 +240,7 @@ def build(args: argparse.Namespace) -> None:
                 for item in version_rows
             ),
             "reviewed_legacy_alias_versions": sum(
-                item["lineage_resolution"] == "reviewed_legacy_wiz_alias"
-                for item in version_rows
+                item["lineage_resolution"] == "reviewed_legacy_wiz_alias" for item in version_rows
             ),
             "unproven_versions": 0,
             "fallback_task_key_group_rows": sum(
@@ -257,10 +251,7 @@ def build(args: argparse.Namespace) -> None:
         },
         "corrected_historical_claim": {
             "claim": "held_out_task_families_excluded_across_all_versions = 25",
-            "locations": [
-                f"{repo_path(path)}:catalog_provenance"
-                for path in manifests
-            ]
+            "locations": [f"{repo_path(path)}:catalog_provenance" for path in manifests]
             + [f"{repo_path(path)}:rechunk_provenance" for path in manifests],
             "status": "false_for_the_bound_source_selection",
             "replacement": "20 lineage-clean, 5 exposed through 6 alias keys",
@@ -331,17 +322,22 @@ def build(args: argparse.Namespace) -> None:
     training_keys = {row["task_key"] for row in key_rows}
     training_versions = {row["task_version_id"] for row in version_rows}
     exact_key_overlap = len(training_keys & {row["task_key"] for row in heldout})
-    exact_version_overlap = len(
-        training_versions & {row["task_version_id"] for row in heldout}
-    )
+    exact_version_overlap = len(training_versions & {row["task_version_id"] for row in heldout})
     if exact_key_overlap or exact_version_overlap:
         raise ValueError("unexpected exact heldout identity overlap")
 
     clean_tasks = [
-        {key: row[key] for key in (
-            "source_role", "application", "group_id", "task_key", "task_version_id",
-            "reviewed_task_family",
-        )}
+        {
+            key: row[key]
+            for key in (
+                "source_role",
+                "application",
+                "group_id",
+                "task_key",
+                "task_version_id",
+                "reviewed_task_family",
+            )
+        }
         for row in clean
     ]
     protocol = {
