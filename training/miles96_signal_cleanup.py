@@ -21,7 +21,7 @@ TASK_VERSION_ID = "0920e798-c7e7-4da6-9d5e-ebeba45ec05a"
 VERIFIER_VERSION_ID = "9356b7ca-43b4-4926-a871-d9a95b41f6e5"
 MODEL_REVISION = "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
 SERVED_MODEL = "qwen/chris-q38-base-pass4-v1"
-JOB_NAME = "chris-q38-m96-signal-a2-leak-a4"
+JOB_NAME = "chris-q38-m96-signal-a2-leak-a5"
 CM_NAME = JOB_NAME + "-code"
 NAMESPACE = "fleet-train-jobs"
 IMAGE = (
@@ -85,6 +85,31 @@ def _write_once(path: Path, value: dict[str, Any]) -> None:
         os.fsync(stream.fileno())
 
 
+def _release_state(instance_id: str, runtime: dict[str, Any]) -> str:
+    """Return absent, terminated, or live for one exact owned instance."""
+    status, value = _request(instance_id, "GET")
+    if status == 404:
+        return "absent"
+    if status != 200 or value is None:
+        raise RuntimeError("one exact instance status is unreadable")
+    if value.get("instance_id") != instance_id or any(
+        value.get(field) != runtime.get(runtime_field)
+        for field, runtime_field in (
+            ("env_key", "env_key"),
+            ("version", "environment_version"),
+            ("data_key", "data_key"),
+            ("data_version", "data_version"),
+        )
+    ):
+        raise ValueError("one instance differs from its exact runtime binding")
+    terminated_at = value.get("terminated_at")
+    if terminated_at is None:
+        return "live"
+    if not isinstance(terminated_at, str) or not terminated_at.strip():
+        raise ValueError("one instance has invalid termination evidence")
+    return "terminated"
+
+
 def reconcile(source: Path = SOURCE) -> dict[str, Any]:
     receipt_path = source / RECEIPT.name
     if source.is_symlink() or not source.is_dir() or receipt_path.exists():
@@ -120,42 +145,43 @@ def reconcile(source: Path = SOURCE) -> dict[str, Any]:
     if cleanup_count not in {7, 8}:
         raise ValueError("private cleanup count is outside the reviewed seven-or-eight bound")
 
-    live: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
-    for instance_id, runtime in rows:
-        status, value = _request(instance_id, "GET")
-        if status == 404:
-            continue
-        if status != 200 or value is None:
-            raise RuntimeError("one exact instance status is unreadable")
-        if any(
-            value.get(field) != runtime.get(runtime_field)
-            for field, runtime_field in (
-                ("env_key", "env_key"),
-                ("version", "environment_version"),
-                ("data_key", "data_key"),
-                ("data_version", "data_version"),
-            )
-        ):
-            raise ValueError("one live instance differs from its exact runtime binding")
-        live.append((instance_id, runtime, value))
+    states = [
+        (instance_id, runtime, _release_state(instance_id, runtime))
+        for instance_id, runtime in rows
+    ]
+    live = [(instance_id, runtime) for instance_id, runtime, state in states if state == "live"]
     if len(live) > 1:
         raise RuntimeError("more than one exact owned instance remains live")
 
     deleted = False
     deleted_digest = None
     if live:
-        instance_id = live[0][0]
-        status, _ = _request(instance_id, "DELETE")
-        if status not in {200, 202, 204}:
+        instance_id, runtime = live[0]
+        status, value = _request(instance_id, "DELETE")
+        if (
+            status != 200
+            or value is None
+            or value.get("instance_id") != instance_id
+            or any(
+                value.get(field) != runtime.get(runtime_field)
+                for field, runtime_field in (
+                    ("env_key", "env_key"),
+                    ("version", "environment_version"),
+                    ("data_key", "data_key"),
+                    ("data_version", "data_version"),
+                )
+            )
+            or not isinstance(value.get("terminated_at"), str)
+            or not value["terminated_at"].strip()
+        ):
             raise RuntimeError("exact instance release failed")
         deleted = True
         deleted_digest = digest(instance_id)
 
+    final_states: list[str] = []
     for attempt in range(6):
-        remaining = [
-            instance_id for instance_id, _ in rows if _request(instance_id, "GET")[0] != 404
-        ]
-        if not remaining:
+        final_states = [_release_state(instance_id, runtime) for instance_id, runtime in rows]
+        if "live" not in final_states:
             break
         if attempt == 5:
             raise RuntimeError("one or more exact instances remain live after release")
@@ -166,7 +192,7 @@ def reconcile(source: Path = SOURCE) -> dict[str, Any]:
     signal_validated_present = (source / "SIGNAL_VALIDATED.json").is_file()
 
     body = {
-        "schema": "cyber_qwen38_miles96_signal_leak_reconciliation_v2",
+        "schema": "cyber_qwen38_miles96_signal_leak_reconciliation_v3",
         "status": "all_exact_instances_released",
         "source_job_uid": SOURCE_JOB_UID,
         "attempt_count": 8,
@@ -178,7 +204,10 @@ def reconcile(source: Path = SOURCE) -> dict[str, Any]:
         "live_instance_count_before": len(live),
         "exact_delete_attempted": deleted,
         "deleted_instance_identity_sha256": deleted_digest,
-        "all_instances_absent_after": True,
+        "absent_instance_count_after": final_states.count("absent"),
+        "terminated_instance_count_after": final_states.count("terminated"),
+        "live_instance_count_after": final_states.count("live"),
+        "all_instances_released_after": final_states.count("live") == 0,
         "prompts_traces_rewards_included": False,
     }
     receipt = {**body, "sha256": digest(body)}
@@ -278,7 +307,7 @@ def packet() -> dict[str, Any]:
         ],
     }
     body = {
-        "schema": "cyber_qwen38_miles96_signal_leak_reconcile_packet_v3",
+        "schema": "cyber_qwen38_miles96_signal_leak_reconcile_packet_v4",
         "job_name": JOB_NAME,
         "config_map_name": CM_NAME,
         "source_job_uid": SOURCE_JOB_UID,

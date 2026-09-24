@@ -65,20 +65,20 @@ def test_reconcile_releases_only_exact_remaining_instance(tmp_path: Path, monkey
         calls.append((instance_id, method))
         if method == "DELETE":
             live.remove(instance_id)
-            return 204, None
-        if instance_id in live:
-            return 200, {
-                "env_key": "env",
-                "version": "v1",
-                "data_key": "data",
-                "data_version": "v1",
-            }
-        return 404, None
+        return 200, {
+            "instance_id": instance_id,
+            "env_key": "env",
+            "version": "v1",
+            "data_key": "data",
+            "data_version": "v1",
+            "terminated_at": None if instance_id in live else "2026-09-24T00:00:00Z",
+        }
 
     monkeypatch.setattr(cleanup, "_request", request)
     monkeypatch.setattr(cleanup, "RECEIPT", source / "LEAK_RECONCILED.json")
     receipt = cleanup.reconcile(source)
-    assert receipt["all_instances_absent_after"] is True
+    assert receipt["all_instances_released_after"] is True
+    assert receipt["terminated_instance_count_after"] == 8
     assert receipt["exact_delete_attempted"] is True
     assert calls.count((ids[0], "DELETE")) == 1
     assert all(instance_id not in json.dumps(receipt) for instance_id in ids)
@@ -146,13 +146,25 @@ def test_reconcile_accepts_eight_cleanup_receipts_without_delete(
     def request(instance_id: str, method: str):
         calls.append((instance_id, method))
         assert method == "GET"
-        return 404, None
+        if instance_id == ids[-1]:
+            return 404, None
+        return 200, {
+            "instance_id": instance_id,
+            "env_key": "env",
+            "version": "v1",
+            "data_key": "data",
+            "data_version": "v1",
+            "terminated_at": "2026-09-24T00:00:00Z",
+        }
 
     monkeypatch.setattr(cleanup, "_request", request)
     monkeypatch.setattr(cleanup, "RECEIPT", source / "LEAK_RECONCILED.json")
     receipt = cleanup.reconcile(source)
     assert receipt["preexisting_cleanup_receipt_count"] == 8
     assert receipt["exact_delete_attempted"] is False
+    assert receipt["all_instances_released_after"] is True
+    assert receipt["absent_instance_count_after"] == 1
+    assert receipt["terminated_instance_count_after"] == 7
     assert receipt["reward_terminal_metadata_read"] is False
     assert len(calls) == 16
     assert all(instance_id not in json.dumps(receipt) for instance_id in ids)
