@@ -120,6 +120,65 @@ execute=True)` once, and observation imports `SCORE_COMPLETE.json` or a
 sanitized failed-score receipt. This preserves the required collection/scoring
 split and lets another judge repair scoring without replaying the rollout.
 
+### Concrete Fleet final8 mapping
+
+`evals/fleet/campaign_adapter.py` reuses the existing held-out launch packet and
+its duplicate checks, server preview, create-once journal, exact-UID
+observation, and score-blind terminal receipt. It does not render or submit a
+second kind of Fleet job.
+
+The prospective comparison is locked to the eight `final_test` task versions
+in `configs/data/fleet-blackbox-current-study-split-20260914-v2.json`. The
+adapter verifies all three identities before it can report readiness:
+
+- file SHA-256
+  `28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb`;
+- logical split SHA-256
+  `05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c`;
+- final-eight selection SHA-256
+  `9623149c4a021bc13ed2cf94ca26e107b30c18816cf3c02d76b5020cab5066f4`.
+
+The descriptive `dev17` evidence remains descriptive. It cannot be imported as
+a final-eight result. The final eight are labelled
+`historically_exposed_locked_confirmation_set` because their historical
+exposure is part of the interpretation boundary, not something the adapter can
+erase. The adapter binds the prospective matrix digest
+`f4459e4d939f99973ad04ab114b03643073da43b9e767681f375bc0e33685da6`
+and the exposure audit at
+`docs/evidence/qwen38-fleet-final8-exposure-audit-20260923.json` (file SHA-256
+`3e6b56d0e91560e55240efeaad3b1b660698287961e1eae6bc1b7e2df9d89a05`,
+receipt SHA-256
+`dac348e34529ac0185d6cb9943bf6c7ad13c5b28bedf9fc8542bd7e8a2e59073`).
+That audit records that all eight exact versions have prior quality-certification
+execution and two have accepted pre-split model-comparison execution. No
+historical cell is reused, and this comparison must never be described as
+pristine or untouched.
+
+Pass@4 is four independent pass-1 source jobs per model, using seeds 46, 47,
+48, and 49 with retries disabled. For the six-arm comparison this is exactly 24
+Fleet jobs, not 192 jobs and not one pass-4 job per model. Each source job runs
+all eight tasks. The controller still keeps 192 independent logical records
+(`6 models × 8 tasks × 4 attempts`): one elected record creates the source job,
+and its seven siblings bind to the same immutable Job UID. This gives efficient
+execution without weakening per-task deduplication or partial-failure
+isolation.
+
+Every server preview is checked through the existing Fleet launcher and must
+show the root Job with `fleet.ai/failure-alerts: "off"` and priority `c1`
+before creation is possible. Collection starts only after that preview and the
+existing duplicate census pass. Results are read only after the exact source
+Job UID is terminal. Each task is then classified independently from its
+score-blind database row, so one broken task does not discard seven accepted
+siblings.
+
+Fleet already performs its authoritative task grading during the rollout. The
+campaign score phase is therefore local: it seals the accepted native grading
+receipt and never calls a second judge, replays a rollout, or reads a score
+value. A restarted controller reuses immutable shared preview, launch, and
+terminal records. If a create response is ambiguous, the existing create-once
+journal and the campaign's `launch_uncertain` state require reconciliation
+rather than another POST.
+
 ## Commands
 
 Prepare once:

@@ -132,6 +132,10 @@ class Database(Protocol):
 
     def summary(self, database: str) -> dict[str, Any]: ...
 
+    def cell_status(
+        self, database: str, *, task_version_id: str, model_revision: str, attempt: int
+    ) -> dict[str, Any]: ...
+
 
 @dataclass(frozen=True)
 class LaunchPacket:
@@ -1864,6 +1868,33 @@ class PostgresDatabase:
             raise HeldoutLaunchError("database environment is missing")
         return value
 
+    def _database_dsn(self, database: str) -> str:
+        if not isinstance(database, str) or DATABASE_NAME.fullmatch(database) is None:
+            raise HeldoutLaunchError("database name is invalid")
+        original = urlsplit(self._dsn())
+        if (
+            original.scheme not in {"postgres", "postgresql"}
+            or not original.netloc
+            or original.fragment
+        ):
+            raise HeldoutLaunchError("database environment is not a supported PostgreSQL URI")
+        query_keys = {
+            key.casefold() for key, _ in parse_qsl(original.query, keep_blank_values=True)
+        }
+        if query_keys & {"database", "dbname"}:
+            raise HeldoutLaunchError(
+                "database environment must select its database only by URI path"
+            )
+        return urlunsplit(
+            (
+                original.scheme,
+                original.netloc,
+                "/" + quote(database, safe=""),
+                original.query,
+                "",
+            )
+        )
+
     def exists(self, database: str) -> bool:
         try:
             import psycopg
@@ -1890,33 +1921,25 @@ class PostgresDatabase:
         try:
             from evals.fleet import rollout_postgres
 
-            if not isinstance(database, str) or DATABASE_NAME.fullmatch(database) is None:
-                raise HeldoutLaunchError("database name is invalid")
-            original = urlsplit(self._dsn())
-            if (
-                original.scheme not in {"postgres", "postgresql"}
-                or not original.netloc
-                or original.fragment
-            ):
-                raise HeldoutLaunchError("database environment is not a supported PostgreSQL URI")
-            query_keys = {
-                key.casefold() for key, _ in parse_qsl(original.query, keep_blank_values=True)
-            }
-            if query_keys & {"database", "dbname"}:
-                raise HeldoutLaunchError(
-                    "database environment must select its database only by URI path"
-                )
-            dsn = urlunsplit(
-                (
-                    original.scheme,
-                    original.netloc,
-                    "/" + quote(database, safe=""),
-                    original.query,
-                    "",
-                )
-            )
-            return rollout_postgres.summary(dsn)
+            return rollout_postgres.summary(self._database_dsn(database))
         except HeldoutLaunchError:
             raise
         except Exception:
             raise HeldoutLaunchError("score-blind database summary failed") from None
+
+    def cell_status(
+        self, database: str, *, task_version_id: str, model_revision: str, attempt: int
+    ) -> dict[str, Any]:
+        try:
+            from evals.fleet import rollout_postgres
+
+            return rollout_postgres.cell_status(
+                self._database_dsn(database),
+                task_version_id=task_version_id,
+                model_revision=model_revision,
+                attempt=attempt,
+            )
+        except HeldoutLaunchError:
+            raise
+        except Exception:
+            raise HeldoutLaunchError("score-blind database cell status failed") from None
