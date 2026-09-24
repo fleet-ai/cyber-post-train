@@ -1,15 +1,15 @@
 {
   "classification": "accepted_release_proof",
   "cleanup": {
-    "diagnostic_config_map_absent": false,
-    "diagnostic_job_absent": false,
-    "diagnostic_pod_absent": false,
-    "diagnostic_workload_absent": false,
-    "failed_source_config_map_absent": false,
-    "failed_source_job_absent": false,
-    "failed_source_pod_absent": false,
-    "failed_source_workload_absent": false,
-    "uid_preconditioned_cleanup_at": null
+    "diagnostic_config_map_absent": true,
+    "diagnostic_job_absent": true,
+    "diagnostic_pod_absent": true,
+    "diagnostic_workload_absent": true,
+    "failed_source_config_map_absent": true,
+    "failed_source_job_absent": true,
+    "failed_source_pod_absent": true,
+    "failed_source_workload_absent": true,
+    "uid_preconditioned_cleanup_at": "2026-09-24T06:21:22Z"
   },
   "config_map": {
     "name": "chris-q38-m96-signal-a2-leak-a5-code",
@@ -77,7 +77,7 @@
     "priority": "c1/q1"
   },
   "schema": "cyber_qwen38_miles96_signal_leak_reconcile_terminal_v1",
-  "sha256": "sha256:afc65bf34ec6397a1c1ee45aedb110ff8e132588a15fbfb5388f9c2892989139",
+  "sha256": "sha256:c6b5688cccfad9dcbd8f2d49cf4d8897379859fc3978c8feacd9094d049d544c",
   "workload": {
     "name": "job-chris-q38-m96-signal-a2-leak-a5-6d97f",
     "uid": "bd52a6f1-6dfc-416a-b2f8-07ce7b83cebd"
