@@ -22,7 +22,7 @@ from typing import Any
 import httpx
 
 from evals import campaign
-from evals.fleet import evaluate, heldout_launch
+from evals.fleet import evaluate, heldout_launch, outcome_validity
 from evals.fleet import opencode_self_hosted as harness
 
 SCHEMA = "cyber_fleet_campaign_bindings_v1"
@@ -576,12 +576,18 @@ def run_action(
         # score-blind reads. A missing exact row is terminal infrastructure
         # evidence for this cell, not a reason to hold its siblings forever.
         row = {"cell_id": None, "state": "absent", "receipt_digest": None}
+    normally_completed = True
+    try:
+        outcome_validity.require_normal_completion(row)
+    except outcome_validity.OutcomeValidityError:
+        normally_completed = False
     accepted = (
         row.get("state") == "accepted"
         and row.get("result_class") == "valid"
         and row.get("local_results") == 1
         and row.get("retry_count") == 0
         and row.get("max_retries") == 0
+        and normally_completed
         and isinstance(row.get("receipt_digest"), str)
         and _SHA.fullmatch(row["receipt_digest"]) is not None
     )
@@ -590,6 +596,7 @@ def run_action(
         "cell_id": row.get("cell_id"),
         "cell_state": row.get("state"),
         "cell_receipt_sha256": row.get("receipt_digest"),
+        "normal_completion": normally_completed,
         "cleanup_completed": accepted,
     }
     return _receipt(

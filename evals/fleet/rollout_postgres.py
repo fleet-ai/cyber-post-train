@@ -786,7 +786,9 @@ def cell_status(
             """
             SELECT c.cell_id, c.state, c.retry_count, c.max_retries,
                    c.result_class, c.receipt_digest, c.failure_code,
-                   COUNT(r.execution_id) AS local_results
+                   COUNT(r.execution_id) AS local_results,
+                   MIN(r.agent_exit_code) AS agent_exit_code,
+                   MIN(r.agent_termination) AS agent_termination
             FROM rollout_cells AS c
             LEFT JOIN rollout_local_results AS r ON r.cell_id = c.cell_id
             WHERE c.task_version_id = %s AND c.model_id = %s
