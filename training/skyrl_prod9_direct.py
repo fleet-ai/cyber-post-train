@@ -19,6 +19,7 @@ import os
 import re
 import stat
 import subprocess
+import tempfile
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -1949,16 +1950,23 @@ def _cpu_duplicate_checks(
 
 def _write_once_fsynced(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w") as stream:
-        stream.write(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n")
-        stream.flush()
-        os.fsync(stream.fileno())
-    parent = os.open(path.parent, os.O_RDONLY)
+    # The cleanup observer polls this path concurrently.  Publish only complete,
+    # durable bytes; opening the final path first exposes an empty SFS file.
+    fd, temporary_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    temporary = Path(temporary_name)
     try:
-        os.fsync(parent)
+        with os.fdopen(fd, "w") as stream:
+            stream.write(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.link(temporary, path)
+        parent = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(parent)
+        finally:
+            os.close(parent)
     finally:
-        os.close(parent)
+        temporary.unlink(missing_ok=True)
 
 
 def _create_cpu_once(

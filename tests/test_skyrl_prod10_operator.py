@@ -6,6 +6,7 @@ import json
 import os
 import stat
 import subprocess
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -2639,6 +2640,73 @@ def test_incluster_runner_allows_only_prod_get_create_and_uid_cas_delete() -> No
         )
         with pytest.raises(incluster_kubernetes.InClusterKubernetesError, match=message):
             denied.capacity_inventory()
+
+
+def test_creator_binding_is_invisible_until_its_complete_bytes_are_durable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan_sha256 = "sha256:" + "1" * 64
+    manifest_sha256 = "sha256:" + "2" * 64
+    uid = "00000000-0000-4000-8000-000000000123"
+    observer = cleanup.Observer(
+        context=direct.PROD_CONTEXT,
+        namespace=direct.NAMESPACE,
+        kind="job",
+        name="exact-preflight",
+        maximum_seconds=direct.CPU_MAXIMUM_SECONDS,
+        expected_gpus=0,
+        plan_sha256=plan_sha256,
+        manifest_sha256=manifest_sha256,
+        armed_path=tmp_path / "armed.json",
+        result_path=tmp_path / "result.json",
+        profile="production-cpu",
+    )
+    target = observer.creator_binding_path
+    partial_fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with pytest.raises(cleanup.ObserverError, match="creator binding is invalid"):
+            observer._creator_uid()
+    finally:
+        os.close(partial_fd)
+        target.unlink()
+
+    link_started = threading.Event()
+    release_link = threading.Event()
+    real_link = os.link
+
+    def paused_link(source: str | os.PathLike[str], destination: str | os.PathLike[str]) -> None:
+        link_started.set()
+        assert not target.exists()
+        assert release_link.wait(5)
+        real_link(source, destination)
+
+    monkeypatch.setattr(direct.os, "link", paused_link)
+    errors: list[BaseException] = []
+
+    def publish() -> None:
+        try:
+            direct._publish_creator_binding(
+                {"creator_binding_path": str(target)},
+                kind="job",
+                name=observer.name,
+                plan_sha256=plan_sha256,
+                manifest_sha256=manifest_sha256,
+                uid=uid,
+            )
+        except BaseException as exc:
+            errors.append(exc)
+
+    thread = threading.Thread(target=publish)
+    thread.start()
+    assert link_started.wait(5)
+    assert observer._creator_uid() is None
+    release_link.set()
+    thread.join(5)
+
+    assert not thread.is_alive()
+    assert errors == []
+    assert observer._creator_uid() == uid
+    assert [path.name for path in tmp_path.iterdir()] == [target.name]
 
 
 def test_incluster_runner_allows_rayjob_only_for_server_dry_run() -> None:
