@@ -9,6 +9,13 @@ SkyRL trainer. Model files, tokenizer, train/dev data, target masks, W&B identit
 batch size, learning rate, stopping rule and checkpoint policy are bound before
 submission. Never interpret a historical config as a currently supported recipe.
 
+The CPU preflight is a separate zero-GPU Job. A passed receipt is written only
+to `PREFLIGHT.json`. If the Job fails, its short terminal retention window lets
+the collector bind the exact Job, Workload, Pod, image and source before saving
+`PREFLIGHT_FAILED_A<attempt>.json`; that file is evidence for repair and never
+opens the GPU submission gate. Private exception text and native output remain
+unpublished.
+
 ## Data utilities
 
 The existing read-only export and normalization commands remain available:

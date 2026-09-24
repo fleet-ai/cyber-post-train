@@ -75,10 +75,13 @@ from .sfs_write_identity import (
     validate_direct_dev_gpu_reload_output,
     validate_owned_output_binding,
 )
+from .sft_cpu_preflight_driver import LOG_PREFIX as SFT_CPU_PREFLIGHT_LOG_PREFIX
 from .sft_cpu_preflight_job import (
     build_sft_cpu_preflight_job,
+    collect_sft_cpu_preflight_failure,
     collect_sft_cpu_preflight_receipt,
     validate_completed_sft_cpu_preflight_job,
+    validate_failed_sft_cpu_preflight_job,
     validate_sft_cpu_preflight_job_node_fit,
     validate_sft_cpu_preflight_job_package,
     validate_sft_cpu_preflight_job_response,
@@ -2021,7 +2024,7 @@ def collect_sft_cpu_preflight(
     attempt: int,
     kubectl: Kubectl,
 ) -> dict:
-    """Collect one exact admitted, successful dense-SFT CPU-preflight receipt."""
+    """Collect one exact admitted dense-SFT CPU-preflight terminal receipt."""
     try:
         package = build_sft_cpu_preflight_job(
             directory,
@@ -2036,6 +2039,37 @@ def collect_sft_cpu_preflight(
         workloads = kubectl.list_output_check_workloads(job_uid)
         pods = kubectl.list_output_check_pods(name)
         service_account = kubectl.get_output_check_service_account()
+        failed = any(
+            item.get("type") == "Failed" and item.get("status") == "True"
+            for item in job.get("status", {}).get("conditions", [])
+            if isinstance(item, dict)
+        )
+        if failed:
+            pod_name, _ = validate_failed_sft_cpu_preflight_job(
+                package,
+                job,
+                workloads,
+                pods,
+                service_account,
+            )
+            try:
+                logs = kubectl.sft_cpu_preflight_logs(pod_name)
+            except JobsError:
+                logs = pods["items"][0]["status"]["containerStatuses"][0]["state"][
+                    "terminated"
+                ].get("message", "")
+            if len(logs.splitlines()) != 1 or not logs.startswith(SFT_CPU_PREFLIGHT_LOG_PREFIX):
+                logs = pods["items"][0]["status"]["containerStatuses"][0]["state"][
+                    "terminated"
+                ].get("message", "")
+            return collect_sft_cpu_preflight_failure(
+                package,
+                job,
+                workloads,
+                pods,
+                service_account,
+                logs,
+            )
         pod_name, _ = validate_completed_sft_cpu_preflight_job(
             package,
             job,

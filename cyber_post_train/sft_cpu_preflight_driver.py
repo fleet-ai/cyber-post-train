@@ -28,6 +28,8 @@ PREFLIGHT_SCHEMA = "cyber_sft_cpu_preflight_v1"
 CHUNK_PREFIX = "CYBER_SFT_PREFLIGHT_BUNDLE_"
 ENV_BUNDLE_SHA256 = "CYBER_SFT_PREFLIGHT_BUNDLE_SHA256"
 ENV_DRIVER_SHA256 = "CYBER_SFT_PREFLIGHT_DRIVER_SHA256"
+ENV_PLAN_SHA256 = "CYBER_SFT_PREFLIGHT_PLAN_SHA256"
+ENV_REQUEST_SHA256 = "CYBER_SFT_PREFLIGHT_REQUEST_SHA256"
 ENV_RUN_NAME = "CYBER_SFT_PREFLIGHT_RUN_NAME"
 ENV_RUN_DIR = "CYBER_SFT_PREFLIGHT_RUN_DIR"
 LOG_PREFIX = "CYBER_SFT_PREFLIGHT_RECEIPT "
@@ -44,6 +46,70 @@ QWEN38_262K_4NODE_REQUEST_SHA256 = (
     "1679d4699b36bbd6e687ae9e84f6c0d6288620583bdb7a857ec873b87b908470"
 )
 _SHA256 = re.compile(r"[0-9a-f]{64}")
+_STAGE = re.compile(r"[a-z0-9_.-]{1,96}")
+_NATIVE_STAGES = frozenset(
+    {
+        "validate_262k_plan",
+        "install_262k_runtime",
+        "gpu_isolation",
+        "validate_plan",
+        "validate_runtime_sources",
+        "build_runtime_configs",
+        "validate_forward_backward_adapter",
+        "load_model_config",
+        "load_tokenizer",
+        "read_dataset_train",
+        "prepare_rows_train",
+        "target_accounting_train",
+        "read_dataset_dev",
+        "prepare_rows_dev",
+        "target_accounting_dev",
+        "validate_training_split",
+        "native_dataset_loader",
+        "complete",
+    }
+)
+FAILURE_STAGES = frozenset(
+    {
+        "unclassified",
+        "runtime_isolation",
+        "runtime_identity",
+        "bundle_decode",
+        "bundle_verify",
+        "output_absence",
+        "bundle_materialize",
+        "source_import",
+        "prepared_bindings",
+        "native_preflight",
+        "native_receipt",
+        "cgroup_peak_memory",
+        *("native." + stage for stage in _NATIVE_STAGES),
+    }
+)
+
+
+class _PreflightFailure(Exception):
+    """Sanitized stage binding for a private underlying preflight error."""
+
+    def __init__(self, stage: str, error: BaseException):
+        if _STAGE.fullmatch(stage) is None:
+            stage = "unclassified"
+        self.stage = stage
+        self.error_class = type(error).__name__
+        self.error_fingerprint = hashlib.sha256(
+            (self.error_class + "\0" + str(error)).encode(errors="replace")
+        ).hexdigest()
+        super().__init__(stage)
+
+
+@contextlib.contextmanager
+def _failure_stage(stage: str):
+    try:
+        yield
+    except _PreflightFailure:
+        raise
+    except BaseException as exc:
+        raise _PreflightFailure(stage, exc) from None
 
 
 def canonical_json(value: object) -> bytes:
@@ -225,39 +291,48 @@ def _cgroup_v2_peak_memory_bytes(path: Path | None = None) -> int:
 
 
 def run_preflight() -> dict:
-    if (
-        os.environ.get("CUDA_VISIBLE_DEVICES") != ""
-        or os.environ.get("NVIDIA_VISIBLE_DEVICES") != "none"
-        or os.environ.get("WANDB_MODE") != "disabled"
-    ):
-        raise ValueError("CPU preflight GPU/W&B isolation drifted")
-    driver_sha = os.environ.get(ENV_DRIVER_SHA256, "")
-    if _SHA256.fullmatch(driver_sha) is None:
-        raise ValueError("CPU preflight driver digest is invalid")
-    run_name = os.environ.get(ENV_RUN_NAME, "")
-    run_dir = _jobs_path(os.environ.get(ENV_RUN_DIR, ""), run_name)
-    blob = _bundle_from_environment()
-    manifest, files = _inspect_bundle(blob)
-    if (
-        manifest.get("run_name") != run_name
-        or manifest.get("training_output_root") != str(run_dir)
-        or manifest.get("driver_sha256") != driver_sha
-    ):
-        raise ValueError("CPU preflight runtime identity drifted")
-    _require_output_absent(run_dir)
-    with tempfile.TemporaryDirectory(prefix="cyber-sft-preflight-", dir="/tmp") as temporary:
-        root = Path(temporary)
-        _write_tree(root, files)
+    with _failure_stage("runtime_isolation"):
+        if (
+            os.environ.get("CUDA_VISIBLE_DEVICES") != ""
+            or os.environ.get("NVIDIA_VISIBLE_DEVICES") != "none"
+            or os.environ.get("WANDB_MODE") != "disabled"
+        ):
+            raise ValueError("CPU preflight GPU/W&B isolation drifted")
+    with _failure_stage("runtime_identity"):
+        driver_sha = os.environ.get(ENV_DRIVER_SHA256, "")
+        if _SHA256.fullmatch(driver_sha) is None:
+            raise ValueError("CPU preflight driver digest is invalid")
+        run_name = os.environ.get(ENV_RUN_NAME, "")
+        run_dir = _jobs_path(os.environ.get(ENV_RUN_DIR, ""), run_name)
+    with _failure_stage("bundle_decode"):
+        blob = _bundle_from_environment()
+    with _failure_stage("bundle_verify"):
+        manifest, files = _inspect_bundle(blob)
+        if (
+            manifest.get("run_name") != run_name
+            or manifest.get("training_output_root") != str(run_dir)
+            or manifest.get("driver_sha256") != driver_sha
+        ):
+            raise ValueError("CPU preflight runtime identity drifted")
+    with _failure_stage("output_absence"):
+        _require_output_absent(run_dir)
+    with _failure_stage("bundle_materialize"):
+        temporary = tempfile.TemporaryDirectory(prefix="cyber-sft-preflight-", dir="/tmp")
+        root = Path(temporary.name)
+    try:
+        with _failure_stage("bundle_materialize"):
+            _write_tree(root, files)
         sys.path.insert(0, str(root / "src"))
-        try:
-            private_output = io.StringIO()
-            with (
-                contextlib.redirect_stdout(private_output),
-                contextlib.redirect_stderr(private_output),
-            ):
+        private_output = io.StringIO()
+        with (
+            contextlib.redirect_stdout(private_output),
+            contextlib.redirect_stderr(private_output),
+        ):
+            with _failure_stage("source_import"):
                 from cyber_post_train.cli import _prepared
                 from training.sft_dispatch import compiler_for_plan
 
+            with _failure_stage("prepared_bindings"):
                 plan, request = _prepared(root / "prepared")
                 compiler = compiler_for_plan(plan)
                 if compiler.job_request(plan) != request:
@@ -271,21 +346,39 @@ def run_preflight() -> dict:
                     or request.get("priority_class") != "c1"
                 ):
                     raise ValueError("staged plan/request identity drifted")
-                native = compiler.preflight(plan)
-        finally:
-            sys.path.remove(str(root / "src"))
-    if (
-        native.get("schema") != PREFLIGHT_SCHEMA
-        or native.get("status") != "passed"
-        or native.get("gpus") != 0
-        or native.get("plan_sha256") != manifest["plan_sha256"]
-        or native.get("request_sha256") != manifest["request_sha256"]
-    ):
-        raise ValueError("native dense-SFT CPU preflight receipt drifted")
+            native_stage = "native_preflight"
+
+            def progress(stage: str) -> None:
+                nonlocal native_stage
+                if stage not in _NATIVE_STAGES:
+                    raise ValueError("native preflight reported an invalid stage")
+                native_stage = "native." + stage
+
+            try:
+                if is_qwen38_262k_4node_candidate(plan, request):
+                    native = compiler.preflight(plan, progress=progress)
+                else:
+                    native = compiler.preflight(plan)
+            except BaseException as exc:
+                raise _PreflightFailure(native_stage, exc) from None
+    finally:
+        if sys.path and sys.path[0] == str(root / "src"):
+            sys.path.pop(0)
+        temporary.cleanup()
+    with _failure_stage("native_receipt"):
+        if (
+            native.get("schema") != PREFLIGHT_SCHEMA
+            or native.get("status") != "passed"
+            or native.get("gpus") != 0
+            or native.get("plan_sha256") != manifest["plan_sha256"]
+            or native.get("request_sha256") != manifest["request_sha256"]
+        ):
+            raise ValueError("native dense-SFT CPU preflight receipt drifted")
     peak_memory_bytes = None
     receipt_body = dict(native)
     if is_qwen38_262k_4node_candidate(plan, request):
-        peak_memory_bytes = _cgroup_v2_peak_memory_bytes()
+        with _failure_stage("cgroup_peak_memory"):
+            peak_memory_bytes = _cgroup_v2_peak_memory_bytes()
         receipt_body["peak_memory_bytes"] = peak_memory_bytes
         receipt_body["peak_memory_source"] = PEAK_MEMORY_SOURCE
     receipt = {**receipt_body, "sha256": digest(receipt_body)}
@@ -312,10 +405,26 @@ def main() -> None:
     try:
         value = run_preflight()
     except BaseException as exc:
+        failure = (
+            exc if isinstance(exc, _PreflightFailure) else _PreflightFailure("unclassified", exc)
+        )
         print(
             LOG_PREFIX
             + json.dumps(
-                {"schema": ENVELOPE_SCHEMA, "status": "failed", "error_class": type(exc).__name__},
+                {
+                    "schema": ENVELOPE_SCHEMA,
+                    "status": "failed",
+                    "gpus": 0,
+                    "job_name": os.environ.get("JOB_NAME", ""),
+                    "observed_at_unix": time.time(),
+                    "bundle_sha256": os.environ.get(ENV_BUNDLE_SHA256, ""),
+                    "driver_sha256": os.environ.get(ENV_DRIVER_SHA256, ""),
+                    "plan_sha256": os.environ.get(ENV_PLAN_SHA256, ""),
+                    "request_sha256": os.environ.get(ENV_REQUEST_SHA256, ""),
+                    "failure_stage": failure.stage,
+                    "error_class": failure.error_class,
+                    "error_fingerprint": failure.error_fingerprint,
+                },
                 sort_keys=True,
                 separators=(",", ":"),
             ),

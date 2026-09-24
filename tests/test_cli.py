@@ -742,6 +742,34 @@ def test_sft_cpu_preflight_job_commands_use_clean_source_and_exact_prepared_bind
     assert cli._read(output / "PREFLIGHT.json") == receipt
 
 
+def test_sft_cpu_preflight_failed_receipt_is_not_accepted_as_preflight(prepared, monkeypatch):
+    from cyber_post_train import direct_submit
+
+    output, plan, request, _ = prepared
+    current_plan = {**plan, "schema": "cyber_sft_runtime_dense_v1"}
+    failure = {
+        "schema": "cyber_sft_cpu_preflight_failure_v1",
+        "status": "failed",
+        "attempt": 2,
+        "sha256": "a" * 64,
+    }
+    monkeypatch.setattr(cli, "_prepared", lambda _: (current_plan, request))
+    monkeypatch.setattr(cli, "_submission_gate", lambda *args: None)
+    monkeypatch.setattr(cli, "_external_action_gate", lambda *args: None)
+    monkeypatch.setattr(cli, "_clean_source_commit", lambda: "a" * 40)
+    monkeypatch.setattr(direct_submit, "Kubectl", lambda context: context)
+    monkeypatch.setattr(direct_submit, "collect_sft_cpu_preflight", lambda **kwargs: failure)
+
+    result = RUNNER.invoke(
+        cli.app,
+        ["sft-cpu-preflight-job-collect", str(output), "--context", "prod", "--attempt", "2"],
+    )
+
+    assert result.exit_code == 0
+    assert not (output / "PREFLIGHT.json").exists()
+    assert cli._read(output / "PREFLIGHT_FAILED_A02.json") == failure
+
+
 def test_lr30_one_off_prepare_preflight_and_direct_submit_are_exact(tmp_path, monkeypatch):
     from cyber_post_train import direct_submit
     from training import qwen38_lr30_step76_gate as gate

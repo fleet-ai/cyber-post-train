@@ -193,9 +193,13 @@ def job_request(plan: dict) -> dict:
     }
 
 
-def preflight(plan: dict) -> dict:
+def preflight(plan: dict, *, progress=None) -> dict:
     from .sft_262k_runtime import install_runtime
 
+    if progress is not None:
+        progress("validate_262k_plan")
     validate_plan(plan, check_files=True)
+    if progress is not None:
+        progress("install_262k_runtime")
     install_runtime()
-    return sft.preflight(plan)
+    return sft.preflight(plan, progress=progress)

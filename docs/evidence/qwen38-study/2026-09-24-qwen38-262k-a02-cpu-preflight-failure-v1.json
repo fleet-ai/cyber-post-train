@@ -1,0 +1,109 @@
+{
+  "schema": "cyber_qwen38_262k_cpu_preflight_a02_failure_v1",
+  "status": "terminal_failure_exact_valueerror_gate_unrecoverable",
+  "classification": "infrastructure_invalid_terminal_evidence_gap",
+  "scientific_disposition": "no_training_run_no_optimizer_step_no_checkpoint_claim",
+  "run": {
+    "name": "chris-q38-t3k262-4n-can-v1-pre-a02",
+    "namespace": "fleet-train-jobs",
+    "attempt": 2,
+    "job_uid": "35476efe-c57d-4cc7-abf7-6ec08a67b728",
+    "workload_uid": "2f776241-3265-4585-bd76-c090afe508be",
+    "pod_name": "chris-q38-t3k262-4n-can-v1-pre-a02-x26n2",
+    "pod_uid": "fe40e4fe-c263-402e-be64-4077e1cd323f",
+    "node": "computeinstance-e04r6ge82f4fcgmbqz",
+    "job_terminal_reason": "BackoffLimitExceeded",
+    "job_terminal_at": "2026-09-24T15:19:37Z",
+    "workload_finished_at": "2026-09-24T15:19:38.153017Z",
+    "gpus": 0,
+    "restarts": 0
+  },
+  "bindings": {
+    "source_commit": "c9e5e3091cdc4a43d35898dc32bc4cc8e64effbd",
+    "plan_sha256": "3f96ba9d9233a969e47110f70ccf52c0e72d7c2f01d1ab5ce09678d982507a7e",
+    "request_sha256": "1679d4699b36bbd6e687ae9e84f6c0d6288620583bdb7a857ec873b87b908470",
+    "manifest_sha256": "543649442cdd8c7181f5e3e3e70e683f21b0d027c632da738a2cfe36c7f44a2b",
+    "bundle_sha256": "3ce16f259382b7659701814e7a2778cac7a78b2aa99bae8ae1274a3c2c50ca2c",
+    "driver_sha256": "95cc44419093b6cf3d2193e17f64dc8093d50d22031e004fc252b2d0c22a1b38",
+    "image_sha256": "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4"
+  },
+  "timeline": {
+    "workload_created_at": "2026-09-24T15:17:12.905977Z",
+    "workload_admitted_at": "2026-09-24T15:17:13.077600Z",
+    "container_started_at": "2026-09-24T15:17:14Z",
+    "sanitized_failure_observed_at": "2026-09-24T15:19:32.190116Z"
+  },
+  "retained_observations": {
+    "sanitized_log": {
+      "line_count": 1,
+      "schema": "cyber_sft_cpu_preflight_observation_v1",
+      "status": "failed",
+      "error_class": "ValueError",
+      "line_sha256": "af01ebeb602a26b0d172a70ebf95610ab2c72d187be872debf5f557b98842be6",
+      "line_bytes": 124,
+      "exception_message_retained": false,
+      "failure_stage_retained": false
+    },
+    "container_metrics": {
+      "memory_limit_bytes": 51539607552,
+      "max_usage_bytes": 31424692224,
+      "headroom_bytes": 20114915328,
+      "max_usage_fraction": 0.6097192764282227,
+      "max_usage_percent": 60.971927642822266,
+      "max_working_set_bytes": 1008775168,
+      "max_rss_bytes": 487067648,
+      "cpu_seconds": 69.875662,
+      "filesystem_read_bytes": 477003776,
+      "source": "retained Prometheus container series bound to the exact Pod UID"
+    },
+    "events": {
+      "oom_or_killed_event_present": false,
+      "exact_image_present": true,
+      "container_created_and_started": true,
+      "terminal_failure_recorded": true
+    },
+    "terminal_object_census_at_2026_09_24T15_37_34Z": {
+      "jobs_matching_exact_name_or_uid": 0,
+      "workloads_matching_exact_name_or_uid": 0,
+      "pods_matching_exact_name_or_uid": 0,
+      "possible_resource_leak": false
+    }
+  },
+  "diagnosis": {
+    "oom_ruled_out": true,
+    "oom_reason": "The exact container peak was 31,424,692,224 bytes, 20,114,915,328 bytes below the 48 GiB limit; Kubernetes recorded no OOM or Killed event, and the driver emitted its own ValueError failure envelope.",
+    "early_identity_gate_ruled_out": true,
+    "early_identity_reason": "The container remained active for about 138 seconds, consumed about 70 CPU-seconds, read about 477 MB, and reached a 31.4 GB cgroup peak, which requires the heavy native preflight path to have started.",
+    "remaining_stage_classes": [
+      "native compiler preflight after heavy dataset/model preparation began",
+      "native receipt binding after compiler preflight returned",
+      "final cgroup-v2 peak-memory evidence read"
+    ],
+    "exact_stage_recoverable": false,
+    "why_exact_stage_is_unrecoverable": [
+      "The driver redirected native stdout and stderr into a private in-memory buffer.",
+      "Its only public failure envelope retained error class but neither a stage nor the exception text.",
+      "The Job used ttlSecondsAfterFinished=0, so the terminal Job and Pod were deleted before the separate observer could bind status or a termination message.",
+      "The collector accepted only successful terminal objects and had no failed-receipt path.",
+      "No PREFLIGHT.json or attempt-specific failure receipt exists."
+    ]
+  },
+  "smallest_safe_successor_design": {
+    "allocates_gpu": false,
+    "terminal_ttl_seconds": 1800,
+    "terminal_resource_note": "A finished zero-GPU Job retains only its control-plane object and terminal Pod evidence; it holds no active CPU or GPU allocation.",
+    "failure_envelope": "Exact source hashes plus a bounded stage identifier, error class, and SHA-256 fingerprint of class and private message; never the message or private output.",
+    "termination_message_policy": "FallbackToLogsOnError",
+    "collector": "Validate exact Job, Workload, Pod, image, UID, attempt, source and nonzero exit before reading the one sanitized line; preserve it as PREFLIGHT_FAILED_Axx.json, never PREFLIGHT.json.",
+    "success_contract_changed": false,
+    "external_create_authorized_by_this_receipt": false,
+    "successor_submitted": false
+  },
+  "privacy": {
+    "credentials_included": false,
+    "private_logs_included": false,
+    "exception_messages_included": false,
+    "prompts_responses_flags_rewards_or_trace_content_included": false
+  },
+  "sha256": "sha256:783251761eadda704c6d2a94c4907edb20c8c35b5646329f949437ef116cb6fb"
+}

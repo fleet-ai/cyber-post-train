@@ -431,7 +431,7 @@ def _check_native_dataset_loader(plan: dict, prepared_rows: dict[str, list[dict]
         raise ValueError("task-outcome training unexpectedly produced an eval dataset")
 
 
-def preflight(plan: dict) -> dict:
+def preflight(plan: dict, *, progress=None) -> dict:
     """CPU-only checks in the pinned image, with staged inputs mounted.
 
     Check every bound file, native config and actual token/mask accounting before
@@ -449,37 +449,55 @@ def preflight(plan: dict) -> dict:
         validate_runtime_sources,
     )
 
+    def mark(stage: str) -> None:
+        if progress is not None:
+            progress(stage)
+
+    mark("gpu_isolation")
     if torch.cuda.is_available():
         raise ValueError("run data/runtime preflight without GPU allocation")
+    mark("validate_plan")
     validate_plan(plan)
+    mark("validate_runtime_sources")
     validate_runtime_sources(plan)
+    mark("build_runtime_configs")
     build_runtime_configs(plan)
+    mark("validate_forward_backward_adapter")
     _validate_sft_forward_backward_adapter(plan)
+    mark("load_model_config")
     AutoConfig.from_pretrained(
         plan["model"]["root"], local_files_only=True, trust_remote_code=False
     )
+    mark("load_tokenizer")
     tokenizer = AutoTokenizer.from_pretrained(
         plan["model"]["root"], local_files_only=True, trust_remote_code=False
     )
     counts = {}
     prepared_rows = {}
     for split, spec in plan["datasets"].items():
+        mark("read_dataset_" + split)
+        source_rows = pq.read_table(spec["path"]).to_pylist()
+        mark("prepare_rows_" + split)
         rows = prepare_rows(
-            pq.read_table(spec["path"]).to_pylist(),
+            source_rows,
             spec,
             tokenizer,
             tokenize_chat_example,
             max_length=plan["recipe"]["max_length"],
         )
+        mark("target_accounting_" + split)
         counts[split] = {
             "rows": len(rows),
             "tasks": len(spec["task_keys"]),
             "supervised_tokens": sum(sum(row["loss_mask"]) for row in rows),
         }
         prepared_rows[split] = rows
+    mark("validate_training_split")
     if "train" not in prepared_rows:
         raise ValueError("CPU preflight did not materialize the training split")
+    mark("native_dataset_loader")
     _check_native_dataset_loader(plan, prepared_rows)
+    mark("complete")
     return {
         "schema": "cyber_sft_cpu_preflight_v1",
         "request_sha256": digest(job_request(plan)),

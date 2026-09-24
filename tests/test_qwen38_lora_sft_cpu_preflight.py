@@ -158,3 +158,39 @@ def test_typed_cli_route_reuses_generic_zero_gpu_job_and_enforces_its_receipt(
     (directory / "PREFLIGHT.json").write_text(json.dumps(native_receipt))
     with pytest.raises(ValueError, match="identity drifted"):
         cli._require_preflight(directory, plan, request)
+
+
+def test_typed_cli_route_preserves_failure_without_accepting_preflight(tmp_path, monkeypatch):
+    from cyber_post_train import direct_submit
+
+    directory, _, _ = _prepared_a2(tmp_path)
+    failure = {
+        "schema": "cyber_sft_cpu_preflight_failure_v1",
+        "status": "failed",
+        "attempt": 2,
+        "sha256": "a" * 64,
+    }
+
+    class SyntheticKubectl:
+        def __init__(self, context):
+            self.context = context
+
+    monkeypatch.setattr(cli, "_clean_source_commit", lambda: "a" * 40)
+    monkeypatch.setattr(direct_submit, "Kubectl", SyntheticKubectl)
+    monkeypatch.setattr(direct_submit, "collect_sft_cpu_preflight", lambda **kwargs: failure)
+
+    result = RUNNER.invoke(
+        cli.app,
+        [
+            "qwen38-lora-sft-cpu-preflight-job-collect",
+            str(directory),
+            "--context",
+            "prod",
+            "--attempt",
+            "2",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert not (directory / "PREFLIGHT.json").exists()
+    assert cli._read(directory / "PREFLIGHT_FAILED_A02.json") == failure

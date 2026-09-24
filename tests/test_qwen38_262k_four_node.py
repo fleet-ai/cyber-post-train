@@ -187,13 +187,15 @@ def test_candidate_allows_preview_and_zero_gpu_preflight_but_blocks_gpu_submit()
         cli._external_action_gate(plan, "submit")
 
 
-def test_candidate_zero_gpu_preflight_job_has_immediate_terminal_ttl(exact_preflight_package):
+def test_candidate_zero_gpu_preflight_job_retains_terminal_evidence_briefly(
+    exact_preflight_package,
+):
     package = exact_preflight_package
     plan = package.plan
     resources = package.job["spec"]["template"]["spec"]["containers"][0]["resources"]
     assert resources["requests"]["memory"] == "16Gi"
     assert resources["limits"]["memory"] == "48Gi"
-    assert package.job["spec"]["ttlSecondsAfterFinished"] == 0
+    assert package.job["spec"]["ttlSecondsAfterFinished"] == 1800
     assert "nvidia.com/gpu" not in json.dumps(package.job)
     assert plan["qualification"]["submission_gate"]["submission_authorized"] is False
     assert (

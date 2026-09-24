@@ -426,7 +426,7 @@ def _validate_container(actual: Any, expected: dict) -> None:
         "container",
     )
     for key, value in _SERVER_CONTAINER_DEFAULTS.items():
-        if key in container and container[key] != value:
+        if key in container and container[key] != expected.get(key, value):
             raise ValueError("server output-check container default drifted")
     if any(container.get(name) not in (None, []) for name in ("envFrom", "ports", "volumeDevices")):
         raise ValueError("server output-check container gained an unreviewed source or device")
@@ -823,7 +823,11 @@ def _validate_admitted_workload(
     package: SfsOutputJobPackage,
     job: dict,
     workloads: dict,
+    *,
+    expected_finished_reason: str = "Succeeded",
 ) -> dict:
+    if expected_finished_reason not in {"Succeeded", "Failed"}:
+        raise ValueError("output-check expected Workload outcome is invalid")
     if workloads.get("kind") != "List" or not isinstance(workloads.get("items"), list):
         raise ValueError("output-check Workload inventory is incomplete")
     expected_owner = {
@@ -919,7 +923,7 @@ def _validate_admitted_workload(
         or admitted[0].get("status") != "True"
         or len(finished) != 1
         or finished[0].get("status") != "True"
-        or finished[0].get("reason") != "Succeeded"
+        or finished[0].get("reason") != expected_finished_reason
     ):
         raise ValueError("output-check Workload is not both admitted and terminally finished")
     if any(condition.get("status") == "True" for condition in evicted):

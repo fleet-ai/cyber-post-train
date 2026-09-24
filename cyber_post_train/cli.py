@@ -1193,6 +1193,7 @@ def sft_cpu_preflight_job_collect(
     """Collect one exact terminal generic-SFT CPU-preflight receipt."""
     from .direct_submit import Kubectl, collect_sft_cpu_preflight
     from .qwen38_lora_sft_preflight import is_qwen38_lora_plan
+    from .sft_cpu_preflight_job import FAILURE_SCHEMA
 
     try:
         plan, request = _prepared(directory)
@@ -1208,7 +1209,10 @@ def sft_cpu_preflight_job_collect(
             attempt=attempt,
             kubectl=Kubectl(context),
         )
-        _write(directory / "PREFLIGHT.json", receipt)
+        if receipt.get("schema") == FAILURE_SCHEMA:
+            _write(directory / f"PREFLIGHT_FAILED_A{attempt:02d}.json", receipt)
+        else:
+            _write(directory / "PREFLIGHT.json", receipt)
         _print(receipt)
     except Exception as exc:
         _fail(exc)
@@ -1254,6 +1258,7 @@ def qwen38_lora_sft_cpu_preflight_job_collect(
     """Collect a typed Qwen3.8 LoRA receipt from the exact native CPU Job."""
     from .direct_submit import Kubectl, collect_sft_cpu_preflight
     from .qwen38_lora_sft_preflight import build_receipt, validate_plan_request
+    from .sft_cpu_preflight_job import FAILURE_SCHEMA
 
     try:
         plan, request = _prepared(directory)
@@ -1268,6 +1273,10 @@ def qwen38_lora_sft_cpu_preflight_job_collect(
             attempt=attempt,
             kubectl=Kubectl(context),
         )
+        if native_receipt.get("schema") == FAILURE_SCHEMA:
+            _write(directory / f"PREFLIGHT_FAILED_A{attempt:02d}.json", native_receipt)
+            _print(native_receipt)
+            return
         receipt = build_receipt(plan, request, native_receipt)
         _write(directory / "PREFLIGHT.json", receipt)
         _print(receipt)

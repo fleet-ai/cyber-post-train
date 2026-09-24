@@ -37,9 +37,12 @@ from .sft_cpu_preflight_driver import (
     CHUNK_PREFIX,
     ENV_BUNDLE_SHA256,
     ENV_DRIVER_SHA256,
+    ENV_PLAN_SHA256,
+    ENV_REQUEST_SHA256,
     ENV_RUN_DIR,
     ENV_RUN_NAME,
     ENVELOPE_SCHEMA,
+    FAILURE_STAGES,
     LOG_PREFIX,
     MAX_CHUNK_BYTES,
     MAX_CHUNKS,
@@ -50,6 +53,7 @@ from .sft_cpu_preflight_driver import (
 )
 
 JOB_ROLE = "sft-cpu-preflight"
+FAILURE_SCHEMA = "cyber_sft_cpu_preflight_failure_v1"
 JOB_SUFFIX = "-pre-a{attempt:02d}"
 MAX_ATTEMPT = 99
 PLAN_ANNOTATION = "cyber-post-train.fleet.ai/plan-sha256"
@@ -197,6 +201,8 @@ def _bundle(
     environment = {
         ENV_BUNDLE_SHA256: hashlib.sha256(blob).hexdigest(),
         ENV_DRIVER_SHA256: driver_sha256,
+        ENV_PLAN_SHA256: digest(plan),
+        ENV_REQUEST_SHA256: digest(request),
         ENV_RUN_NAME: request["name"],
         ENV_RUN_DIR: request["run_dir"],
         **{f"{CHUNK_PREFIX}{index:03d}": value for index, value in enumerate(chunks)},
@@ -257,7 +263,10 @@ def _render(
             "completions": 1,
             "parallelism": 1,
             "suspend": True,
-            "ttlSecondsAfterFinished": 0,
+            # Terminal zero-GPU Pods hold no accelerator or CPU reservation.
+            # Retain their UID-bound status briefly so the separate collector
+            # can preserve the sanitized result before the TTL controller acts.
+            "ttlSecondsAfterFinished": 1800,
             "template": {
                 "metadata": {
                     "annotations": deepcopy(annotations),
@@ -271,6 +280,7 @@ def _render(
                             "name": "preflight",
                             "image": request["image"],
                             "imagePullPolicy": "IfNotPresent",
+                            "terminationMessagePolicy": "FallbackToLogsOnError",
                             "command": ["python", "-u", "-c", source],
                             "env": [
                                 {
@@ -494,14 +504,21 @@ def validate_sft_cpu_preflight_job_node_fit(
     return {"eligible_nodes": len(eligible), "fitting_nodes": len(fitting)}
 
 
-def validate_completed_sft_cpu_preflight_job(
+def _validate_terminal_sft_cpu_preflight_job(
     package: SftCpuPreflightJobPackage,
     job: dict,
     workloads: dict,
     pods: dict,
     service_account: dict,
-) -> tuple[str, dict]:
-    admitted_workload = _validate_admitted_workload(package, job, workloads)
+    *,
+    expected_success: bool,
+) -> tuple[str, dict, dict]:
+    admitted_workload = _validate_admitted_workload(
+        package,
+        job,
+        workloads,
+        expected_finished_reason="Succeeded" if expected_success else "Failed",
+    )
     owned = [
         item
         for item in workloads.get("items", [])
@@ -531,16 +548,19 @@ def validate_completed_sft_cpu_preflight_job(
         admitted_workload=admitted_workload,
     )
     conditions = job.get("status", {}).get("conditions", [])
-    if not any(
+    complete = any(
         item.get("type") == "Complete" and item.get("status") == "True"
         for item in conditions
         if isinstance(item, dict)
-    ) or any(
+    )
+    failed = any(
         item.get("type") == "Failed" and item.get("status") == "True"
         for item in conditions
         if isinstance(item, dict)
-    ):
-        raise ValueError("dense-SFT CPU-preflight Job is not terminally successful")
+    )
+    if (complete, failed) != ((True, False) if expected_success else (False, True)):
+        outcome = "successful" if expected_success else "failed"
+        raise ValueError(f"dense-SFT CPU-preflight Job is not terminally {outcome}")
     if pods.get("kind") != "List" or not isinstance(pods.get("items"), list):
         raise ValueError("dense-SFT CPU-preflight Pod inventory is incomplete")
     if len(pods["items"]) != 1:
@@ -576,18 +596,61 @@ def validate_completed_sft_cpu_preflight_job(
     if labels != live_template["labels"]:
         raise ValueError("dense-SFT CPU-preflight Pod labels drifted")
     statuses = pod.get("status", {}).get("containerStatuses", [])
-    if pod.get("status", {}).get("phase") != "Succeeded" or len(statuses) != 1:
-        raise ValueError("dense-SFT CPU-preflight Pod is not terminally successful")
+    expected_phase = "Succeeded" if expected_success else "Failed"
+    if pod.get("status", {}).get("phase") != expected_phase or len(statuses) != 1:
+        raise ValueError("dense-SFT CPU-preflight Pod terminal phase drifted")
     terminated = statuses[0].get("state", {}).get("terminated", {})
-    if statuses[0].get("restartCount") != 0 or terminated.get("exitCode") != 0:
-        raise ValueError("dense-SFT CPU-preflight container restarted or exited nonzero")
+    exit_code = terminated.get("exitCode")
+    if (
+        statuses[0].get("restartCount") != 0
+        or type(exit_code) is not int
+        or (exit_code == 0) is not expected_success
+    ):
+        raise ValueError("dense-SFT CPU-preflight container restart/exit contract drifted")
     image_digest = package.request["image"].rsplit("@", 1)[-1]
     if not statuses[0].get("imageID", "").endswith("@" + image_digest):
         raise ValueError("dense-SFT CPU-preflight image differs from the prepared request")
     name = metadata.get("name")
     if not isinstance(name, str) or not name:
         raise ValueError("dense-SFT CPU-preflight Pod name is missing")
-    return name, admitted_workload
+    return name, admitted_workload, pod
+
+
+def validate_completed_sft_cpu_preflight_job(
+    package: SftCpuPreflightJobPackage,
+    job: dict,
+    workloads: dict,
+    pods: dict,
+    service_account: dict,
+) -> tuple[str, dict]:
+    name, workload, _ = _validate_terminal_sft_cpu_preflight_job(
+        package,
+        job,
+        workloads,
+        pods,
+        service_account,
+        expected_success=True,
+    )
+    return name, workload
+
+
+def validate_failed_sft_cpu_preflight_job(
+    package: SftCpuPreflightJobPackage,
+    job: dict,
+    workloads: dict,
+    pods: dict,
+    service_account: dict,
+) -> tuple[str, dict]:
+    """Bind one exact failed Pod before its sanitized receipt is read."""
+    name, workload, _ = _validate_terminal_sft_cpu_preflight_job(
+        package,
+        job,
+        workloads,
+        pods,
+        service_account,
+        expected_success=False,
+    )
+    return name, workload
 
 
 def collect_sft_cpu_preflight_receipt(
@@ -661,3 +724,86 @@ def collect_sft_cpu_preflight_receipt(
     ):
         raise ValueError("dense-SFT CPU-preflight native receipt failed its binding")
     return receipt
+
+
+def collect_sft_cpu_preflight_failure(
+    package: SftCpuPreflightJobPackage,
+    job: dict,
+    workloads: dict,
+    pods: dict,
+    service_account: dict,
+    logs: str,
+) -> dict:
+    """Preserve one source/UID-bound, sanitized failed-preflight outcome."""
+    _, workload, pod = _validate_terminal_sft_cpu_preflight_job(
+        package,
+        job,
+        workloads,
+        pods,
+        service_account,
+        expected_success=False,
+    )
+    lines = logs.splitlines()
+    if len(lines) != 1 or not lines[0].startswith(LOG_PREFIX):
+        raise ValueError("failed dense-SFT CPU-preflight logs lack one sanitized receipt")
+    try:
+        envelope = json.loads(lines[0].removeprefix(LOG_PREFIX))
+    except json.JSONDecodeError as exc:
+        raise ValueError("failed dense-SFT CPU-preflight receipt is invalid JSON") from exc
+    proof = validate_sft_cpu_preflight_job_package(package)
+    expected_keys = {
+        "schema",
+        "status",
+        "gpus",
+        "job_name",
+        "observed_at_unix",
+        "bundle_sha256",
+        "driver_sha256",
+        "plan_sha256",
+        "request_sha256",
+        "failure_stage",
+        "error_class",
+        "error_fingerprint",
+    }
+    if (
+        not isinstance(envelope, dict)
+        or set(envelope) != expected_keys
+        or envelope.get("schema") != ENVELOPE_SCHEMA
+        or envelope.get("status") != "failed"
+        or envelope.get("gpus") != 0
+        or envelope.get("job_name") != job["metadata"]["name"]
+        or envelope.get("bundle_sha256") != proof["bundle_sha256"]
+        or envelope.get("driver_sha256") != proof["driver_sha256"]
+        or envelope.get("plan_sha256") != proof["plan_sha256"]
+        or envelope.get("request_sha256") != proof["request_sha256"]
+        or not isinstance(envelope.get("observed_at_unix"), (int, float))
+        or envelope.get("failure_stage") not in FAILURE_STAGES
+        or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]{0,127}", envelope.get("error_class", "")) is None
+        or re.fullmatch(r"[0-9a-f]{64}", envelope.get("error_fingerprint", "")) is None
+    ):
+        raise ValueError("failed dense-SFT CPU-preflight observation identity drifted")
+    status = pod["status"]["containerStatuses"][0]
+    terminated = status["state"]["terminated"]
+    body = {
+        "schema": FAILURE_SCHEMA,
+        "status": "failed",
+        "classification": "preflight_failed",
+        "attempt": package.attempt,
+        "source_commit": package.source_commit,
+        "plan_sha256": proof["plan_sha256"],
+        "request_sha256": proof["request_sha256"],
+        "bundle_sha256": proof["bundle_sha256"],
+        "driver_sha256": proof["driver_sha256"],
+        "job": {"name": job["metadata"]["name"], "uid": job["metadata"]["uid"]},
+        "workload_uid": workload["uid"],
+        "pod": {"name": pod["metadata"]["name"], "uid": pod["metadata"]["uid"]},
+        "image_id": status["imageID"],
+        "restart_count": status["restartCount"],
+        "exit_code": terminated["exitCode"],
+        "observed_at_unix": envelope["observed_at_unix"],
+        "failure_stage": envelope["failure_stage"],
+        "error_class": envelope["error_class"],
+        "error_fingerprint": envelope["error_fingerprint"],
+        "gpus": 0,
+    }
+    return {**body, "sha256": digest(body)}
