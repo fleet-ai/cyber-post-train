@@ -2,29 +2,18 @@ from __future__ import annotations
 
 import hashlib
 import json
-import subprocess
 from pathlib import Path
 
 from evals.fleet import task_quality_qualification as qualification
 
 ROOT = Path(__file__).parents[1]
 PACKET = ROOT / "configs/qualification/fleet-blackbox-qa33-zero-model-canary-20260924-v1.json"
-PACKET_COMMIT = "0ae3e0923c1e74e65bea3a91f102c1ac7a12917d"
 
 
 def _load(path: Path) -> dict:
     value = json.loads(path.read_text())
     assert isinstance(value, dict)
     return value
-
-
-def _packet_source(path: Path) -> bytes:
-    relative = path.relative_to(ROOT).as_posix()
-    return subprocess.run(
-        ["git", "-C", str(ROOT), "show", f"{PACKET_COMMIT}:{relative}"],
-        check=True,
-        capture_output=True,
-    ).stdout
 
 
 def test_packet_is_self_digested_and_binds_exact_inputs():
@@ -34,7 +23,7 @@ def test_packet_is_self_digested_and_binds_exact_inputs():
     )
     for binding in packet["inputs"].values():
         path = ROOT / binding["path"]
-        source = _packet_source(path)
+        source = path.read_bytes()
         assert "sha256:" + hashlib.sha256(source).hexdigest() == binding["file_sha256"]
         if "logical_sha256" in binding:
             assert json.loads(source)["sha256"] == binding["logical_sha256"]

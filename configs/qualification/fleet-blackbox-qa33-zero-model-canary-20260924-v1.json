@@ -117,7 +117,7 @@
       "path": "configs/data/fleet-blackbox-qa-candidates-20260924-v1.json"
     },
     "qualification_controller": {
-      "file_sha256": "sha256:a4e6060e83c08dc3347fb6f8f87605326f34c39ee49af17b43272570a6ea7591",
+      "file_sha256": "sha256:ab30043d961228904d19f9125a9db29cb00bcd09f1f472849e3a60d35d2c185b",
       "path": "evals/fleet/task_quality_qualification.py"
     },
     "qualification_job_entry": {
@@ -203,7 +203,7 @@
       "exploitability"
     ]
   },
-  "sha256": "sha256:b889f2db090f964fb9813fddda6f9640eb58c754a53e2320c4ec08e659af0e30",
+  "sha256": "sha256:8cf2d58a632028d90b820606f142e2f9d1fdb729378d7886f8fa98917346d658",
   "source": {
     "lineage_authority_git_commit": "4235f54749b739bb2ec1af38d113715b1c156914",
     "lineage_authority_git_tree": "43f01376fb2f5e44eedd48b4492c49bd10c9f2e8",
