@@ -1,14 +1,14 @@
 {
   "schema": "cyber_qwen38_top5_multibench_pass4_operational_matrix_v2",
   "matrix_id": "q38-top5-multibench-pass4-operational-20260924-v2",
-  "prepared_against_main_commit": "2547cd522f9db2d1fa09f4abd72004375e62cad2",
+  "prepared_against_main_commit": "a02aff8424f0470cd63bdb1903acc47ce5798851",
   "status": "prepared_no_launch",
   "launchable": false,
   "purpose": "Apply only availability substitutions to the prospectively frozen six-arm study after three selected native checkpoint sources were evicted before promotion.",
   "base_matrix": {
     "path": "configs/evaluation/qwen38-top5-multibench-pass4-matrix-20260923-v1.json",
-    "file_sha256": "sha256:2f6fbf5b1956f05f1906fa77513afb742f0d96c5321fc6ea0a20ab0d1fc37dff",
-    "matrix_sha256": "sha256:f4459e4d939f99973ad04ab114b03643073da43b9e767681f375bc0e33685da6",
+    "file_sha256": "sha256:59125bdd59892182b6fbe8d67318b13f3cde7c8e16e8bc4f86363418ec85bf15",
+    "matrix_sha256": "sha256:d72f52ce7035c5b2f48eb75de9513141a98f87d5fd7e4caf552ed625e967593a",
     "selection_rationale_is_immutable": true
   },
   "amendment_evidence": {
@@ -174,5 +174,5 @@
     "routes_authorized_by_this_amendment": 0,
     "evaluation_cells_authorized_by_this_amendment": 0
   },
-  "sha256": "389a496130f9a4ce0379d9dd901ee6f5003b7cb1d9fae3bbf02100de202962e4"
+  "sha256": "72d310d0e8a8f5d949c6e6066feb8cefeef182cb86cb8f1dd1083f6b5f527be7"
 }

@@ -143,7 +143,7 @@ a final-eight result. The final eight are labelled
 `historically_exposed_locked_confirmation_set` because their historical
 exposure is part of the interpretation boundary, not something the adapter can
 erase. The adapter binds the operational matrix receipt
-`389a496130f9a4ce0379d9dd901ee6f5003b7cb1d9fae3bbf02100de202962e4`.
+`72d310d0e8a8f5d949c6e6066feb8cefeef182cb86cb8f1dd1083f6b5f527be7`.
 That receipt keeps the prospective selection order and applies only three
 outcome-blind retention fallbacks: batch-16 step 200, 64K step 225, and
 learning-rate-1e-6 step 500. The exact six arms are base, step 1000, those
