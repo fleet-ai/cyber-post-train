@@ -104,21 +104,60 @@ current code as follows:
    gates and attempt-unique sandbox name.
 2. `ready` repeats the shared-capacity, full-inventory, local claim, remote-name,
    and output-root checks immediately before create. No mutation is permitted.
-3. `launch` calls the existing `CollectionLauncher.create` and
-   `start_collection` path once. Those methods retain their own permanent
-   before-request claims. The adapter emits a create receipt only after both
-   exact provider identities are known; uncertainty returns no receipt, leaving
-   the campaign launch intent for reconciliation.
-4. `observe` only reads the existing collection-supervisor/replica-pump state.
-   It imports an accepted rollout-bundle digest or a sanitized infrastructure
-   terminal digest; it never restarts collection or scoring.
+3. `launch` writes its local receipt, starts one detached worker, and waits for
+   its signed `STARTED` receipt. The worker does not touch TensorLake until the
+   campaign controller has durably recorded that exact launch receipt. A local
+   spawn failure therefore becomes an ordinary observed failure rather than an
+   uncertain remote create. The worker repeats the provider gates under
+   the shared create lock, then calls the existing `CollectionLauncher.create`
+   and `start_collection` path once. Their permanent before-request claims are
+   unchanged. An ambiguous sandbox create is attached by exact name and spec;
+   an ambiguous collection-process response is attached by the exact claimed
+   runner command. Neither POST is replayed. If provider ownership cannot be
+   proven, the exact create claim and capacity reservation remain held for
+   reconciliation; they are never cleared from a single inventory miss. The
+   worker then delegates
+   preservation, release, and export to the existing replica-pump supervisor
+   and snapshot exporter.
+4. `observe` only reads the worker's signed state and independently reopens the
+   existing supervisor, release, export, and rollout-bundle evidence. It imports
+   an accepted rollout-bundle digest or a sanitized infrastructure terminal
+   digest; it never restarts collection or scoring.
 
 The score actions use the existing `deferred_score` module over the accepted
 rollout bundle: preview validates the sealed score plan without a judge call,
-readiness checks its create-once score root, launch calls `run_score(...,
-execute=True)` once, and observation imports `SCORE_COMPLETE.json` or a
-sanitized failed-score receipt. This preserves the required collection/scoring
-split and lets another judge repair scoring without replaying the rollout.
+readiness checks its create-once score root, launch starts one detached worker
+that waits for the campaign controller's durable launch receipt before calling
+`run_score(..., execute=True)` once, and observation independently
+reopens the score bundle or a sanitized failed-score receipt. This preserves
+the required collection/scoring split and lets another judge repair scoring
+without replaying the rollout.
+
+`campaign_adapter.py` is the concrete bridge. Each statistical attempt binds
+one existing WEB `pass_k=1` collection plan; the campaign's four independently
+named attempts form pass@4. WEB sampling is fixed to temperature 1.0, top-p
+0.95, and an explicitly unset provider seed. A binding is sealed beside each
+campaign `packet.json` as `web-binding.json`, so every benchmark driver can use
+the same direct-argument commands. Generate the exact rollout and score driver
+blocks with `campaign_adapter driver-spec --phase rollout|score`; this avoids
+manual command drift. `seal-binding` validates the exact
+launch plan, task, model artifact, serving-route and live-parity receipts,
+OpenCode harness, sampling, runtime-budget digest, deterministic sandbox name,
+state paths, and deferred-score draft without a provider call. Collection
+serving evidence also has one reviewed signed mapping to the plan's complete
+public student identity; a base arm must supply the canonical standalone route
+proof plus a fresh paired live-parity receipt, while a checkpoint arm must use
+the exact registration and parity files already validated by its plan.
+Collection
+launch delegates to `CollectionLauncher`; terminal preservation delegates to
+the replica-pump supervisor; scoring delegates to `deferred_score`. Immediately
+before a provider create, launch requires the live owner selected by the latest
+bound capacity marker, so an older packet source cannot reject a valid
+generation-2 owner. An ambiguous sandbox create is reconciled by its permanent
+claim and exact provider identity rather than repeated. Rollout acceptance
+waits for both the supervisor's exact
+released terminal chain and the existing snapshot-export path's verified local
+rollout bundle. The adapter does not invent a second export implementation.
 
 ## Commands
 
