@@ -1,0 +1,303 @@
+{
+  "schema": "cyber_qwen38_step1000_weight_lineage_reconciliation_v1",
+  "observed_at": "2026-09-24T10:33:21Z",
+  "status": "accepted_export_drift_and_current_served_bytes_verified",
+  "scope": "Read-only reconciliation of the frozen Qwen3.8-27B base, accepted Teacher3K 32K checkpoints and BF16 exports, and the currently served step-1000 route. No raw weights, tensor names, model outputs, task content, prompts, traces, flags, answers, or scores are included.",
+  "source_receipts": {
+    "weight_drift_success": {
+      "path": "docs/evidence/qwen38-study/2026-09-24-q38-step1000-weight-drift-a2-success.json",
+      "receipt_sha256": "5ee87e410a22518d9896d747af66ceb39c4267c192e25633f60a859374de4a0e",
+      "self_digest_verified": true
+    },
+    "promotion": {
+      "path": "docs/evidence/qwen38-teacher3k32-step1000-promotion-20260922.json",
+      "receipt_sha256": "457b9dc3a97a552db38b66fc83102d67925020d01112392970e4ec9d3d24d9ee",
+      "self_digest_verified": true
+    },
+    "evaluation_artifact_acceptance": {
+      "path": "docs/evidence/qwen38-teacher3k32-step1000-eval-artifact-accepted-20260923.json",
+      "receipt_sha256": "sha256:b120de36f8927874281ed1743fb07c482eedc249c638274cb56f8db6f74b9c71",
+      "self_digest_verified": true
+    }
+  },
+  "audit_execution": {
+    "job": {
+      "name": "chris-q38-t3k32-drift-a2",
+      "uid": "1e4079ba-29e1-477f-88be-780f17ea3964",
+      "terminal_at": "2026-09-24T09:06:03Z",
+      "condition": "Complete",
+      "root_failure_alert_annotation": "off"
+    },
+    "pod": {
+      "name": "chris-q38-t3k32-drift-a2-2jqp2",
+      "uid": "e8af9630-80a8-46e5-9f23-f3e91a90945e",
+      "exit_code": 0,
+      "restart_count": 0,
+      "gpu_request": 0,
+      "run_as_user": 1000,
+      "run_as_group": 100,
+      "image_sha256": "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4"
+    },
+    "aggregate_receipt": {
+      "schema": "cyber_qwen38_weight_drift_audit_v1",
+      "status": "passed",
+      "stdout_sha256": "95c7cf4d66e0b46260acd4451601eb415a4c9b6028d15edd1e093ba8909b3415",
+      "self_sha256": "db8451cee96db2139466da47fef2b2e3e75e06d57903189a18dbad3fbac27baf",
+      "self_sha256_verified": true
+    },
+    "resource_release": {
+      "active_owned_pods": 0,
+      "active_workloads": 0,
+      "gpu_allocation": 0
+    }
+  },
+  "base_and_export_structure": {
+    "exact_key_shape_dtype_parity": true,
+    "dtype": "BF16",
+    "tensor_count": 1199,
+    "tensor_values": 27781427952,
+    "tensor_bytes": 55562855904,
+    "base_weight_shards_verified": 18,
+    "export_weight_shards_verified": 19,
+    "index_header_offsets_valid": true,
+    "export_layout_sha256": "068ec3b29b45e4dfc81f33089be8c131306926a1c41d589657f7749d64c24b21",
+    "trained_tensor_count": 1184,
+    "restored_frozen_mtp_tensor_count": 15,
+    "sidecars_matching_frozen_base": 9,
+    "nonfinite_values": 0,
+    "new_all_zero_tensors": 0,
+    "missing_tensors": 0,
+    "unexpected_tensors": 0,
+    "statement": "All 1,199 export tensors have the exact same keys, shapes, and BF16 dtypes as the frozen base. The different base/export index and shard counts reflect deterministic resharing, not tensor-layout drift. All index offsets, payload inventories, and accepted hashes pass."
+  },
+  "base_to_step1000_drift": {
+    "changed_training_tensors": 718,
+    "eligible_training_tensors": 1184,
+    "changed_elements": 19748783453,
+    "total_elements": 27781427952,
+    "changed_element_fraction": 0.7108627924785369,
+    "mean_abs_diff": 0.000069017746162554,
+    "rms_diff": 0.00009648111446568063,
+    "relative_l2": 0.006459652221567357,
+    "max_abs_diff": 0.002197265625,
+    "changed_transformer_layers": 64,
+    "transformer_layers": 64,
+    "layer_relative_l2": {
+      "min": 0.004993226980744229,
+      "median": 0.007632521528568203,
+      "max": 0.008146594112371645
+    },
+    "categories": {
+      "embedding": {
+        "changed_tensors": 1,
+        "tensors": 1,
+        "changed_element_fraction": 0.15922821831457393,
+        "relative_l2": 0.003064592838116157
+      },
+      "lm_head": {
+        "changed_tensors": 1,
+        "tensors": 1,
+        "changed_element_fraction": 0.45038705255567413,
+        "relative_l2": 0.008160790263241393
+      },
+      "mlp": {
+        "changed_tensors": 192,
+        "tensors": 192,
+        "changed_element_fraction": 0.7992637944572112,
+        "relative_l2": 0.008690713547952339
+      },
+      "self_attention": {
+        "changed_tensors": 81,
+        "tensors": 96,
+        "changed_element_fraction": 0.7322823203463743,
+        "relative_l2": 0.0062318690990303075
+      },
+      "linear_attention": {
+        "changed_tensors": 315,
+        "tensors": 432,
+        "changed_element_fraction": 0.7312805548434921,
+        "relative_l2": 0.006213502408938102
+      },
+      "normalization": {
+        "changed_tensors": 128,
+        "tensors": 129,
+        "changed_element_fraction": 0.1789107921511628,
+        "relative_l2": 0.00040459398142503946
+      },
+      "visual": {
+        "changed_tensors": 0,
+        "tensors": 333,
+        "changed_element_fraction": 0.0,
+        "relative_l2": 0.0
+      },
+      "mtp": {
+        "changed_tensors": 0,
+        "tensors": 15,
+        "changed_element_fraction": 0.0,
+        "relative_l2": 0.0
+      }
+    },
+    "unchanged_bf16_interpretation": {
+      "unchanged_eligible_training_tensors": 466,
+      "visual_tensors": 333,
+      "other_tensors": 133,
+      "statement": "The text-only SFT path leaves the visual tower byte-equal to base. Another 133 eligible tensors are BF16-equal to base even though neighboring tensors and every transformer layer changed. The pruned native FP32 step-1000 checkpoint prevents deciding whether those 133 tensors had exactly zero FP32 update or an update below the BF16 rounding threshold."
+    }
+  },
+  "checkpoint_progression": {
+    "step600": {
+      "changed_training_tensors_vs_base": 707,
+      "changed_non_mtp_tensors_vs_previous": 707,
+      "changed_layers_vs_base": 64
+    },
+    "step700": {
+      "changed_training_tensors_vs_base": 707,
+      "changed_non_mtp_tensors_vs_previous": 696,
+      "changed_layers_vs_base": 64
+    },
+    "step800": {
+      "changed_training_tensors_vs_base": 710,
+      "changed_non_mtp_tensors_vs_previous": 692,
+      "changed_layers_vs_base": 64
+    },
+    "step900": {
+      "changed_training_tensors_vs_base": 712,
+      "changed_non_mtp_tensors_vs_previous": 690,
+      "changed_layers_vs_base": 64
+    },
+    "step1000": {
+      "changed_training_tensors_vs_base": 718,
+      "changed_non_mtp_tensors_vs_previous": 698,
+      "changed_layers_vs_base": 64,
+      "step900_to_step1000_changed_elements": 12329042474,
+      "step900_to_step1000_changed_element_fraction": 0.4437872126408256,
+      "step900_to_step1000_relative_l2": 0.0023817317899197925
+    },
+    "statement": "Every accepted intermediate export differs from both the frozen base and the immediately preceding accepted export. This rules out a stalled or repeatedly re-exported base model."
+  },
+  "checkpoint_and_export_lineage": {
+    "native_checkpoint": {
+      "optimizer_step": 1000,
+      "supervised_tokens": 31035607,
+      "seal_file_sha256": "sha256:b639cd04c1a4d1ee9b7a461808af3cfb77a91d71d841f6de83106fc4d3b7e48c",
+      "seal_sha256": "sha256:685af3a1a85bee98d4fa26994f968ec7315107157ea0a4b99a500b7b2e030359",
+      "receipt_file_sha256": "sha256:378011c8f0c8908d156aaf5dffa4d8a9ffe68b10373dbd4e0eecf14a5155e934",
+      "receipt_sha256": "sha256:bae4b7215a6b9ebd38461555a2de02dfe822013222280ee0ca6498ad27e892b7",
+      "current_directory_present": false,
+      "receipt_present": true,
+      "seal_present": true,
+      "retention_observed_at": "2026-09-24T10:11:54Z",
+      "retained_neighbor_directories": [
+        "global_step_1800",
+        "global_step_1837"
+      ]
+    },
+    "bf16_export": {
+      "path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/hf-export-step1000-v1",
+      "receipt_file_sha256": "sha256:e79d2cdaaebe52da61a37e4f4ad35c2c8ccd4878afaf77de0fc4796e8e1c6463",
+      "receipt_sha256": "sha256:8a1d9e093fa1f856c35d357cf34861862317491ee83a9268613f1cf86160eef0",
+      "payload_manifest_sha256": "sha256:023c5f8b0559ba050f0d672a6bc27aabecec7d5837595f8ea5bc914446d26db5",
+      "payload_files": 29,
+      "payload_total_bytes": 55586032099,
+      "source_inventory_unchanged": true,
+      "all_output_tensors_reopened_equal": true
+    },
+    "conversion_contract": {
+      "native_source_required_cpu_fp32": true,
+      "export_dtype": "BF16",
+      "exact_export_code_sha256": "af0fc6cc2c388f8948f6be02a3cfedc189bbafbffa9511aacae35a08ce9125b1",
+      "direct_step1000_f32_to_bf16_numeric_comparison_available": false,
+      "statement": "The sealed export code requires CPU FP32 native shards, reconstructs exact rank layouts, checks finiteness and replica equality, casts to BF16, reopens every output tensor, and records source stability. The native step-1000 directory was later retention-pruned, so this audit cannot independently repeat a direct FP32-to-BF16 value comparison for step 1000."
+    }
+  },
+  "served_route_lineage": {
+    "control_plane": {
+      "fleet_team_id": "a1025f0b-ad67-49fc-a023-51800ab43e84",
+      "model_id": "chris-q38-t3k32-s1000-v1",
+      "resource_version": "35255497",
+      "observed_generation": 8,
+      "phase": "ready",
+      "desired_replicas": 1,
+      "active_pods": 1,
+      "ready_replicas": 1,
+      "routing_enabled": true,
+      "spec_sha256": "sha256:b1cbd99c13378b14452d013dbd0b176ec26a72e506ef6a3dc386185e1bb8e726",
+      "model_path": "/scratch/models/chris-q38-t3k32-s1000-v1",
+      "source_path": "/models/chris-q38-t3k32-s1000-v1",
+      "revision": "sha256:023c5f8b0559ba050f0d672a6bc27aabecec7d5837595f8ea5bc914446d26db5",
+      "precision": "bf16",
+      "tensor_parallel_size": 1,
+      "data_parallel_size": 8,
+      "priority_class": "c1",
+      "runtime_image_sha256": "d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9"
+    },
+    "current_pod": {
+      "name": "inference-chris-q38-t3k32-s1000-v1-5fb548878-7d96t",
+      "uid": "11f4a14e-c47b-4e30-92ae-39ce5196a95e",
+      "created_at": "2026-09-24T09:14:04Z",
+      "ready_at": "2026-09-24T09:20:18Z",
+      "ready": true,
+      "restart_count": 0,
+      "model_argument": "/scratch/models/chris-q38-t3k32-s1000-v1",
+      "served_model_argument": "chris-q38-t3k32-s1000-v1",
+      "source_mount_read_only": true
+    },
+    "staging_acceptance": {
+      "schema": "cyber_inference_model_stream_stage_receipt_v1",
+      "acceptance_file_sha256": "fbddf6d7a56651931689d5b27ec04e035ce855a721b89a4a44cb34bb85d61efc",
+      "acceptance_sha256": "sha256:5b4e15b75f8f1ecfdab363e20beb94e4a3f8b60054cb9fa79c7b700f221ab80c",
+      "self_digest_verified": true,
+      "payload_manifest_sha256": "sha256:023c5f8b0559ba050f0d672a6bc27aabecec7d5837595f8ea5bc914446d26db5",
+      "payload_files": 29,
+      "payload_total_bytes": 55586032099,
+      "index_sha256": "4d30c2ae0ae163e8a4f272088cb3133cc7a8998efbf3828d6fbb857a16814094",
+      "source_acceptance_matches_scratch_acceptance": true,
+      "source_index_matches_scratch_index": true,
+      "scratch_cache_marker_sha256": "55f8b2644031ab0eb56478c43c3b2206b6717dcb24da000f284040e995995369",
+      "scratch_cache_marker_binds_exact_source_and_acceptance": true
+    },
+    "current_scratch_full_digest_audit": {
+      "observed_at": "2026-09-24T10:33:21Z",
+      "payload_files_hashed": 29,
+      "payload_bytes_hashed": 55586032099,
+      "digest_matches": 29,
+      "digest_mismatches": 0,
+      "all_current_scratch_payload_digests_match_acceptance": true,
+      "raw_weights_or_values_emitted": false
+    },
+    "historical_live_parity": {
+      "observed_at": "2026-09-22T22:16:01.235278Z",
+      "status": "passed",
+      "receipt_file_sha256": "sha256:1a9c74ef8ac0d9f1edce0c0e9c9844c14417a3e703885962b8c4a8cd9e510f06",
+      "receipt_sha256": "sha256:ab9ab3bdd826b6cfc7096af8284ae5b16650f744c4012577b486976a152ecec3",
+      "normalized_contract_sha256": "sha256:d82d78721f4ec8d4b0d6228242df4838b38086a48108e57fc6fe4e7be1fa3662",
+      "fixed_probe_logit_projection_differs_between_base_and_candidate": true,
+      "response_content_recorded": false
+    }
+  },
+  "conclusion": {
+    "no_op_training_or_base_copy_export": "ruled_out",
+    "wrong_checkpoint_or_base_weights_currently_served": "ruled_out",
+    "basis": [
+      "Step 1000 has 19,748,783,453 BF16 elements and 718 eligible tensors different from frozen base across all 64 transformer layers.",
+      "Step 1000 differs from step 900 in 12,329,042,474 BF16 elements across 698 non-MTP tensors.",
+      "The export, inference staging receipt, route revision, source and scratch acceptance markers, and every one of the 29 currently served scratch payload digests all bind the same payload manifest.",
+      "The active route explicitly loads that verified scratch path and an earlier fixed probe confirmed different candidate-versus-base logit projections under the matched serving contract."
+    ],
+    "remaining_gaps": [
+      "The retention-pruned native step-1000 FP32 directory prevents an independent repeat of native FP32-to-BF16 numerical equality. The accepted exporter receipt and exact code contract remain, but this is not the same as re-reading the original native tensors now.",
+      "For the 133 non-visual eligible tensors that are BF16-equal to base, the current artifacts cannot distinguish a truly zero FP32 update from an update rounded away by BF16 conversion.",
+      "Weight integrity does not establish benchmark lift, task quality, or semantic correctness; those require matched evaluations."
+    ]
+  },
+  "privacy": {
+    "contains_secrets": false,
+    "contains_private_logs": false,
+    "contains_raw_weights": false,
+    "contains_tensor_names": false,
+    "contains_tensor_values": false,
+    "contains_model_outputs": false,
+    "contains_prompts_traces_flags_answers_or_scores": false
+  },
+  "receipt_sha256": "4bfcacedf0b4ef218fc61f73b169e6176f4260e8d88af66a3aee3fc5bc3d074c"
+}
