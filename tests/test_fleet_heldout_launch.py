@@ -1066,6 +1066,35 @@ def test_create_response_journal_append_failure_is_not_swallowed(
     assert cluster.create_calls == 1
 
 
+def test_uid_append_failure_keeps_returned_uids_in_uncertain_record(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    packet = _packet(tmp_path)
+    cluster, database = FakeCluster(), FakeDatabase()
+    journal = tmp_path / "intent.jsonl"
+    real_open = launch.os.open
+    append_calls = 0
+
+    def fail_first_append(path, flags, *args):
+        nonlocal append_calls
+        if Path(path) == journal and flags & launch.os.O_APPEND:
+            append_calls += 1
+            if append_calls == 1:
+                raise OSError("injected first append failure")
+        return real_open(path, flags, *args)
+
+    monkeypatch.setattr(launch.os, "open", fail_first_append)
+    with pytest.raises(launch.HeldoutLaunchError, match="durably append"):
+        _launch(packet, cluster, database, journal)
+    lines = [json.loads(line) for line in journal.read_text().splitlines()]
+    assert lines[-1] == {
+        "state": "KUBECTL_CREATE_RESPONSE_UNCERTAIN_DO_NOT_RETRY",
+        "observed_exact_names": {"job": False, "config_map": False},
+        "returned_job_uid": JOB_UID,
+        "returned_config_map_uid": CONFIG_MAP_UID,
+    }
+
+
 def test_returned_uids_are_durable_before_later_response_validation(tmp_path):
     packet = _packet(tmp_path)
     _enable_rollout_database(packet)
