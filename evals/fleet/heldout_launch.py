@@ -1021,6 +1021,25 @@ def _workload_binds_created_job(item: dict[str, Any], job_name: str, job_uid: st
     return False
 
 
+def _pod_binds_created_job(item: dict[str, Any], job_name: str, job_uid: str) -> bool:
+    """Require the Pod controller reference to bind the exact created Job UID."""
+    owners = _metadata(item, "Pod").get("ownerReferences")
+    if not isinstance(owners, list):
+        raise HeldoutLaunchError("Pod owner references are invalid")
+    for owner in owners:
+        if not isinstance(owner, dict):
+            raise HeldoutLaunchError("Pod owner reference is invalid")
+        if (
+            owner.get("apiVersion") == "batch/v1"
+            and owner.get("kind") == "Job"
+            and owner.get("name") == job_name
+            and owner.get("uid") == job_uid
+            and owner.get("controller") is True
+        ):
+            return True
+    return False
+
+
 def _scoped_items(
     cluster: Cluster,
     resource: str,
@@ -1423,6 +1442,8 @@ def launch_once(
     _write_new_record(journal, intent)
     try:
         created = cluster.create_once(package.packet.namespace, package.bundle)
+        if _validate_server_preview(created, package) != first_preview:
+            raise HeldoutLaunchError("created bundle differs from accepted server preview")
         job = _response_object(
             created,
             api_version="batch/v1",
@@ -1439,32 +1460,15 @@ def launch_once(
             name=package.packet.config_map_name,
             label="create response",
         )
-        expected_reads_postgres = require_postgres_client_label(
-            package.job, label="sealed packet Job"
-        )
-        observed_reads_postgres = require_postgres_client_label(job, label="created Job")
-        if observed_reads_postgres != expected_reads_postgres:
-            raise HeldoutLaunchError(
-                "created Job changed the rollout PostgreSQL dependency contract"
-            )
-        annotations = _metadata(job, "created Job").get("annotations")
         uid = _metadata(job, "created Job").get("uid")
         config_map_uid = _metadata(config_map, "created ConfigMap").get("uid")
         if (
-            not isinstance(annotations, dict)
-            or annotations.get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
-            or not isinstance(uid, str)
+            not isinstance(uid, str)
             or KUBERNETES_UID.fullmatch(uid) is None
             or not isinstance(config_map_uid, str)
             or KUBERNETES_UID.fullmatch(config_map_uid) is None
         ):
-            raise HeldoutLaunchError("create response lacks exact root alert annotation or UID")
-        created_spec = job.get("spec")
-        created_template = created_spec.get("template") if isinstance(created_spec, dict) else None
-        created_pod = created_template.get("spec") if isinstance(created_template, dict) else None
-        if not isinstance(created_pod, dict):
-            raise HeldoutLaunchError("created Job Pod template is invalid")
-        _assert_cpu_only(created_pod)
+            raise HeldoutLaunchError("create response lacks exact resource UIDs")
     except Exception as exc:
         observed = _created_name_observation(cluster, package.packet)
         _append_record(
@@ -1698,6 +1702,8 @@ def collect_terminal(
     ):
         raise HeldoutLaunchError("scoped Workload read differs from the created Job")
     pods = _owned_pods(cluster, packet)
+    if any(not _pod_binds_created_job(item, packet.job_name, job_uid) for item in pods):
+        raise HeldoutLaunchError("scoped Pod read differs from the created Job UID")
     try:
         database_exists = database.exists(packet.database)
         if database_exists:

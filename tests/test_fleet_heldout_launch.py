@@ -71,6 +71,7 @@ class FakeCluster:
         self.postgres_label_in_create: str | None = None
         self.drop_postgres_contract_in_create = False
         self.add_postgres_contract_in_create = False
+        self.mutate_config_map_in_create = False
         self.created: dict[str, Any] | None = None
 
     def list(
@@ -142,6 +143,8 @@ class FakeCluster:
             resources.setdefault("limits", {})[self.inject_gpu] = "1"
         config_map = next(item for item in result["items"] if item["kind"] == "ConfigMap")
         config_map["metadata"]["uid"] = CONFIG_MAP_UID
+        if create and self.mutate_config_map_in_create:
+            config_map["data"]["config.json"] = "{}"
         return result
 
     def server_dry_run(self, namespace: str, bundle: dict[str, Any]) -> dict[str, Any]:
@@ -484,6 +487,23 @@ def test_create_response_must_retain_database_client_label(tmp_path):
     journal = tmp_path / "intent.jsonl"
 
     with pytest.raises(launch.HeldoutLaunchError, match="reads rollout PostgreSQL"):
+        _launch(packet, cluster, database, journal)
+
+    assert cluster.preview_calls == 2
+    assert cluster.create_calls == 1
+    assert [json.loads(line)["state"] for line in journal.read_text().splitlines()] == [
+        "KUBECTL_CREATE_INTENT_DO_NOT_RETRY",
+        "KUBECTL_CREATE_RESPONSE_UNCERTAIN_DO_NOT_RETRY",
+    ]
+
+
+def test_create_response_must_equal_the_accepted_preview(tmp_path):
+    packet = _packet(tmp_path)
+    cluster, database = FakeCluster(), FakeDatabase()
+    cluster.mutate_config_map_in_create = True
+    journal = tmp_path / "intent.jsonl"
+
+    with pytest.raises(launch.HeldoutLaunchError, match="ConfigMap differs"):
         _launch(packet, cluster, database, journal)
 
     assert cluster.preview_calls == 2
@@ -856,6 +876,15 @@ def test_terminal_collection_is_score_blind_and_never_retries_or_scores(tmp_path
                 "name": JOB_NAME + "-abc",
                 "uid": POD_UID,
                 "labels": {"job-name": JOB_NAME},
+                "ownerReferences": [
+                    {
+                        "apiVersion": "batch/v1",
+                        "kind": "Job",
+                        "name": JOB_NAME,
+                        "uid": JOB_UID,
+                        "controller": True,
+                    }
+                ],
             },
             "status": {"phase": "Succeeded"},
         }
@@ -931,6 +960,47 @@ def test_terminal_collection_is_score_blind_and_never_retries_or_scores(tmp_path
         None,
         f"kueue.x-k8s.io/job-uid={JOB_UID}",
     ) in cluster.list_calls
+
+
+def test_terminal_collection_rejects_stale_same_name_pod_owner_uid(tmp_path):
+    packet = _packet(tmp_path)
+    cluster, database = FakeCluster(), FakeDatabase()
+    _launch(packet, cluster, database, tmp_path / "intent.jsonl")
+    assert cluster.created is not None
+    job = next(item for item in cluster.created["items"] if item["kind"] == "Job")
+    job["status"] = {
+        "conditions": [{"type": "Complete", "status": "True"}],
+        "succeeded": 1,
+        "failed": 0,
+    }
+    cluster.inventories["pods"]["items"] = [
+        {
+            "metadata": {
+                "name": JOB_NAME + "-stale",
+                "uid": POD_UID,
+                "labels": {"job-name": JOB_NAME},
+                "ownerReferences": [
+                    {
+                        "apiVersion": "batch/v1",
+                        "kind": "Job",
+                        "name": JOB_NAME,
+                        "uid": CONFIG_MAP_UID,
+                        "controller": True,
+                    }
+                ],
+            },
+            "status": {"phase": "Succeeded"},
+        }
+    ]
+
+    with pytest.raises(launch.HeldoutLaunchError, match="created Job UID"):
+        launch.collect_terminal(
+            packet,
+            cluster=cluster,
+            database=database,
+            receipt_path=tmp_path / "terminal.json",
+            output_exists=lambda _: True,
+        )
 
 
 def test_postgres_summary_preserves_uri_scheme_when_selecting_database(monkeypatch):
