@@ -18,6 +18,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, quote, urlsplit, urlunsplit
 
 import httpx
 
@@ -39,6 +40,77 @@ class AdapterError(ValueError):
 
 class CapacityUnavailable(AdapterError):
     """The bound daily rollout allowance cannot admit this source group."""
+
+
+class CampaignDatabase(heldout_launch.PostgresDatabase):
+    """New score-blind reads without changing byte-bound historical modules."""
+
+    def _campaign_dsn(self, database: str) -> str:
+        if (
+            not isinstance(database, str)
+            or heldout_launch.DATABASE_NAME.fullmatch(database) is None
+        ):
+            raise heldout_launch.HeldoutLaunchError("database name is invalid")
+        original = urlsplit(self._dsn())  # noqa: SLF001
+        if (
+            original.scheme not in {"postgres", "postgresql"}
+            or not original.netloc
+            or original.fragment
+        ):
+            raise heldout_launch.HeldoutLaunchError(
+                "database environment is not a supported PostgreSQL URI"
+            )
+        if {key.casefold() for key, _ in parse_qsl(original.query, keep_blank_values=True)} & {
+            "database",
+            "dbname",
+        }:
+            raise heldout_launch.HeldoutLaunchError(
+                "database environment must select its database only by URI path"
+            )
+        return urlunsplit(
+            (
+                original.scheme,
+                original.netloc,
+                "/" + quote(database, safe=""),
+                original.query,
+                "",
+            )
+        )
+
+    def cell_status(
+        self,
+        database: str,
+        *,
+        task_version_id: str,
+        model_id: str,
+        model_revision: str,
+        attempt: int,
+    ) -> dict[str, Any]:
+        """Read one exact cell without scores, prompts, or trace content."""
+        try:
+            from evals.fleet import rollout_postgres
+
+            with rollout_postgres._read_transaction(self._campaign_dsn(database)) as connection:  # noqa: SLF001
+                rows = connection.execute(
+                    """
+                    SELECT c.cell_id, c.state, c.retry_count, c.max_retries,
+                           c.result_class, c.receipt_digest, c.failure_code,
+                           COUNT(r.execution_id) AS local_results
+                    FROM rollout_cells AS c
+                    LEFT JOIN rollout_local_results AS r ON r.cell_id = c.cell_id
+                    WHERE c.task_version_id = %s AND c.model_id = %s
+                      AND c.model_revision = %s AND c.attempt = %s
+                    GROUP BY c.cell_id
+                    """,
+                    (task_version_id, model_id, model_revision, attempt),
+                ).fetchall()
+            if len(rows) != 1:
+                raise heldout_launch.HeldoutLaunchError("exact rollout cell is absent or ambiguous")
+            return dict(rows[0])
+        except heldout_launch.HeldoutLaunchError:
+            raise
+        except Exception:
+            raise heldout_launch.HeldoutLaunchError("score-blind cell status failed") from None
 
 
 def _digest(value: object) -> str:
@@ -249,6 +321,19 @@ def _route_ready(package: heldout_launch.Package) -> dict[str, Any]:
         return evaluate.check_route(route, model, client)
 
 
+def _preview_package(package: heldout_launch.Package, *, cluster: heldout_launch.Cluster) -> str:
+    """Prove two stable server previews without changing the frozen launcher."""
+    first = heldout_launch._validate_server_preview(  # noqa: SLF001
+        cluster.server_dry_run(package.packet.namespace, package.bundle), package
+    )
+    second = heldout_launch._validate_server_preview(  # noqa: SLF001
+        cluster.server_dry_run(package.packet.namespace, package.bundle), package
+    )
+    if first != second:
+        raise heldout_launch.HeldoutLaunchError("server dry-run changed across identical previews")
+    return first
+
+
 def _budget(
     binding: dict[str, Any],
     group_id: str,
@@ -359,7 +444,7 @@ def run_action(
     group = bindings["groups"][group_id]
     root = _group_root(packet_path, group_id)
     cluster = cluster or heldout_launch.KubectlCluster(context)
-    database = database or heldout_launch.PostgresDatabase()
+    database = database or CampaignDatabase()
 
     if phase == "score":
         collection_path = terminal_receipt or (
@@ -412,7 +497,7 @@ def run_action(
 
     shared = _launch_record(root / "launch.json")
     if action == "preview":
-        server_preview = heldout_launch.preview_package(package, cluster=cluster)
+        server_preview = _preview_package(package, cluster=cluster)
         return _receipt(
             target,
             phase,

@@ -770,31 +770,3 @@ def summary(dsn: str) -> dict[str, Any]:
         "stale_active": stale,
         "plan_sha256": plan["value"] if plan else None,
     }
-
-
-def cell_status(
-    dsn: str,
-    *,
-    task_version_id: str,
-    model_id: str,
-    model_revision: str,
-    attempt: int,
-) -> dict[str, Any]:
-    """Read one exact cell without returning scores, prompts, or trace content."""
-    with _read_transaction(dsn) as connection:
-        rows = connection.execute(
-            """
-            SELECT c.cell_id, c.state, c.retry_count, c.max_retries,
-                   c.result_class, c.receipt_digest, c.failure_code,
-                   COUNT(r.execution_id) AS local_results
-            FROM rollout_cells AS c
-            LEFT JOIN rollout_local_results AS r ON r.cell_id = c.cell_id
-            WHERE c.task_version_id = %s AND c.model_id = %s
-              AND c.model_revision = %s AND c.attempt = %s
-            GROUP BY c.cell_id
-            """,
-            (task_version_id, model_id, model_revision, attempt),
-        ).fetchall()
-    if len(rows) != 1:
-        raise rollout_ledger.LedgerError("exact rollout cell is absent or ambiguous")
-    return dict(rows[0])

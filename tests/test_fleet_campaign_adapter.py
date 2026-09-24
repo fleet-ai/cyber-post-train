@@ -80,7 +80,7 @@ def _package() -> heldout_launch.Package:
         database="heldout_base_seed46",
         identity={"pass_k": 1, "retry_limit": 0, "sampling_seed": 46},
     )
-    return SimpleNamespace(packet=packet, evaluation_config={})
+    return SimpleNamespace(packet=packet, evaluation_config={}, bundle={})
 
 
 class Cluster:
@@ -100,6 +100,16 @@ class Database:
         return dict(self.row)
 
 
+class PreviewCluster:
+    def __init__(self, previews: list[str]) -> None:
+        self.previews = iter(previews)
+        self.calls = 0
+
+    def server_dry_run(self, _namespace: str, _bundle: dict[str, Any]) -> dict[str, Any]:
+        self.calls += 1
+        return {"digest": next(self.previews)}
+
+
 def _patch_source(monkeypatch: pytest.MonkeyPatch, bindings: dict[str, Any]) -> None:
     package = _package()
 
@@ -116,6 +126,81 @@ def _phase_files(tmp_path: Path) -> tuple[Path, Path]:
         {"receipt_sha256": "sha256:" + "2" * 64, "route_profile_sha256": ROUTE_SHA},
     )
     return preview, ready
+
+
+def test_preview_is_two_identical_server_dry_runs(monkeypatch: pytest.MonkeyPatch) -> None:
+    cluster = PreviewCluster(["stable", "stable"])
+    monkeypatch.setattr(
+        heldout_launch,
+        "_validate_server_preview",
+        lambda response, _package: response["digest"],
+    )
+    assert adapter._preview_package(_package(), cluster=cluster) == "stable"  # noqa: SLF001
+    assert cluster.calls == 2
+
+
+def test_preview_rejects_server_drift(monkeypatch: pytest.MonkeyPatch) -> None:
+    cluster = PreviewCluster(["first", "second"])
+    monkeypatch.setattr(
+        heldout_launch,
+        "_validate_server_preview",
+        lambda response, _package: response["digest"],
+    )
+    with pytest.raises(heldout_launch.HeldoutLaunchError, match="changed"):
+        adapter._preview_package(_package(), cluster=cluster)  # noqa: SLF001
+
+
+def test_campaign_database_reads_one_exact_score_blind_cell(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from evals.fleet import rollout_postgres
+
+    row = {
+        "cell_id": "cell-a",
+        "state": "accepted",
+        "retry_count": 0,
+        "max_retries": 0,
+        "result_class": "valid",
+        "receipt_digest": "sha256:" + "9" * 64,
+        "failure_code": None,
+        "local_results": 1,
+    }
+    observed: dict[str, Any] = {}
+
+    class Connection:
+        def execute(self, query: str, parameters: tuple[Any, ...]):
+            observed["query"] = query
+            observed["parameters"] = parameters
+            return SimpleNamespace(fetchall=lambda: [row])
+
+    class Transaction:
+        def __enter__(self) -> Connection:
+            return Connection()
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    def read_transaction(dsn: str) -> Transaction:
+        observed["dsn"] = dsn
+        return Transaction()
+
+    monkeypatch.setenv(
+        "ROLLOUT_DATABASE_URL", "postgresql://reader@postgres:5432/rollout?sslmode=require"
+    )
+    monkeypatch.setattr(rollout_postgres, "_read_transaction", read_transaction)
+    result = adapter.CampaignDatabase().cell_status(
+        "heldout_base_seed46",
+        task_version_id="task-1",
+        model_id="base",
+        model_revision="revision-a",
+        attempt=1,
+    )
+    assert result == row
+    assert observed["dsn"] == (
+        "postgresql://reader@postgres:5432/heldout_base_seed46?sslmode=require"
+    )
+    assert observed["parameters"] == ("task-1", "base", "revision-a", 1)
+    assert "score" not in observed["query"].lower()
 
 
 def test_shared_source_job_is_created_once_and_siblings_resume(
