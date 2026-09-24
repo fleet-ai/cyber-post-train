@@ -35,6 +35,7 @@ SOURCE_ROOTS = (
     ROOT / "cyber_post_train" / "jobs.py",
     ROOT / "evals" / "__init__.py",
     ROOT / "evals" / "fleet" / "__init__.py",
+    heldout_launch.CANONICAL_RUN_SCRIPT,
 )
 LAUNCHER = r"""from __future__ import annotations
 

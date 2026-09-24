@@ -397,6 +397,7 @@ def _runtime(plan: dict[str, Any]) -> bytes:
         ROOT / "cyber_post_train" / "jobs.py",
         ROOT / "evals" / "__init__.py",
         ROOT / "evals" / "fleet" / "__init__.py",
+        heldout_launch.CANONICAL_RUN_SCRIPT,
     ):
         files[str(source.relative_to(ROOT))] = source.read_text(encoding="utf-8")
     for source in sorted((ROOT / "evals" / "fleet").glob("*.py")):

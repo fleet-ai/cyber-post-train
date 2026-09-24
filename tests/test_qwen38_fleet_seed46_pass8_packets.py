@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import gzip
 import hashlib
 import json
 from datetime import UTC, datetime
@@ -99,6 +101,11 @@ def test_renderer_makes_sixteen_cpu_only_alert_suppressed_launchers(tmp_path, mo
     jobs = [item for item in bundle["items"] if item["kind"] == "Job"]
     config_maps = [item for item in bundle["items"] if item["kind"] == "ConfigMap"]
     assert len(jobs) == len(config_maps) == 16
+    files = json.loads(
+        gzip.decompress(base64.b64decode(config_maps[0]["binaryData"]["bundle.json.gz"]))
+    )
+    relative = str(heldout_launch.CANONICAL_RUN_SCRIPT.relative_to(ROOT))
+    assert files[relative] == heldout_launch.CANONICAL_RUN_SCRIPT.read_text(encoding="utf-8")
     for job in jobs:
         assert job["metadata"]["name"].endswith("-launch-v2")
         assert job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
