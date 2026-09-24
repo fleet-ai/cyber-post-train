@@ -859,7 +859,7 @@ def test_wave_bound_control_plane_drift_fails_before_preview(
         )
 
 
-def test_strict_wave_action_rejects_legacy_binding_downgrade_before_source(
+def test_strict_wave_launch_rejects_legacy_binding_downgrade_before_create(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     packets, binding, plan = _strict_wave_campaign(tmp_path)
@@ -879,24 +879,47 @@ def test_strict_wave_action_rejects_legacy_binding_downgrade_before_source(
         {key: value for key, value in downgraded.items() if key != "sha256"}
     )
     _write(tmp_path / "fleet-bindings.json", downgraded)
+    _patch_source(monkeypatch, downgraded)
     monkeypatch.setattr(
         adapter,
-        "_source",
-        lambda *_args, **_kwargs: pytest.fail("legacy binding reached source capture"),
+        "_cluster_duplicate_absence",
+        lambda *_args, **_kwargs: (
+            lambda _path: False,
+            adapter._AbsentDatabase("heldout_base_seed46"),
+        ),
     )
+    create_calls = 0
+
+    def launch(*_args: Any, **_kwargs: Any) -> None:
+        nonlocal create_calls
+        create_calls += 1
+        pytest.fail("legacy binding reached source Job create")
+
+    monkeypatch.setattr(
+        heldout_launch,
+        "launch_package_once",
+        launch,
+    )
+    preview, ready = _phase_files(tmp_path)
+    budget_root = tmp_path / "budget"
     with pytest.raises(adapter.AdapterError, match="wave-bound campaign"):
         adapter.run_action(
-            action="preview",
+            action="launch",
             phase="rollout",
             packet_path=packets[KEY_A],
             bindings_path=tmp_path / "fleet-bindings.json",
             strict_profile_path=profile,
             strict_profile_file_sha256=_profile_file_sha256(profile),
             context="fleet",
+            preview_receipt=preview,
+            readiness_receipt=ready,
             duplicate_gate_evidence=tmp_path / "duplicate-gate-evidence.json",
             cluster=Cluster(),
             database=Database(),
+            budget_root=budget_root,
         )
+    assert create_calls == 0
+    assert not budget_root.exists()
 
 
 def test_strict_wave_action_rejects_coherent_alternate_plan_profile_and_packet_set(
