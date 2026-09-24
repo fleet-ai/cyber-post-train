@@ -27,12 +27,11 @@ from evals.fleet import heldout_launch
 from evals.fleet.evaluate import stable_job_preview
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_COMMIT = "5b31f910de81809811c61118b7ec0d11d353eb61"
 IMAGE = (
     "ghcr.io/astral-sh/uv:python3.12-bookworm@"
     "sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
 )
-NAME = "chris-q38-h20-budget-duplicate-gate-v2"
+NAME = "chris-q38-h20-budget-duplicate-gate-v3"
 NAMESPACE = heldout_launch.NAMESPACE
 PACKETS = 16
 SESSIONS = 160
@@ -113,7 +112,7 @@ def connect(dsn):
         autocommit=False,
         row_factory=dict_row,
         connect_timeout=5,
-        application_name="fleet-heldout20-budget-duplicate-gate-v2",
+        application_name="fleet-heldout20-budget-duplicate-gate-v3",
     )
 
 
@@ -362,9 +361,12 @@ if __name__ == "__main__":
 
 
 def _digest(value: Any) -> str:
-    return "sha256:" + hashlib.sha256(
-        json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
-    ).hexdigest()
+    return (
+        "sha256:"
+        + hashlib.sha256(
+            json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        ).hexdigest()
+    )
 
 
 def _file_digest(path: Path) -> str:
@@ -402,15 +404,20 @@ def _runtime(plan: dict[str, Any]) -> bytes:
     return _gzip_json(files)
 
 
-def _assert_commit() -> None:
+def _assert_commit(expected_commit: str) -> None:
+    invalid = any(character not in "0123456789abcdef" for character in expected_commit)
+    if len(expected_commit) != 40 or invalid:
+        raise ValueError("--expected-commit must be one full lowercase Git SHA")
     value = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True
     ).stdout.strip()
-    if value != EXPECTED_COMMIT:
+    if value != expected_commit:
         raise ValueError("integration checkout is not the authorized commit")
 
 
-def _packet_plan(render: Path) -> tuple[dict[str, Any], list[tuple[str, bytes]]]:
+def _packet_plan(
+    render: Path, *, expected_commit: str
+) -> tuple[dict[str, Any], list[tuple[str, bytes]]]:
     bindings_path = render / "static-bindings.json"
     bindings = json.loads(bindings_path.read_text(encoding="utf-8"))
     unsigned = {key: value for key, value in bindings.items() if key != "sha256"}
@@ -427,9 +434,10 @@ def _packet_plan(render: Path) -> tuple[dict[str, Any], list[tuple[str, bytes]]]
     common_ledger = None
     for index, (group_id, group) in enumerate(sorted(bindings["groups"].items())):
         packet_path = (render / group["packet"]).resolve()
-        if render.resolve() not in packet_path.parents or _file_digest(packet_path) != group[
-            "packet_sha256"
-        ]:
+        if (
+            render.resolve() not in packet_path.parents
+            or _file_digest(packet_path) != group["packet_sha256"]
+        ):
             raise ValueError("source packet differs from static binding")
         package = heldout_launch.build_package(packet_path)
         sealed = heldout_launch.sealed_evaluation(package)
@@ -459,13 +467,16 @@ def _packet_plan(render: Path) -> tuple[dict[str, Any], list[tuple[str, bytes]]]
     if all_cells != set(bindings["cells"]):
         raise ValueError("source groups do not cover all bound cells")
     packet_set = [
-        {key: value for key, value in item.items() if key not in {"job_name", "config_map_name",
-                                                                  "output_root", "database"}}
+        {
+            key: value
+            for key, value in item.items()
+            if key not in {"job_name", "config_map_name", "output_root", "database"}
+        }
         for item in packets
     ]
     plan = {
         "schema": "cyber_fleet_heldout_budget_duplicate_gate_plan_v1",
-        "repo_commit": EXPECTED_COMMIT,
+        "repo_commit": expected_commit,
         "static_bindings_file_sha256": _file_digest(bindings_path),
         "static_bindings_sha256": bindings["sha256"],
         "packet_set_sha256": _digest(packet_set),
@@ -486,8 +497,10 @@ def _config_map(name: str, key: str, value: bytes) -> dict[str, Any]:
         "metadata": {
             "name": name,
             "namespace": NAMESPACE,
-            "labels": {"cyber-post-train.fleet.ai/experiment": NAME,
-                       "cyber-post-train.fleet.ai/owner": "chris"},
+            "labels": {
+                "cyber-post-train.fleet.ai/experiment": NAME,
+                "cyber-post-train.fleet.ai/owner": "chris",
+            },
             "annotations": {heldout_launch.CREATE_ONCE_ANNOTATION: "true"},
         },
         "immutable": True,
@@ -497,12 +510,20 @@ def _config_map(name: str, key: str, value: bytes) -> dict[str, Any]:
 
 def _job(config_maps: list[str]) -> dict[str, Any]:
     projections = [
-        {"configMap": {"name": config_maps[0], "items": [{"key": "runtime.json.gz",
-                                                             "path": "runtime.json.gz"}]}}
+        {
+            "configMap": {
+                "name": config_maps[0],
+                "items": [{"key": "runtime.json.gz", "path": "runtime.json.gz"}],
+            }
+        }
     ]
     projections.extend(
-        {"configMap": {"name": name, "items": [{"key": "packet.json.gz",
-                                                   "path": f"packets/p{index:02d}.json.gz"}]}}
+        {
+            "configMap": {
+                "name": name,
+                "items": [{"key": "packet.json.gz", "path": f"packets/p{index:02d}.json.gz"}],
+            }
+        }
         for index, name in enumerate(config_maps[1:])
     )
     return {
@@ -511,75 +532,104 @@ def _job(config_maps: list[str]) -> dict[str, Any]:
         "metadata": {
             "name": NAME,
             "namespace": NAMESPACE,
-            "labels": {"cyber-post-train.fleet.ai/experiment": NAME,
-                       "cyber-post-train.fleet.ai/owner": "chris",
-                       "kueue.x-k8s.io/queue-name": "training-lq"},
-            "annotations": {heldout_launch.FAILURE_ALERT_ANNOTATION: "off",
-                            heldout_launch.CREATE_ONCE_ANNOTATION: "true"},
+            "labels": {
+                "cyber-post-train.fleet.ai/experiment": NAME,
+                "cyber-post-train.fleet.ai/owner": "chris",
+                "kueue.x-k8s.io/queue-name": "training-lq",
+            },
+            "annotations": {
+                heldout_launch.FAILURE_ALERT_ANNOTATION: "off",
+                heldout_launch.CREATE_ONCE_ANNOTATION: "true",
+            },
         },
         "spec": {
             "backoffLimit": 0,
             "activeDeadlineSeconds": 1800,
             "template": {
-                "metadata": {"labels": {"cyber-post-train.fleet.ai/experiment": NAME,
-                                        "cyber-post-train.fleet.ai/owner": "chris",
-                                        heldout_launch.POSTGRES_CLIENT_LABEL: "true"}},
+                "metadata": {
+                    "labels": {
+                        "cyber-post-train.fleet.ai/experiment": NAME,
+                        "cyber-post-train.fleet.ai/owner": "chris",
+                        heldout_launch.POSTGRES_CLIENT_LABEL: "true",
+                    }
+                },
                 "spec": {
                     "priorityClassName": "c1",
                     "restartPolicy": "Never",
-                    "nodeSelector": {"kubernetes.io/arch": "amd64",
-                                     "workload": "fleetai-training-ng-cpu"},
-                    "tolerations": [{"key": "workload", "operator": "Equal",
-                                     "value": "fleetai-training-ng-cpu",
-                                     "effect": "NoSchedule"}],
-                    "containers": [{
-                        "name": "gate",
-                        "image": IMAGE,
-                        "command": ["/bin/bash", "-ceu", "--"],
-                        "args": [
-                            "apt-get update\n"
-                            "apt-get install --yes --no-install-recommends kubernetes-client\n"
-                            "mkdir -p /workspace/source\n"
-                            "python - <<'PY'\n"
-                            "import gzip,json,pathlib\n"
-                            "root=pathlib.Path('/workspace/source')\n"
-                            "data=json.loads(gzip.decompress(pathlib.Path('/gate-input/runtime.json.gz').read_bytes()))\n"
-                            "for name,text in data.items():\n"
-                            " p=root/name; p.parent.mkdir(parents=True,exist_ok=True)\n"
-                            " p.write_text(text)\n"
-                            "PY\n"
-                            "cd /workspace/source\n"
-                            "token=/var/run/secrets/kubernetes.io/serviceaccount\n"
-                            "printf 'apiVersion: v1\\nkind: Config\\nclusters:\\n"
-                            "- name: incluster\\n  cluster:\\n"
-                            "    server: https://kubernetes.default.svc\\n"
-                            "    certificate-authority: %s/ca.crt\\nusers:\\n"
-                            "- name: gate\\n  user:\\n    tokenFile: %s/token\\n"
-                            "contexts:\\n- name: incluster\\n  context:\\n"
-                            "    cluster: incluster\\n    user: gate\\n"
-                            "    namespace: fleet-train-jobs\\n"
-                            "current-context: incluster\\n' \"$token\" \"$token\" "
-                            "> kubeconfig.yaml\n"
-                            "chmod 600 kubeconfig.yaml\n"
-                            "export KUBECONFIG=$PWD/kubeconfig.yaml\n"
-                            "exec uv run --no-project --with httpx==0.28.1 --with pyyaml==6.0.3 "
-                            "--with 'psycopg[binary]==3.3.5' python gate.py\n"
-                        ],
-                        "env": [{"name": "ROLLOUT_DATABASE_URL",
-                                 "valueFrom": {"secretKeyRef": {
-                                     "name": heldout_launch.ROLLOUT_DATABASE_SECRET,
-                                     "key": heldout_launch.ROLLOUT_DATABASE_ENV}}}],
-                        "resources": {"requests": {"cpu": "1", "memory": "2Gi"},
-                                      "limits": {"cpu": "2", "memory": "4Gi"}},
-                        "volumeMounts": [
-                            {"name": "input", "mountPath": "/gate-input", "readOnly": True},
-                            {"name": "sfs", "mountPath": "/mnt/sfs", "readOnly": True},
-                        ],
-                    }],
+                    "nodeSelector": {
+                        "kubernetes.io/arch": "amd64",
+                        "workload": "fleetai-training-ng-cpu",
+                    },
+                    "tolerations": [
+                        {
+                            "key": "workload",
+                            "operator": "Equal",
+                            "value": "fleetai-training-ng-cpu",
+                            "effect": "NoSchedule",
+                        }
+                    ],
+                    "containers": [
+                        {
+                            "name": "gate",
+                            "image": IMAGE,
+                            "command": ["/bin/bash", "-ceu", "--"],
+                            "args": [
+                                "apt-get update\n"
+                                "apt-get install --yes --no-install-recommends kubernetes-client\n"
+                                "mkdir -p /workspace/source\n"
+                                "python - <<'PY'\n"
+                                "import gzip,json,pathlib\n"
+                                "root=pathlib.Path('/workspace/source')\n"
+                                "data=json.loads(gzip.decompress(pathlib.Path('/gate-input/runtime.json.gz').read_bytes()))\n"
+                                "for name,text in data.items():\n"
+                                " p=root/name; p.parent.mkdir(parents=True,exist_ok=True)\n"
+                                " p.write_text(text)\n"
+                                "PY\n"
+                                "cd /workspace/source\n"
+                                "token=/var/run/secrets/kubernetes.io/serviceaccount\n"
+                                "printf 'apiVersion: v1\\nkind: Config\\nclusters:\\n"
+                                "- name: incluster\\n  cluster:\\n"
+                                "    server: https://kubernetes.default.svc\\n"
+                                "    certificate-authority: %s/ca.crt\\nusers:\\n"
+                                "- name: gate\\n  user:\\n    tokenFile: %s/token\\n"
+                                "contexts:\\n- name: incluster\\n  context:\\n"
+                                "    cluster: incluster\\n    user: gate\\n"
+                                "    namespace: fleet-train-jobs\\n"
+                                'current-context: incluster\\n\' "$token" "$token" '
+                                "> kubeconfig.yaml\n"
+                                "chmod 600 kubeconfig.yaml\n"
+                                "export KUBECONFIG=$PWD/kubeconfig.yaml\n"
+                                "exec uv run --no-project --with httpx==0.28.1 "
+                                "--with pyyaml==6.0.3 "
+                                "--with 'psycopg[binary]==3.3.5' python gate.py\n"
+                            ],
+                            "env": [
+                                {
+                                    "name": "ROLLOUT_DATABASE_URL",
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": heldout_launch.ROLLOUT_DATABASE_SECRET,
+                                            "key": heldout_launch.ROLLOUT_DATABASE_ENV,
+                                        }
+                                    },
+                                }
+                            ],
+                            "resources": {
+                                "requests": {"cpu": "1", "memory": "2Gi"},
+                                "limits": {"cpu": "2", "memory": "4Gi"},
+                            },
+                            "volumeMounts": [
+                                {"name": "input", "mountPath": "/gate-input", "readOnly": True},
+                                {"name": "sfs", "mountPath": "/mnt/sfs", "readOnly": True},
+                            ],
+                        }
+                    ],
                     "volumes": [
                         {"name": "input", "projected": {"sources": projections}},
-                        {"name": "sfs", "persistentVolumeClaim": {"claimName": "sfs-shared",
-                                                                     "readOnly": True}},
+                        {
+                            "name": "sfs",
+                            "persistentVolumeClaim": {"claimName": "sfs-shared", "readOnly": True},
+                        },
                     ],
                 },
             },
@@ -611,14 +661,20 @@ def _normalized_preview(response: dict[str, Any], source: dict[str, Any]) -> dic
                 raise ValueError("server-rendered Job changed sealed fields")
             normalized.append(stable)
         else:
-            stable = {"apiVersion": actual.get("apiVersion"), "kind": actual.get("kind"),
-                      "metadata": {"name": key[1], "namespace": NAMESPACE},
-                      "immutable": actual.get("immutable"),
-                      "binaryData": actual.get("binaryData")}
-            wanted_stable = {"apiVersion": wanted.get("apiVersion"), "kind": wanted.get("kind"),
-                             "metadata": {"name": key[1], "namespace": NAMESPACE},
-                             "immutable": wanted.get("immutable"),
-                             "binaryData": wanted.get("binaryData")}
+            stable = {
+                "apiVersion": actual.get("apiVersion"),
+                "kind": actual.get("kind"),
+                "metadata": {"name": key[1], "namespace": NAMESPACE},
+                "immutable": actual.get("immutable"),
+                "binaryData": actual.get("binaryData"),
+            }
+            wanted_stable = {
+                "apiVersion": wanted.get("apiVersion"),
+                "kind": wanted.get("kind"),
+                "metadata": {"name": key[1], "namespace": NAMESPACE},
+                "immutable": wanted.get("immutable"),
+                "binaryData": wanted.get("binaryData"),
+            }
             if stable != wanted_stable:
                 raise ValueError("server-rendered ConfigMap changed")
             normalized.append(stable)
@@ -634,11 +690,13 @@ def _preview(bundle: dict[str, Any], context: str) -> str:
     return _digest(first)
 
 
-def render(*, packets_root: Path, output: Path, context: str) -> dict[str, Any]:
+def render(
+    *, packets_root: Path, output: Path, context: str, expected_commit: str
+) -> dict[str, Any]:
     if output.exists() or output.is_symlink() or not output.parent.is_dir():
         raise ValueError("output must be a new path below an existing directory")
-    _assert_commit()
-    plan, packet_bundles = _packet_plan(packets_root)
+    _assert_commit(expected_commit)
+    plan, packet_bundles = _packet_plan(packets_root, expected_commit=expected_commit)
     runtime = _runtime(plan)
     config_maps = [_config_map(f"{NAME}-runtime", "runtime.json.gz", runtime)]
     for item_id, bundle in packet_bundles:
@@ -655,17 +713,27 @@ def render(*, packets_root: Path, output: Path, context: str) -> dict[str, Any]:
         )
         receipt = {
             "schema": "cyber_fleet_heldout_budget_duplicate_gate_render_v1",
-            "repo_commit": EXPECTED_COMMIT,
+            "repo_commit": expected_commit,
             "manifest": {"path": "gate.yaml", "sha256": _file_digest(manifest)},
-            "plan": {"path": "gate-plan.json", "sha256": _file_digest(temporary / "gate-plan.json"),
-                     "self_sha256": plan["sha256"]},
+            "plan": {
+                "path": "gate-plan.json",
+                "sha256": _file_digest(temporary / "gate-plan.json"),
+                "self_sha256": plan["sha256"],
+            },
             "server_preview_sha256": preview_sha256,
             "server_preview_count": 2,
             "objects": {"jobs": 1, "config_maps": len(config_maps)},
-            "job": {"name": NAME, "namespace": NAMESPACE,
-                    "failure_alerts": "off", "priority_class": "c1", "gpus": 0,
-                    "backoff_limit": 0, "active_deadline_seconds": 1800,
-                    "sfs_read_only": True, "postgres_read_only": True},
+            "job": {
+                "name": NAME,
+                "namespace": NAMESPACE,
+                "failure_alerts": "off",
+                "priority_class": "c1",
+                "gpus": 0,
+                "backoff_limit": 0,
+                "active_deadline_seconds": 1800,
+                "sfs_read_only": True,
+                "postgres_read_only": True,
+            },
             "cleanup": {
                 "require_exact_job_uid": True,
                 "exact_config_map_names": [item["metadata"]["name"] for item in config_maps],
@@ -689,9 +757,20 @@ def main() -> None:
     parser.add_argument("--packets-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--context", required=True)
+    parser.add_argument("--expected-commit", required=True)
     args = parser.parse_args()
-    print(json.dumps(render(packets_root=args.packets_root, output=args.output,
-                            context=args.context), indent=2, sort_keys=True))
+    print(
+        json.dumps(
+            render(
+                packets_root=args.packets_root,
+                output=args.output,
+                context=args.context,
+                expected_commit=args.expected_commit,
+            ),
+            indent=2,
+            sort_keys=True,
+        )
+    )
 
 
 if __name__ == "__main__":

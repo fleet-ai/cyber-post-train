@@ -808,12 +808,15 @@ def build_package(packet_path: Path) -> Package:
     if config.get("training_data_eligible") is not False:
         raise HeldoutLaunchError("held-out evaluator config must be training-data ineligible")
     task_set = config.get("task_set")
+    run_script = data.get("run.sh")
     if (
         not isinstance(task_set, str)
         or not task_set
         or Path(task_set).name != task_set
         or environment.get("EVAL_TASK_SET_NAME") != task_set
-        or not isinstance(data.get("task-set.json"), str)
+        or data.get("task-set.json") != packet.files["task_set"].read_text(encoding="utf-8")
+        or not isinstance(run_script, str)
+        or '"$root/configs/evaluation/$EVAL_TASK_SET_NAME"' not in run_script
     ):
         raise HeldoutLaunchError("evaluation config task set is invalid")
     configured_task_set = (packet.files["evaluation_config"].parent / task_set).resolve()
@@ -1918,9 +1921,10 @@ class PostgresDatabase:
             or original.fragment
         ):
             raise HeldoutLaunchError("database environment is not a supported PostgreSQL URI")
-        if {
-            key.casefold() for key, _ in parse_qsl(original.query, keep_blank_values=True)
-        } & {"database", "dbname"}:
+        if {key.casefold() for key, _ in parse_qsl(original.query, keep_blank_values=True)} & {
+            "database",
+            "dbname",
+        }:
             raise HeldoutLaunchError(
                 "database environment must select its database only by URI path"
             )
