@@ -22,6 +22,37 @@ TRAINER_GID = 100
 DEV_GPU_RELOAD_OPERATION_SUFFIX = "-dev-gpu-reload"
 DEV_GPU_RUN_NAME_LABEL = "fleet.ai/run-name"
 DEV_GPU_OWNER_PREFIXES = ("chris-q38-",)
+DEV_GPU_NODE_SELECTOR = {
+    "kubernetes.io/arch": "amd64",
+    "workload": "fleetai-training-ng-gpu",
+}
+DEV_GPU_TOLERATIONS = [
+    {
+        "effect": "NoSchedule",
+        "key": "workload",
+        "operator": "Equal",
+        "value": "fleetai-training-ng-gpu",
+    }
+]
+DEV_GPU_ADMISSION_TOLERATIONS = [
+    {
+        "effect": "NoExecute",
+        "key": "node.kubernetes.io/not-ready",
+        "operator": "Exists",
+        "tolerationSeconds": 300,
+    },
+    {
+        "effect": "NoExecute",
+        "key": "node.kubernetes.io/unreachable",
+        "operator": "Exists",
+        "tolerationSeconds": 300,
+    },
+    {
+        "effect": "NoSchedule",
+        "key": "nvidia.com/gpu",
+        "operator": "Exists",
+    },
+]
 DEV_GPU_CONTROL_MOUNT = PurePosixPath("/controls")
 DEV_GPU_CONTROL_SUBPATH = str(LORA_CONTROL_ROOT.relative_to(PurePosixPath("/mnt/sfs")))
 _CONTROL = re.compile(r"\.preflight-control-[a-z0-9](?:[-a-z0-9]*[a-z0-9])?")
@@ -168,6 +199,16 @@ def validate_direct_dev_gpu_reload_output(manifest: dict) -> None:
         {"name": "sfs-control", "persistentVolumeClaim": {"claimName": "sfs-shared"}},
     ]:
         raise ValueError("direct dev GPU reload must use only the shared SFS claim")
+    if spec.get("nodeSelector") != DEV_GPU_NODE_SELECTOR:
+        raise ValueError("direct dev GPU reload must select the reviewed GPU pool")
+    tolerations = spec.get("tolerations")
+    if not isinstance(tolerations, list) or DEV_GPU_TOLERATIONS[0] not in tolerations:
+        raise ValueError("direct dev GPU reload must tolerate the reviewed GPU-pool taint")
+    allowed_tolerations = DEV_GPU_TOLERATIONS + DEV_GPU_ADMISSION_TOLERATIONS
+    if len(tolerations) != len({repr(sorted(item.items())) for item in tolerations}) or any(
+        item not in allowed_tolerations for item in tolerations
+    ):
+        raise ValueError("direct dev GPU reload tolerations contain unreviewed drift")
 
 
 def verify_owned_output_runtime(

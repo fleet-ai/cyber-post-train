@@ -31,6 +31,18 @@ def dev_gpu_reload_pod() -> dict:
             "annotations": {"fleet.ai/failure-alerts": "off"},
         },
         "spec": {
+            "nodeSelector": {
+                "kubernetes.io/arch": "amd64",
+                "workload": "fleetai-training-ng-gpu",
+            },
+            "tolerations": [
+                {
+                    "effect": "NoSchedule",
+                    "key": "workload",
+                    "operator": "Equal",
+                    "value": "fleetai-training-ng-gpu",
+                }
+            ],
             "securityContext": {
                 "runAsNonRoot": True,
                 "runAsUser": 1000,
@@ -109,6 +121,36 @@ def test_renderer_binds_name_and_capacity_owner_label_from_one_authority() -> No
     assert rendered["metadata"]["labels"]["fleet.ai/run-name"] == "chris-q38-t3k64-s195-dev-gpu-v1"
 
 
+def test_validator_accepts_only_the_known_api_server_toleration_additions() -> None:
+    pod = dev_gpu_reload_pod()
+    pod["spec"]["tolerations"].extend(
+        [
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/not-ready",
+                "operator": "Exists",
+                "tolerationSeconds": 300,
+            },
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/unreachable",
+                "operator": "Exists",
+                "tolerationSeconds": 300,
+            },
+            {
+                "effect": "NoSchedule",
+                "key": "nvidia.com/gpu",
+                "operator": "Exists",
+            },
+        ]
+    )
+    validate_direct_dev_gpu_reload_output(pod)
+
+    pod["spec"]["tolerations"].append({"key": "unreviewed", "operator": "Exists"})
+    with pytest.raises(ValueError, match="unreviewed drift"):
+        validate_direct_dev_gpu_reload_output(pod)
+
+
 def test_create_rejects_known_v1_top_level_output_before_kubectl(monkeypatch) -> None:
     calls = []
     pod = dev_gpu_reload_pod()
@@ -159,6 +201,8 @@ def test_create_rejects_missing_capacity_owner_before_census_or_kubectl(monkeypa
         ("different-claim", "shared SFS claim"),
         ("mismatched-owner", "canonical fleet.ai/run-name"),
         ("wrong-gpu-count", "exactly one GPU"),
+        ("wrong-node-pool", "reviewed GPU pool"),
+        ("missing-gpu-toleration", "reviewed GPU-pool taint"),
     ],
 )
 def test_validator_rejects_v2_output_shape_drift(fault, message) -> None:
@@ -183,6 +227,10 @@ def test_validator_rejects_v2_output_shape_drift(fault, message) -> None:
         spec["volumes"][1]["persistentVolumeClaim"]["claimName"] = "other"
     elif fault == "mismatched-owner":
         pod["metadata"]["labels"]["fleet.ai/run-name"] = "chris-q38-other-dev-gpu-v1"
+    elif fault == "wrong-node-pool":
+        spec["nodeSelector"]["workload"] = "fleetai-training-ng-cpu"
+    elif fault == "missing-gpu-toleration":
+        spec["tolerations"] = []
     else:
         container["resources"]["requests"]["nvidia.com/gpu"] = "2"
 
