@@ -760,7 +760,7 @@ def run(
                 "run_status": "held" if held else "terminal",
                 "held_targets": held,
             }
-        if result["advanced"] == 0:
+        if result["advanced"] == 0 or result["errors"]:
             sleep(float(poll_seconds))
 
 

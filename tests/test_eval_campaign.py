@@ -473,6 +473,33 @@ def test_run_waits_through_capacity_deferral(tmp_path: Path):
     assert sleeps == [3.0]
 
 
+def test_run_paces_driver_errors_while_siblings_advance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    script = tmp_path / "driver.py"
+    script.write_text(DRIVER)
+    state = _prepare(tmp_path, _config(script))
+    calls = 0
+
+    def fake_step(_state: Path, *, execute: bool = False) -> dict:
+        nonlocal calls
+        calls += 1
+        return {
+            "advanced": 1 if calls == 1 else 0,
+            "errors": [{"experiment_key": "one", "error": "CampaignError"}] if calls == 1 else [],
+            **status(state),
+        }
+
+    def stop_after_first_sleep(_seconds: float) -> None:
+        raise RuntimeError("paced")
+
+    monkeypatch.setattr(campaign, "step", fake_step)
+    with pytest.raises(RuntimeError, match="paced"):
+        run(state, poll_seconds=3, sleep=stop_after_first_sleep)
+
+    assert calls == 1
+
+
 def test_run_holds_ambiguous_launch_without_replay(tmp_path: Path):
     script = tmp_path / "driver.py"
     script.write_text(DRIVER)
