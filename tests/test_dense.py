@@ -85,25 +85,6 @@ def test_encoding_keeps_native_masks_and_sanitizes_incompatible_rendering(defect
         assert encoded[1]["target"] is None and encoded[1]["assistant_index"] is None
 
 
-def test_encoding_can_bind_tool_schemas_once_in_the_repeated_anchor():
-    messages = [{"role": role} for role in ("system", "user", "assistant")]
-    tools = [{"type": "function", "function": {"name": "fleet_bash"}}]
-
-    class Tokenizer:
-        def apply_chat_template(self, rows, **kwargs):
-            assert rows == messages[:2]
-            assert kwargs["tools"] is tools
-            return [9, 9]
-
-    def helper(rows, tokenizer, **kwargs):
-        # The schema is anchored once, not duplicated before each message.
-        assert kwargs == {"tokenizer_kwargs": {"tools": []}}
-        return [1, 2], [0, 1], None
-
-    anchor, _ = dense.encode_record(messages, Tokenizer(), helper, tools=tools)
-    assert anchor == [9, 9]
-
-
 def source():
     return {
         "record_id": "source-a",

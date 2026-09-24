@@ -25,7 +25,7 @@ from typing import Any
 from cyber_post_train.jobs import digest
 
 from .corpus import local_tokenizer
-from .dense import Excluded, _normalized_for_template, encode_record, native_helper, segment_record
+from .dense import Excluded, _normalized_for_template, native_helper, segment_record
 from .io import atomic_write_json, atomic_write_jsonl, digest_json, file_sha256, iter_jsonl
 from .post_sft_staging import _rename_noreplace
 from .sft import read_mapping
@@ -63,6 +63,50 @@ SOURCE_TOOL_ALIASES = {
     "mcp__fleet_environment__submit_report": "submit_report",
     "mcp__fleet_environment__mcp__fleet_environment__submit_report": "submit_report",
 }
+
+
+def encode_record(
+    messages: list[dict], tokenizer: Any, helper: Any, *, tools: list[dict]
+) -> tuple[list[int], list[dict]]:
+    """Render complete messages with the successor's bound tool-schema anchor."""
+    try:
+        anchor = tokenizer.apply_chat_template(
+            messages[:2],
+            tokenize=True,
+            add_generation_prompt=False,
+            return_dict=False,
+            tools=tools,
+        )
+        chunks = []
+        ordinal = 0
+        for index, message in enumerate(messages[2:], 2):
+            ids, mask, _ = helper([message], tokenizer, tokenizer_kwargs={"tools": []})
+            if len(ids) != len(mask):
+                raise ValueError("native lengths")
+            assistant = message["role"] == "assistant"
+            if assistant:
+                positions = [position for position, value in enumerate(mask) if value]
+                if not positions or positions != list(range(positions[0], positions[-1] + 1)):
+                    raise ValueError("native assistant mask not contiguous")
+                target = (positions[0], positions[-1] + 1)
+            else:
+                if any(mask):
+                    raise ValueError("native tool masked incorrectly")
+                target = None
+            chunks.append(
+                {
+                    "ids": ids,
+                    "mask": mask,
+                    "message_index": index,
+                    "assistant_index": ordinal if assistant else None,
+                    "target": target,
+                }
+            )
+            ordinal += assistant
+        return anchor, chunks
+    except Exception:
+        # Template failures may contain private task text or token IDs.
+        raise Excluded("native_template_or_mask_contract") from None
 
 
 def _sha(value: object, label: str) -> str:
