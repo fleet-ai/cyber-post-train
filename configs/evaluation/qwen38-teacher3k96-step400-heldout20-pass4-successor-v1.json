@@ -5,7 +5,8 @@
   "purpose": "Prepare the next score-blind Fleet heldout20 comparison by reusing the accepted baseline arm from the corrected base-versus-step1000 study and evaluating the live 96K SFT run's checkpoint 400 only after immutable promotion and matched-serving gates pass.",
   "repository": {
     "prepared_against_main_commit": "0ae3e0923c1e74e65bea3a91f102c1ac7a12917d",
-    "derived_from_pr587_commit": "fe26e6483b00a5fc4ac026133009df95801ab81a"
+    "derived_from_pr587_commit": "fe26e6483b00a5fc4ac026133009df95801ab81a",
+    "lineage_gate_bound_against_main_commit": "ea5f67dd6a955218c4d4ee2946e365189cfd3a8d"
   },
   "scientific_boundary": {
     "private_prompts_or_traces_read": false,
@@ -111,6 +112,94 @@
     "observed_rayjob_priority_class": "q1",
     "observed_effective_workload_priority": 10000,
     "root_failure_alerts": "off"
+  },
+  "lineage_gate": {
+    "status": "passed",
+    "selection_change_authorized": false,
+    "training_lineage_map": {
+      "path": "configs/data/qwen38-teacher3k-training-lineage-map-20260924-v1.json",
+      "file_sha256": "sha256:49be490fed7726e49b92197853f3b2a5504f08dee1617ac6e2cdbfa69d02e5ea",
+      "sha256": "sha256:6e067606fc04162c8765b288982651773aa28c6f72390fe83428a20b9b39e75f",
+      "training_task_keys": 496,
+      "training_task_versions": 1176,
+      "source_sessions": 2886,
+      "unique_reviewed_atom_lineages": 389,
+      "unproven_training_task_keys": 0,
+      "unproven_training_versions": 0
+    },
+    "heldout_protocol": {
+      "path": "configs/evaluation/qwen38-teacher3k-fleet-heldout20-pass4-protocol-v2.json",
+      "file_sha256": "sha256:a2a0389494fa1bca26911081c1d5f55d235cc52c74c15dcd0d98355b7a4dd106",
+      "sha256": "sha256:2ac58c3ded7ba5c9bacd27dc3a379c726912a3f0cafc3ee542672de730e1fe0e",
+      "original_task_families": 25,
+      "lineage_clean_task_families": 20,
+      "excluded_exposed_task_families": 5,
+      "unproven_task_families": 0,
+      "dev_task_families": 13,
+      "final_test_task_families": 7
+    },
+    "proof": {
+      "exact_task_key_overlap": 0,
+      "exact_task_version_overlap": 0,
+      "shared_reviewed_atom_lineages": 0,
+      "all_selected_task_families_have_reviewed_lineage": true
+    }
+  },
+  "existing_rails": {
+    "checkpoint_receipt_and_seal": "training/checkpoints.py:receipt,seal,verify",
+    "bf16_export": "training/export.py:export",
+    "cpu_layout_and_zero_update_reload": "training/export_check.py:check",
+    "immutable_stage": "training/model_stage.py:read_plan,validate_plan,execute_stage",
+    "paused_serving_registration": "training/checkpoint_serving_route.py:prepare,execute,lifecycle",
+    "live_serving_parity": "training/checkpoint_serving_parity.py:capture",
+    "fleet_heldout_compile_and_run": "evals/fleet/evaluate.py:compile_eval,prepare,preflight,run",
+    "fleet_heldout_create_once_launch": "evals/fleet/heldout_launch.py:build_package,sealed_evaluation,duplicate_census,launch_once,collect_terminal"
+  },
+  "packet_generation_gate": {
+    "status": "blocked_checkpoint400_not_complete_or_sealed",
+    "promotion_packet_generation_authorized": false,
+    "evaluation_packet_generation_authorized": false,
+    "first_openable_gate": "checkpoint400_complete_and_immutable_seal_accepted",
+    "checkpoint400_required_evidence": [
+      "checkpoint_receipt_file_sha256",
+      "checkpoint_receipt_sha256",
+      "receipt_optimizer_step_equals_400",
+      "receipt_checkpoint_path_matches_frozen_path",
+      "receipt_source_plan_sha256_matches_training_plan",
+      "receipt_saved_at_utc",
+      "receipt_supervised_tokens_seen",
+      "seal_manifest_file_sha256",
+      "seal_manifest_sha256",
+      "seal_schema",
+      "seal_optimizer_step_equals_400",
+      "seal_checkpoint_path_matches_frozen_path",
+      "seal_source_plan_sha256_matches_training_plan",
+      "seal_world_size_equals_8",
+      "seal_file_count",
+      "seal_total_bytes",
+      "seal_source_unchanged_before_and_after"
+    ],
+    "promotion_chain_required_evidence": [
+      "exact_versioned_promotion_workload_identity_plan",
+      "fresh_promotion_destination_absence_census",
+      "server_preview_for_every_root_job",
+      "bf16_export_receipt_file_sha256_and_sha256",
+      "cpu_layout_receipt_file_sha256_and_sha256",
+      "zero_optimizer_gpu_reload_receipt_file_sha256_and_sha256",
+      "gpu_reload_complete_receipt_file_sha256_and_sha256",
+      "immutable_stage_acceptance_file_sha256_and_sha256",
+      "paused_serving_registration_uid_revision_and_receipt_sha256",
+      "fresh_live_parity_receipt_sha256"
+    ],
+    "evaluation_launch_required_evidence": [
+      "accepted_predecessor_baseline_receipt_set_path_and_sha256_for_all_80_cells",
+      "fresh_absence_census_for_all_8_jobs_configmaps_databases_output_roots_and_run_ids",
+      "fresh_live_task_version_and_verifier_bindings",
+      "fresh_daily_budget_receipt_sha256",
+      "two_server_previews_proving_c1_zero_gpu_backoff0_and_root_failure_alerts_off",
+      "route_readiness_handoff_receipt_sha256"
+    ],
+    "fail_closed_rule": "Do not generate a promotion amendment or evaluation launch packet while either checkpoint-400 receipt or immutable seal evidence is absent, incomplete, mismatched, or non-self-digesting. Later promotion and evaluation evidence gates remain independently mandatory."
   },
   "promotion": {
     "status": "non_executable_future_plan",
@@ -397,9 +486,9 @@
     "The promotion workload names and kinds are deliberately unbound; an exact versioned promotion-workload identity amendment and fresh absence census are required before any create.",
     "The checkpoint-400 BF16 export, CPU validation, zero-update GPU reload, immutable stage, and paused serving registration are absent.",
     "The checkpoint-400 serving model revision, route UID, registration digest, and fresh live-parity receipt therefore do not yet exist.",
-    "A reviewed successor amendment must bind this inert plan to the exact repository commit and regenerate every content-derived digest before use.",
+    "Checkpoint 400 is not complete and immutably sealed in this packet, so promotion-amendment and evaluation-packet generation remain explicitly unauthorized.",
     "The base-versus-step1000 predecessor study has not supplied the accepted terminal baseline-arm receipt set required for reuse.",
     "Fresh duplicate, live-task, serving, daily-budget, and server-preview receipts must be collected immediately before launch."
   ],
-  "sha256": "sha256:3dca6ae5a320e67a10b9a66b96af2a4faa7597ce8a423951bc5d06a9aff91046"
+  "sha256": "sha256:a46edd5c403bb2e6d3e29823b57382651a7df8842f9cd64bd51e155fcd85632f"
 }

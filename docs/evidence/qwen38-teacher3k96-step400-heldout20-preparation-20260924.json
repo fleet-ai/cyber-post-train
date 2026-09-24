@@ -3,11 +3,12 @@
   "status": "prepared_inert_fail_closed",
   "observed_at_utc": null,
   "configuration_path": "configs/evaluation/qwen38-teacher3k96-step400-heldout20-pass4-successor-v1.json",
-  "configuration_file_sha256": "sha256:253b206ff493ad479a9d740e0dcc747b21f95434ba807e42a980947c84f2b990",
-  "configuration_sha256": "sha256:3dca6ae5a320e67a10b9a66b96af2a4faa7597ce8a423951bc5d06a9aff91046",
+  "configuration_file_sha256": "sha256:39bdfaa38ca7f1040807e53e195be8a3fa01f8812b38eb233c6b0bdb198d279b",
+  "configuration_sha256": "sha256:a46edd5c403bb2e6d3e29823b57382651a7df8842f9cd64bd51e155fcd85632f",
   "source": {
     "prepared_against_main_commit": "0ae3e0923c1e74e65bea3a91f102c1ac7a12917d",
-    "derived_from_pr587_commit": "fe26e6483b00a5fc4ac026133009df95801ab81a"
+    "derived_from_pr587_commit": "fe26e6483b00a5fc4ac026133009df95801ab81a",
+    "lineage_gate_bound_against_main_commit": "ea5f67dd6a955218c4d4ee2946e365189cfd3a8d"
   },
   "scientific_boundary": {
     "private_prompts_or_traces_read": false,
@@ -29,6 +30,45 @@
       3965467,
       807861398,
       1399333715
+    ]
+  },
+  "lineage_gate": {
+    "status": "passed",
+    "training_lineage_map_path": "configs/data/qwen38-teacher3k-training-lineage-map-20260924-v1.json",
+    "training_lineage_map_file_sha256": "sha256:49be490fed7726e49b92197853f3b2a5504f08dee1617ac6e2cdbfa69d02e5ea",
+    "training_lineage_map_sha256": "sha256:6e067606fc04162c8765b288982651773aa28c6f72390fe83428a20b9b39e75f",
+    "heldout_protocol_path": "configs/evaluation/qwen38-teacher3k-fleet-heldout20-pass4-protocol-v2.json",
+    "heldout_protocol_file_sha256": "sha256:a2a0389494fa1bca26911081c1d5f55d235cc52c74c15dcd0d98355b7a4dd106",
+    "heldout_protocol_sha256": "sha256:2ac58c3ded7ba5c9bacd27dc3a379c726912a3f0cafc3ee542672de730e1fe0e",
+    "training_task_keys": 496,
+    "training_task_versions": 1176,
+    "unique_reviewed_training_atom_lineages": 389,
+    "selected_lineage_clean_task_families": 20,
+    "shared_reviewed_atom_lineages": 0,
+    "unproven_training_versions": 0,
+    "unproven_heldout_task_families": 0
+  },
+  "required_future_evidence": {
+    "checkpoint400": [
+      "self_digesting_native_checkpoint_receipt_bound_to_step_path_and_source_plan",
+      "self_digesting_immutable_checkpoint_seal_with_world_size_file_count_total_bytes_and_unchanged_source"
+    ],
+    "promotion": [
+      "exact_versioned_workload_identity_plan_and_fresh_absence_census",
+      "bf16_export_receipt",
+      "cpu_tensor_layout_dtype_and_sidecar_receipt",
+      "zero_optimizer_gpu_reload_and_complete_receipts",
+      "immutable_stage_acceptance_receipt",
+      "paused_serving_registration_receipt",
+      "fresh_live_parity_receipt"
+    ],
+    "evaluation": [
+      "accepted_predecessor_baseline_receipt_set_for_all_80_cells",
+      "fresh_8_job_configmap_database_output_and_run_id_absence_census",
+      "fresh_live_task_version_and_verifier_bindings",
+      "fresh_daily_budget_receipt",
+      "two_server_preview_receipts",
+      "route_readiness_handoff_receipt"
     ]
   },
   "future_checkpoint_observation": {
@@ -71,8 +111,11 @@
   },
   "checks": {
     "launchable": false,
+    "lineage_gate_bound": true,
+    "checkpoint400_complete": false,
     "checkpoint_receipt_bound": false,
     "checkpoint_seal_bound": false,
+    "packet_generation_authorized": false,
     "promotion_chain_bound": false,
     "predecessor_baseline_receipts_bound": false,
     "fresh_prelaunch_receipts_bound": false
@@ -84,5 +127,5 @@
     "model_calls": 0,
     "scoring_calls": 0
   },
-  "sha256": "sha256:60c8a5025237a63aa1aa0fcb08fe5a4c2199bf3198de6e988ef4984e9aa02a77"
+  "sha256": "sha256:327dc9c6a14f6cf410053bc187c0cf25b10d8f92aaa18a993668b9c5f6d9f6be"
 }
