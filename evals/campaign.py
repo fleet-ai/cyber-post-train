@@ -687,10 +687,11 @@ def _run_driver(
     invoke(action)
 
 
-def step(state: Path, *, execute: bool = False) -> dict[str, Any]:
+def step(state: Path, *, execute: bool = False, _skip: set[str] | None = None) -> dict[str, Any]:
     """Advance every independent target once; one failure never stops siblings."""
     plan = load_plan(state)
     registry = Path(plan["registry_path"])
+    skip = _skip or set()
     errors: list[dict[str, str]] = []
     advanced = 0
     launches = 0
@@ -698,25 +699,34 @@ def step(state: Path, *, execute: bool = False) -> dict[str, Any]:
         target["canary"] and _target_status(state, target)[0] != "complete"
         for target in plan["targets"]
     )
+    canary_inflight = plan["scheduler"]["serial_canaries"] and any(
+        target["canary"] and _target_status(state, target)[1].endswith("_observe")
+        for target in plan["targets"]
+    )
     launch_limit = 1 if canary_hold else plan["scheduler"]["max_launches_per_step"]
     for target in plan["targets"]:
+        if target["experiment_key"] in skip:
+            continue
         _state, next_action = _target_status(state, target)
         if next_action == "none":
             continue
         phase, action = next_action.split("_", 1)
         if action == "launch" and (
-            launches >= launch_limit or canary_hold and not target["canary"]
+            launches >= launch_limit or canary_hold and (not target["canary"] or canary_inflight)
         ):
             continue
+        intent = _receipt_path(state, target["experiment_key"], phase, "launch-intent")
+        intent_existed = intent.exists()
         try:
             before = _target_status(state, target)
             _run_driver(state, registry, plan, target, phase, action, execute)
             if _target_status(state, target) != before:
                 advanced += 1
-                if action == "launch":
-                    launches += 1
         except Exception as exc:
             errors.append({"experiment_key": target["experiment_key"], "error": type(exc).__name__})
+        finally:
+            if action == "launch" and not intent_existed and intent.exists():
+                launches += 1
     return {"advanced": advanced, "errors": errors, **status(state)}
 
 
@@ -732,8 +742,19 @@ def run(
         raise CampaignError("invalid_poll_seconds")
     plan = load_plan(state)
     targets = {target["experiment_key"]: target for target in plan["targets"]}
+    error_rounds: dict[str, tuple[str, int]] = {}
+    driver_holds: set[str] = set()
     while True:
-        result = step(state, execute=True)
+        result = step(state, execute=True, _skip=driver_holds)
+        failed = {row["experiment_key"]: row["error"] for row in result["errors"]}
+        error_rounds = {
+            key: (error, error_rounds.get(key, ("", 0))[1] + 1)
+            if error_rounds.get(key, ("", 0))[0] == error
+            else (error, 1)
+            for key, error in failed.items()
+            if key not in driver_holds
+        }
+        driver_holds |= {key for key, (_error, rounds) in error_rounds.items() if rounds >= 3}
         states = {
             target["experiment_key"]: _target_status(state, target) for target in plan["targets"]
         }
@@ -742,13 +763,29 @@ def run(
             for key, (target_state, _action) in states.items()
             if target_state.endswith("_launch_uncertain")
         ]
+        held.extend(
+            {"experiment_key": key, "reason": "driver_error"} for key in sorted(driver_holds)
+        )
         active = {key for key, (_target_state, action) in states.items() if action != "none"}
-        canary_barrier = plan["scheduler"]["serial_canaries"] and any(
-            targets[key]["canary"] and action == "none" and target_state != "complete"
-            for key, (target_state, action) in states.items()
+        active -= driver_holds
+        held_canary = any(targets[key]["canary"] for key in driver_holds)
+        canary_barrier = plan["scheduler"]["serial_canaries"] and (
+            held_canary
+            or any(
+                targets[key]["canary"] and action == "none" and target_state != "complete"
+                for key, (target_state, action) in states.items()
+            )
         )
         if canary_barrier:
-            serial_holds = {key for key in active if not targets[key]["canary"]}
+            uncertain_canary = any(
+                targets[key]["canary"] and target_state.endswith("_launch_uncertain")
+                for key, (target_state, _action) in states.items()
+            )
+            serial_holds = (
+                set(active)
+                if uncertain_canary or held_canary
+                else {key for key in active if not targets[key]["canary"]}
+            )
             held.extend(
                 {"experiment_key": key, "reason": "serial_canary_not_accepted"}
                 for key in sorted(serial_holds)

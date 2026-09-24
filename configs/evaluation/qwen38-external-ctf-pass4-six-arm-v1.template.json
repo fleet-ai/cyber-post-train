@@ -7,7 +7,7 @@
   "controller_contract": {
     "schema": "cyber_eval_campaign_v1",
     "source_path": "evals/campaign.py",
-    "source_sha256": "sha256:0b3e81836f3f4fdd68e554f376bd656379165d406b588c71e19f803af4a8c201",
+    "source_sha256": "sha256:fec6a218a6e19cc9d001383eb1ceea1fc95d760b73356bb4a1d301a9aac48643",
     "driver_adapter_path": "evals/external_ctf/campaign_adapter.py",
     "driver_adapter_sha256": "sha256:1102ad3b9d63a89afe208958e54dd83d0a32c8555db83af6650b85609b96627f",
     "binding_schema": "external_ctf_campaign_bindings_v1",
@@ -383,5 +383,5 @@
     "prompts_traces_flags_answers_private_scores_and_secrets_included": false,
     "results_remain_sealed_until_a_complete_predeclared_matched_aggregate": true
   },
-  "template_sha256": "sha256:a4dbb9c5d51300a1e30b01a4ebd985f72ead8bc488e94b598ca0e2cf9e30dbc8"
+  "template_sha256": "sha256:401fdd57f7033cb4a560a1638d916e83d629e8b4c4fcd65391a4daabe9621045"
 }

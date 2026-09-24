@@ -148,10 +148,16 @@ python -m evals.campaign run /restricted/eval-campaign --execute
 ```
 
 `run` repeats score-blind steps, polling when a round makes no immediate
-progress or any driver reports an error. Per-cell infrastructure failures remain
-terminal evidence and do not stop siblings. It exits when every cell is terminal, or when the remaining
-cells are explicitly held by an uncertain launch or a failed serial canary; it
-never replays an uncertain create.
+progress or any driver reports an error. Three consecutive matching driver
+errors for the same target hold that target for repair instead of looping
+forever. Per-cell infrastructure failures remain terminal evidence and do not
+stop siblings. It exits when every cell is terminal, or when the remaining cells
+are explicitly held by an uncertain launch or a failed serial canary; it never
+replays an uncertain create.
+
+When serial canaries are enabled, only one canary cell can be remotely active at
+a time. The controller observes and records that cell before another canary may
+launch; no broad cell launches until the canary barrier is resolved.
 
 `status` reports score-blind aggregate states and experiment keys. `record` can
 import one already-produced, identity-bound receipt; it never creates work.

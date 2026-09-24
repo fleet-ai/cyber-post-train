@@ -481,7 +481,7 @@ def test_run_paces_driver_errors_while_siblings_advance(
     state = _prepare(tmp_path, _config(script))
     calls = 0
 
-    def fake_step(_state: Path, *, execute: bool = False) -> dict:
+    def fake_step(_state: Path, *, execute: bool = False, _skip: set[str] | None = None) -> dict:
         nonlocal calls
         calls += 1
         return {
@@ -498,6 +498,100 @@ def test_run_paces_driver_errors_while_siblings_advance(
         run(state, poll_seconds=3, sleep=stop_after_first_sleep)
 
     assert calls == 1
+
+
+def test_step_counts_failed_launch_intents_against_round_limit(tmp_path: Path):
+    script = tmp_path / "driver.py"
+    script.write_text(DRIVER)
+    config = _config(script, fail_launch=True)
+    config["scheduler"]["max_launches_per_step"] = 4
+    state = _prepare(tmp_path, config)
+    step(state)
+
+    result = step(state, execute=True)
+
+    assert len(result["errors"]) == 4
+    assert result["counts"] == {"rollout_launch_uncertain": 4, "rollout_ready": 12}
+    assert len(list((state / "targets").glob("*/launch-attempts"))) == 4
+
+
+def test_run_holds_after_three_identical_driver_error_rounds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    script = tmp_path / "driver.py"
+    script.write_text(DRIVER)
+    state = _prepare(tmp_path, _config(script))
+    keys = [row["experiment_key"] for row in status(state)["targets"]]
+    calls = 0
+    sleeps: list[float] = []
+
+    def fake_step(_state: Path, *, execute: bool = False, _skip: set[str] | None = None) -> dict:
+        nonlocal calls
+        calls += 1
+        return {
+            "advanced": 0,
+            "errors": [{"experiment_key": key, "error": "CampaignError"} for key in keys],
+            **status(state),
+        }
+
+    monkeypatch.setattr(campaign, "step", fake_step)
+    result = run(state, poll_seconds=2, sleep=sleeps.append)
+
+    assert calls == 3
+    assert sleeps == [2.0, 2.0]
+    assert result["run_status"] == "held"
+    assert len(result["held_targets"]) == 16
+    assert {row["reason"] for row in result["held_targets"]} == {"driver_error"}
+
+
+def test_step_never_reexecutes_driver_held_targets(tmp_path: Path):
+    script = tmp_path / "driver.py"
+    script.write_text(DRIVER)
+    state = _prepare(tmp_path, _config(script))
+    step(state)
+    keys = [row["experiment_key"] for row in status(state)["targets"]]
+
+    result = step(state, execute=True, _skip=set(keys[:8]))
+
+    assert result["counts"] == {"rollout_created": 8, "rollout_ready": 8}
+
+
+def test_run_driver_held_serial_canary_holds_broad_cells(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    script = tmp_path / "driver.py"
+    script.write_text(DRIVER)
+    config = _config(script)
+    config["scheduler"]["serial_canaries"] = True
+    config["benchmarks"][0]["targets"][0]["canary"] = True
+    state = _prepare(tmp_path, config)
+    canaries = {
+        row["experiment_key"] for row in campaign.load_plan(state)["targets"] if row["canary"]
+    }
+    calls = 0
+
+    def fake_step(_state: Path, *, execute: bool = False, _skip: set[str] | None = None) -> dict:
+        nonlocal calls
+        calls += 1
+        return {
+            "advanced": 0,
+            "errors": [
+                {"experiment_key": key, "error": "CampaignError"}
+                for key in canaries - (_skip or set())
+            ],
+            **status(state),
+        }
+
+    monkeypatch.setattr(campaign, "step", fake_step)
+    result = run(state, poll_seconds=1, sleep=lambda _seconds: None)
+
+    assert calls == 3
+    assert result["run_status"] == "held"
+    assert len(result["held_targets"]) == 16
+    assert {row["reason"] for row in result["held_targets"]} == {
+        "driver_error",
+        "serial_canary_not_accepted",
+    }
 
 
 def test_run_holds_ambiguous_launch_without_replay(tmp_path: Path):
@@ -517,6 +611,47 @@ def test_run_holds_ambiguous_launch_without_replay(tmp_path: Path):
     rerun = run(state, poll_seconds=1, sleep=lambda _seconds: None)
     assert rerun["run_status"] == "held"
     assert all(path.read_text() == "x" for path in markers)
+
+
+def test_run_stops_after_first_uncertain_serial_canary(tmp_path: Path):
+    script = tmp_path / "driver.py"
+    script.write_text(DRIVER)
+    config = _config(script, fail_launch=True)
+    config["scheduler"]["serial_canaries"] = True
+    config["benchmarks"][0]["targets"][0]["canary"] = True
+    state = _prepare(tmp_path, config)
+
+    result = run(state, poll_seconds=1, sleep=lambda _seconds: None)
+
+    assert result["run_status"] == "held"
+    assert len(list((state / "targets").glob("*/launch-attempts"))) == 1
+    assert len(result["held_targets"]) == 16
+    assert {row["reason"] for row in result["held_targets"]} == {
+        "launch_uncertain",
+        "serial_canary_not_accepted",
+    }
+
+
+def test_serial_canary_observation_never_launches_the_next_canary(tmp_path: Path):
+    script = tmp_path / "driver.py"
+    script.write_text(DRIVER)
+    config = _config(script)
+    config["scheduler"]["serial_canaries"] = True
+    config["benchmarks"][0]["targets"][0]["canary"] = True
+    state = _prepare(tmp_path, config)
+    step(state)
+
+    first = step(state, execute=True)
+    observed = step(state, execute=True)
+    following = step(state, execute=True)
+
+    assert first["counts"] == {"rollout_created": 1, "rollout_ready": 15}
+    assert observed["counts"] == {"rollout_infrastructure_invalid": 1, "rollout_ready": 15}
+    assert following["counts"] == {
+        "rollout_created": 1,
+        "rollout_infrastructure_invalid": 1,
+        "rollout_ready": 14,
+    }
 
 
 def test_run_reports_serial_canary_barrier_as_explicit_hold(tmp_path: Path):
