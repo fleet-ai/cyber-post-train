@@ -72,6 +72,7 @@ class FakeCluster:
         self.postgres_label_in_create: str | None = None
         self.drop_postgres_contract_in_create = False
         self.add_postgres_contract_in_create = False
+        self.priority_in_create: str | None = None
         self.created: dict[str, Any] | None = None
 
     def list(
@@ -137,6 +138,8 @@ class FakeCluster:
         if create and self.add_postgres_contract_in_create:
             labels[launch.POSTGRES_CLIENT_LABEL] = launch.POSTGRES_CLIENT_LABEL_VALUE
             environment.append({"name": launch.ROLLOUT_DATABASE_ENV, "value": "injected"})
+        if create and self.priority_in_create is not None:
+            job["spec"]["template"]["spec"]["priorityClassName"] = self.priority_in_create
         if self.inject_gpu is not None:
             resources = job["spec"]["template"]["spec"]["containers"][0].setdefault("resources", {})
             resources.setdefault("requests", {})[self.inject_gpu] = "1"
@@ -713,6 +716,24 @@ def test_create_response_must_retain_database_dependency_contract(tmp_path, muta
     assert cluster.create_calls == 1
 
 
+def test_create_response_must_retain_c1_priority(tmp_path):
+    packet = _packet(tmp_path)
+    cluster, database = FakeCluster(), FakeDatabase()
+    cluster.priority_in_create = "system-cluster-critical"
+    journal = tmp_path / "intent.jsonl"
+
+    with pytest.raises(launch.HeldoutLaunchError, match="priority differs"):
+        _launch(packet, cluster, database, journal)
+
+    assert cluster.preview_calls == 2
+    assert cluster.create_calls == 1
+    assert [json.loads(line)["state"] for line in journal.read_text().splitlines()] == [
+        "KUBECTL_CREATE_INTENT_DO_NOT_RETRY",
+        "KUBERNETES_CREATE_RESPONSE_UIDS",
+        "KUBECTL_CREATE_RESPONSE_UNCERTAIN_DO_NOT_RETRY",
+    ]
+
+
 def test_existing_job_stops_before_server_preview_or_create(tmp_path):
     packet = _packet(tmp_path)
     cluster, database = FakeCluster(), FakeDatabase()
@@ -954,6 +975,31 @@ def test_workload_binding_requires_the_created_job_uid_not_only_a_matching_name(
     assert not launch._workload_binds_created_job(workload, JOB_NAME, JOB_UID)  # noqa: SLF001
 
 
+def test_terminal_pod_requires_controller_reference_to_exact_job_uid(tmp_path):
+    package = launch.build_package(_packet(tmp_path))
+    cluster = FakeCluster()
+    cluster.inventories["pods"]["items"] = [
+        {
+            "metadata": {
+                "name": JOB_NAME + "-replacement",
+                "uid": POD_UID,
+                "labels": {"job-name": JOB_NAME},
+                "ownerReferences": [
+                    {
+                        "apiVersion": "batch/v1",
+                        "kind": "Job",
+                        "name": JOB_NAME,
+                        "uid": CONFIG_MAP_UID,
+                        "controller": True,
+                    }
+                ],
+            }
+        }
+    ]
+    with pytest.raises(launch.HeldoutLaunchError, match="exact Job UID"):
+        launch._owned_pods_for_job(cluster, package.packet, JOB_UID)  # noqa: SLF001
+
+
 def test_current_fresh75_selection_contract_remains_compatible():
     selection = json.loads(
         (ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json").read_text()
@@ -1144,6 +1190,15 @@ def test_terminal_collection_is_score_blind_and_never_retries_or_scores(tmp_path
                 "name": JOB_NAME + "-abc",
                 "uid": POD_UID,
                 "labels": {"job-name": JOB_NAME},
+                "ownerReferences": [
+                    {
+                        "apiVersion": "batch/v1",
+                        "kind": "Job",
+                        "name": JOB_NAME,
+                        "uid": JOB_UID,
+                        "controller": True,
+                    }
+                ],
             },
             "status": {"phase": "Succeeded"},
         }
