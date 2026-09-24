@@ -36,6 +36,8 @@ WAVE_RESERVATION_SCHEMA = "cyber_fleet_daily_rollout_wave_reservation_v1"
 BUDGET_ROOT = campaign.CANONICAL_REGISTRY / "fleet-daily-rollouts-v1"
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{1,127}")
 _SHA = re.compile(r"sha256:[0-9a-f]{64}")
+WAVE_GROUP_COUNT = 16
+WAVE_CELL_COUNT = 160
 
 
 class AdapterError(ValueError):
@@ -50,6 +52,61 @@ def _digest(value: object) -> str:
     return "sha256:" + hashlib.sha256(
         json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     ).hexdigest()
+
+
+def _control_source_sha256() -> str:
+    """Bind every module that can advance or create the strict Fleet wave."""
+    return _digest(
+        {
+            "evals/campaign.py": "sha256:"
+            + hashlib.sha256(Path(campaign.__file__).read_bytes()).hexdigest(),
+            "evals/fleet/campaign_adapter.py": "sha256:"
+            + hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            "evals/fleet/heldout_launch.py": "sha256:"
+            + hashlib.sha256(Path(heldout_launch.__file__).read_bytes()).hexdigest(),
+        }
+    )
+
+
+def _packet_set_sha256(groups: dict[str, Any]) -> str:
+    return _digest(
+        [
+            {"group_id": group_id, "packet_sha256": group["packet_sha256"]}
+            for group_id, group in sorted(groups.items())
+        ]
+    )
+
+
+def _validate_wave_contract(
+    binding: dict[str, Any], plan: dict[str, Any]
+) -> dict[str, Any]:
+    binding = _validate_bindings(binding)
+    if binding["schema"] != WAVE_BINDING_SCHEMA:
+        raise AdapterError("Fleet wave coordinator requires a wave-bound campaign")
+    targets = plan.get("targets")
+    if (
+        not isinstance(targets, list)
+        or any(not isinstance(target, dict) for target in targets)
+        or len(targets) != WAVE_CELL_COUNT
+    ):
+        raise AdapterError("Fleet wave campaign plan is not the exact 160-cell plan")
+    keys = [target.get("experiment_key") for target in targets]
+    control_source_sha256 = _control_source_sha256()
+    sources = [
+        target.get("drivers", {}).get(phase, {}).get("source_sha256")
+        for target in targets
+        for phase in campaign.PHASES
+    ]
+    if (
+        any(not isinstance(key, str) or _SHA.fullmatch(key) is None for key in keys)
+        or len(set(keys)) != WAVE_CELL_COUNT
+        or set(keys) != set(binding["cells"])
+        or plan.get("plan_sha256") != binding["wave"]["campaign_plan_sha256"]
+        or binding["wave"]["control_source_sha256"] != control_source_sha256
+        or any(source != control_source_sha256 for source in sources)
+    ):
+        raise AdapterError("Fleet wave campaign control contract differs")
+    return binding
 
 
 def _read(path: Path) -> dict[str, Any]:
@@ -201,6 +258,7 @@ def _reservation_index(
 
 def reserve_wave(
     binding: dict[str, Any],
+    plan: dict[str, Any],
     reservation_id: str,
     *,
     expected_sessions: int,
@@ -210,9 +268,7 @@ def reserve_wave(
     """Atomically reserve every source group in one campaign before any create."""
     if not isinstance(reservation_id, str) or _ID.fullmatch(reservation_id) is None:
         raise AdapterError("Fleet wave reservation id is invalid")
-    binding = _validate_bindings(binding)
-    if binding["schema"] != WAVE_BINDING_SCHEMA:
-        raise AdapterError("Fleet wave reservation requires a wave-bound campaign")
+    binding = _validate_wave_contract(binding, plan)
     packet_set_sha256 = _validate_digest(packet_set_sha256, "wave packet set")
     wave = binding["wave"]
     if (
@@ -363,6 +419,7 @@ def _validate_bindings(value: dict[str, Any]) -> dict[str, Any]:
                 "expected_sessions",
                 "packet_set_sha256",
                 "campaign_plan_sha256",
+                "control_source_sha256",
             }
             or not isinstance(wave["reservation_id"], str)
             or _ID.fullmatch(wave["reservation_id"]) is None
@@ -372,6 +429,7 @@ def _validate_bindings(value: dict[str, Any]) -> dict[str, Any]:
             raise AdapterError("Fleet campaign wave binding is invalid")
         _validate_digest(wave["packet_set_sha256"], "wave packet set")
         _validate_digest(wave["campaign_plan_sha256"], "wave campaign plan")
+        _validate_digest(wave["control_source_sha256"], "wave control source")
     groups, cells = value["groups"], value["cells"]
     if not isinstance(groups, dict) or not groups or not isinstance(cells, dict) or not cells:
         raise AdapterError("Fleet campaign source groups and cells are required")
@@ -403,8 +461,13 @@ def _validate_bindings(value: dict[str, Any]) -> dict[str, Any]:
         assigned.update(members)
     if assigned != set(cells):
         raise AdapterError("Fleet source groups do not partition campaign cells")
-    if schema == WAVE_BINDING_SCHEMA and value["wave"]["expected_sessions"] != len(cells):
-        raise AdapterError("Fleet campaign wave count differs from its cells")
+    if schema == WAVE_BINDING_SCHEMA and (
+        len(groups) != WAVE_GROUP_COUNT
+        or len(cells) != WAVE_CELL_COUNT
+        or value["wave"]["expected_sessions"] != WAVE_CELL_COUNT
+        or value["wave"]["packet_set_sha256"] != _packet_set_sha256(groups)
+    ):
+        raise AdapterError("Fleet campaign wave is not the exact 16-group/160-cell packet set")
     required = {
         "group",
         "attempt",
@@ -706,6 +769,7 @@ def run_action(
     if bindings["schema"] == WAVE_BINDING_SCHEMA:
         state = packet_path.resolve().parents[2]
         plan = campaign.load_plan(state)
+        bindings = _validate_wave_contract(bindings, plan)
         expected_packet = state / "targets" / target["experiment_key"] / "packet.json"
         planned_target = next(
             (
@@ -716,7 +780,7 @@ def run_action(
             None,
         )
         driver = target.get("drivers", {}).get(phase, {})
-        source_sha256 = "sha256:" + hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+        source_sha256 = _control_source_sha256()
         if (
             packet_path.resolve() != expected_packet
             or planned_target != target
@@ -965,7 +1029,12 @@ def run_action(
     final_config_map = cluster.get(
         "configmaps", package.packet.namespace, package.packet.config_map_name
     )
-    final_pods = heldout_launch._owned_pods(cluster, package.packet)  # noqa: SLF001
+    try:
+        final_pods = heldout_launch._owned_pods_for_job(  # noqa: SLF001
+            cluster, package.packet, shared["job_uid"]
+        )
+    except heldout_launch.HeldoutLaunchError as exc:
+        raise AdapterError("Fleet terminal resource identity changed during collection") from exc
     final_pod_rows = heldout_launch._terminal_resource_rows(  # noqa: SLF001
         final_pods, kind="Pod"
     )
@@ -1029,6 +1098,7 @@ def main(argv: list[str] | None = None) -> None:
         reserve_parser = argparse.ArgumentParser()
         reserve_parser.add_argument("command", choices=["reserve-wave"])
         reserve_parser.add_argument("bindings", type=Path)
+        reserve_parser.add_argument("campaign_state", type=Path)
         reserve_parser.add_argument("receipt", type=Path)
         reserve_parser.add_argument("--reservation-id", required=True)
         reserve_parser.add_argument("--expected-sessions", required=True, type=int)
@@ -1036,6 +1106,7 @@ def main(argv: list[str] | None = None) -> None:
         args = reserve_parser.parse_args(argv)
         result = reserve_wave(
             load_bindings(args.bindings),
+            campaign.load_plan(args.campaign_state),
             args.reservation_id,
             expected_sessions=args.expected_sessions,
             packet_set_sha256=args.packet_set_sha256,

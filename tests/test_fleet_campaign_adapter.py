@@ -228,8 +228,9 @@ def _wave_binding(tmp_path: Path, *, used: int = 271) -> dict[str, Any]:
     binding["wave"] = {
         "reservation_id": "heldout20-base-step1000-v3",
         "expected_sessions": 160,
-        "packet_set_sha256": "sha256:" + "9" * 64,
+        "packet_set_sha256": adapter._packet_set_sha256(groups),  # noqa: SLF001
         "campaign_plan_sha256": "sha256:" + "7" * 64,
+        "control_source_sha256": adapter._control_source_sha256(),  # noqa: SLF001
     }
     binding["groups"] = groups
     binding["cells"] = cells
@@ -239,15 +240,154 @@ def _wave_binding(tmp_path: Path, *, used: int = 271) -> dict[str, Any]:
     return binding
 
 
+def _wave_plan(
+    binding: dict[str, Any], *targets: dict[str, Any]
+) -> dict[str, Any]:
+    by_key = {target["experiment_key"]: target for target in targets}
+    source = adapter._control_source_sha256()  # noqa: SLF001
+    rows = []
+    for key in binding["cells"]:
+        rows.append(
+            by_key.get(
+                key,
+                {
+                    "experiment_key": key,
+                    "drivers": {
+                        phase: {"source_sha256": source}
+                        for phase in adapter.campaign.PHASES
+                    },
+                },
+            )
+        )
+    return {
+        "plan_sha256": binding["wave"]["campaign_plan_sha256"],
+        "targets": rows,
+    }
+
+
+def _strict_wave_campaign(
+    tmp_path: Path,
+) -> tuple[dict[str, Path], dict[str, Any], dict[str, Any]]:
+    packets, _ = _campaign(tmp_path)
+    binding = _wave_binding(tmp_path)
+    group = binding["groups"]["group-00"]
+    replaced = group["cells"][0]
+    group["cells"][0] = KEY_A
+    group["leader"] = KEY_A
+    group["packet_sha256"] = PACKET_SHA
+    binding["cells"][KEY_A] = {
+        **binding["cells"].pop(replaced),
+        "group": "group-00",
+    }
+    binding["wave"]["packet_set_sha256"] = adapter._packet_set_sha256(  # noqa: SLF001
+        binding["groups"]
+    )
+    source = adapter._control_source_sha256()  # noqa: SLF001
+    target = json.loads(packets[KEY_A].read_text())
+    target["drivers"] = {
+        phase: {"source_sha256": source} for phase in adapter.campaign.PHASES
+    }
+    _write(packets[KEY_A], target)
+    binding["sha256"] = adapter._digest(  # noqa: SLF001
+        {key: value for key, value in binding.items() if key != "sha256"}
+    )
+    return packets, binding, _wave_plan(binding, target)
+
+
+def test_wave_control_digest_binds_all_three_creator_modules() -> None:
+    expected = adapter._digest(  # noqa: SLF001
+        {
+            "evals/campaign.py": "sha256:"
+            + adapter.hashlib.sha256(Path(adapter.campaign.__file__).read_bytes()).hexdigest(),
+            "evals/fleet/campaign_adapter.py": "sha256:"
+            + adapter.hashlib.sha256(Path(adapter.__file__).read_bytes()).hexdigest(),
+            "evals/fleet/heldout_launch.py": "sha256:"
+            + adapter.hashlib.sha256(Path(heldout_launch.__file__).read_bytes()).hexdigest(),
+        }
+    )
+    assert adapter._control_source_sha256() == expected  # noqa: SLF001
+
+
+def test_strict_wave_rejects_partial_binding_and_arbitrary_packet_set(tmp_path: Path) -> None:
+    binding = _wave_binding(tmp_path)
+    one_group = next(iter(binding["groups"].values()))
+    one_key = one_group["cells"][0]
+    binding["groups"] = {
+        "one-group": {
+            **one_group,
+            "leader": one_key,
+            "cells": [one_key],
+        }
+    }
+    binding["cells"] = {one_key: {**binding["cells"][one_key], "group": "one-group"}}
+    binding["wave"]["expected_sessions"] = 1
+    binding["wave"]["packet_set_sha256"] = adapter._packet_set_sha256(  # noqa: SLF001
+        binding["groups"]
+    )
+    binding["sha256"] = adapter._digest(  # noqa: SLF001
+        {key: value for key, value in binding.items() if key != "sha256"}
+    )
+    with pytest.raises(adapter.AdapterError, match="16-group/160-cell"):
+        adapter.reserve_wave(
+            binding,
+            _wave_plan(binding),
+            binding["wave"]["reservation_id"],
+            expected_sessions=1,
+            packet_set_sha256=binding["wave"]["packet_set_sha256"],
+            root=tmp_path / "budget-partial",
+        )
+    assert not (tmp_path / "budget-partial").exists()
+
+    complete = _wave_binding(tmp_path)
+    complete["wave"]["packet_set_sha256"] = "sha256:" + "9" * 64
+    complete["sha256"] = adapter._digest(  # noqa: SLF001
+        {key: value for key, value in complete.items() if key != "sha256"}
+    )
+    with pytest.raises(adapter.AdapterError, match="16-group/160-cell"):
+        adapter.reserve_wave(
+            complete,
+            _wave_plan(complete),
+            complete["wave"]["reservation_id"],
+            expected_sessions=160,
+            packet_set_sha256=complete["wave"]["packet_set_sha256"],
+            root=tmp_path / "budget-arbitrary",
+        )
+    assert not (tmp_path / "budget-arbitrary").exists()
+
+
+@pytest.mark.parametrize("defect", ["missing", "duplicate", "source"])
+def test_wave_reservation_requires_the_exact_plan_before_state_write(
+    tmp_path: Path, defect: str
+) -> None:
+    binding = _wave_binding(tmp_path)
+    plan = _wave_plan(binding)
+    if defect == "missing":
+        plan["targets"].pop()
+    elif defect == "duplicate":
+        plan["targets"][-1] = json.loads(json.dumps(plan["targets"][0]))
+    else:
+        plan["targets"][0]["drivers"]["rollout"]["source_sha256"] = (
+            "sha256:" + "6" * 64
+        )
+    root = tmp_path / "budget-plan-drift"
+    with pytest.raises(adapter.AdapterError, match="wave campaign"):
+        adapter.reserve_wave(
+            binding,
+            plan,
+            binding["wave"]["reservation_id"],
+            expected_sessions=160,
+            packet_set_sha256=binding["wave"]["packet_set_sha256"],
+            root=root,
+        )
+    assert not root.exists()
+
+
 def test_wave_reservation_counts_existing_reservations_and_every_group_adopts(
     tmp_path: Path,
 ) -> None:
     binding = _wave_binding(tmp_path)
     binding["budget"]["census_receipt_sha256"] = (
         "sha256:9b2d3bccc2c86c383ef9c7fbbe46ba66226ca2e91b89346c7a7871448e0b00e4"
-    )
-    binding["wave"]["packet_set_sha256"] = (
-        "sha256:57429a9c4acf9b4f5c876bd863b189894d872d7a2fb0abd50e3c6d3acab97250"
     )
     binding["sha256"] = adapter._digest(  # noqa: SLF001
         {key: value for key, value in binding.items() if key != "sha256"}
@@ -283,6 +423,7 @@ def test_wave_reservation_counts_existing_reservations_and_every_group_adopts(
     assert old_reserved == 27
     first = adapter.reserve_wave(
         binding,
+        _wave_plan(binding),
         "heldout20-base-step1000-v3",
         expected_sessions=160,
         packet_set_sha256=binding["wave"]["packet_set_sha256"],
@@ -290,6 +431,7 @@ def test_wave_reservation_counts_existing_reservations_and_every_group_adopts(
     )
     second = adapter.reserve_wave(
         binding,
+        _wave_plan(binding),
         "heldout20-base-step1000-v3",
         expected_sessions=160,
         packet_set_sha256=binding["wave"]["packet_set_sha256"],
@@ -343,9 +485,10 @@ def test_wave_reservation_over_cap_writes_no_reservation(tmp_path: Path) -> None
     with pytest.raises(adapter.CapacityUnavailable):
         adapter.reserve_wave(
             binding,
+            _wave_plan(binding),
             "heldout20-base-step1000-v3",
             expected_sessions=160,
-            packet_set_sha256="sha256:" + "9" * 64,
+            packet_set_sha256=binding["wave"]["packet_set_sha256"],
             root=root,
         )
     reservations = root / binding["budget"]["date_utc"] / "reservations"
@@ -372,9 +515,10 @@ def test_wave_reservation_conflict_and_partial_overlap_fail_closed(tmp_path: Pat
     with pytest.raises(adapter.AdapterError, match="partial reservation"):
         adapter.reserve_wave(
             binding,
+            _wave_plan(binding),
             "heldout20-base-step1000-v3",
             expected_sessions=160,
-            packet_set_sha256="sha256:" + "9" * 64,
+            packet_set_sha256=binding["wave"]["packet_set_sha256"],
             root=root,
         )
 
@@ -384,22 +528,27 @@ def test_wave_reservation_same_id_with_changed_binding_fails_closed(tmp_path: Pa
     root = tmp_path / "budget"
     adapter.reserve_wave(
         binding,
+        _wave_plan(binding),
         "heldout20-base-step1000-v3",
         expected_sessions=160,
-        packet_set_sha256="sha256:" + "9" * 64,
+        packet_set_sha256=binding["wave"]["packet_set_sha256"],
         root=root,
     )
     changed = json.loads(json.dumps(binding))
     changed["groups"]["group-00"]["packet_sha256"] = "sha256:" + "8" * 64
+    changed["wave"]["packet_set_sha256"] = adapter._packet_set_sha256(  # noqa: SLF001
+        changed["groups"]
+    )
     changed["sha256"] = adapter._digest(  # noqa: SLF001
         {key: value for key, value in changed.items() if key != "sha256"}
     )
     with pytest.raises(adapter.AdapterError, match="wave reservation differs"):
         adapter.reserve_wave(
             changed,
+            _wave_plan(changed),
             "heldout20-base-step1000-v3",
             expected_sessions=160,
-            packet_set_sha256="sha256:" + "9" * 64,
+            packet_set_sha256=changed["wave"]["packet_set_sha256"],
             root=root,
         )
 
@@ -418,9 +567,10 @@ def test_wave_reservation_write_failure_leaves_no_final_wave(tmp_path: Path, mon
     with pytest.raises(OSError, match="injected"):
         adapter.reserve_wave(
             binding,
+            _wave_plan(binding),
             "heldout20-base-step1000-v3",
             expected_sessions=160,
-            packet_set_sha256="sha256:" + "9" * 64,
+            packet_set_sha256=binding["wave"]["packet_set_sha256"],
             root=root,
         )
     reservations = root / binding["budget"]["date_utc"] / "reservations"
@@ -500,9 +650,10 @@ def test_wave_reservation_validates_full_binding_before_state_write(
     with pytest.raises(adapter.AdapterError):
         adapter.reserve_wave(
             binding,
+            _wave_plan(binding),
             "heldout20-base-step1000-v3",
             expected_sessions=160,
-            packet_set_sha256="sha256:" + "9" * 64,
+            packet_set_sha256=binding["wave"]["packet_set_sha256"],
             root=root,
         )
     assert not root.exists()
@@ -511,34 +662,9 @@ def test_wave_reservation_validates_full_binding_before_state_write(
 def test_wave_bound_launch_cannot_reach_create_before_full_reservation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    packets, bindings = _campaign(tmp_path)
-    bindings["schema"] = adapter.WAVE_BINDING_SCHEMA
-    bindings["wave"] = {
-        "reservation_id": "heldout20-two-cell-test",
-        "expected_sessions": 2,
-        "packet_set_sha256": "sha256:" + "9" * 64,
-        "campaign_plan_sha256": "sha256:" + "7" * 64,
-    }
-    bindings["sha256"] = adapter._digest(  # noqa: SLF001
-        {key: value for key, value in bindings.items() if key != "sha256"}
-    )
-    target = json.loads(packets[KEY_A].read_text())
-    target["drivers"] = {
-        "rollout": {
-            "source_sha256": "sha256:"
-            + adapter.hashlib.sha256(Path(adapter.__file__).read_bytes()).hexdigest()
-        }
-    }
-    _write(packets[KEY_A], target)
+    packets, bindings, plan = _strict_wave_campaign(tmp_path)
     _patch_source(monkeypatch, bindings)
-    monkeypatch.setattr(
-        adapter.campaign,
-        "load_plan",
-        lambda _state: {
-            "plan_sha256": bindings["wave"]["campaign_plan_sha256"],
-            "targets": [json.loads(packets[KEY_A].read_text())],
-        },
-    )
+    monkeypatch.setattr(adapter.campaign, "load_plan", lambda _state: plan)
     monkeypatch.setattr(
         heldout_launch,
         "launch_package_once",
@@ -573,25 +699,8 @@ def test_wave_bound_launch_cannot_reach_create_before_full_reservation(
 def test_wave_bound_control_plane_drift_fails_before_preview(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, drift: str
 ) -> None:
-    packets, bindings = _campaign(tmp_path)
-    bindings["schema"] = adapter.WAVE_BINDING_SCHEMA
-    bindings["wave"] = {
-        "reservation_id": "heldout20-two-cell-test",
-        "expected_sessions": 2,
-        "packet_set_sha256": "sha256:" + "9" * 64,
-        "campaign_plan_sha256": "sha256:" + "7" * 64,
-    }
-    bindings["sha256"] = adapter._digest(  # noqa: SLF001
-        {key: value for key, value in bindings.items() if key != "sha256"}
-    )
+    packets, bindings, plan = _strict_wave_campaign(tmp_path)
     target = json.loads(packets[KEY_A].read_text())
-    target["drivers"] = {
-        "rollout": {
-            "source_sha256": "sha256:"
-            + adapter.hashlib.sha256(Path(adapter.__file__).read_bytes()).hexdigest()
-        }
-    }
-    _write(packets[KEY_A], target)
     _patch_source(monkeypatch, bindings)
     planned_target = json.loads(json.dumps(target))
     plan_sha256 = bindings["wave"]["campaign_plan_sha256"]
@@ -602,17 +711,18 @@ def test_wave_bound_control_plane_drift_fails_before_preview(
     else:
         target["drivers"]["rollout"]["source_sha256"] = "sha256:" + "5" * 64
         _write(packets[KEY_A], target)
-    monkeypatch.setattr(
-        adapter.campaign,
-        "load_plan",
-        lambda _state: {"plan_sha256": plan_sha256, "targets": [planned_target]},
-    )
+    plan["plan_sha256"] = plan_sha256
+    plan["targets"] = [
+        planned_target if item["experiment_key"] == KEY_A else item
+        for item in plan["targets"]
+    ]
+    monkeypatch.setattr(adapter.campaign, "load_plan", lambda _state: plan)
     monkeypatch.setattr(
         heldout_launch,
         "preview_package",
         lambda *_args, **_kwargs: pytest.fail("preview reached after control-plane drift"),
     )
-    with pytest.raises(adapter.AdapterError, match="control plane differs"):
+    with pytest.raises(adapter.AdapterError, match="control .* differs"):
         adapter.run_action(
             action="preview",
             phase="rollout",

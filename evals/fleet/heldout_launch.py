@@ -1071,6 +1071,26 @@ def _workload_binds_created_job(item: dict[str, Any], job_name: str, job_uid: st
     return False
 
 
+def _pod_binds_created_job(item: dict[str, Any], job_name: str, job_uid: str) -> bool:
+    """Require the terminal Pod's controller reference to bind the exact Job UID."""
+    metadata = _metadata(item, "Pod")
+    owners = metadata.get("ownerReferences")
+    if not isinstance(owners, list):
+        return False
+    for owner in owners:
+        if not isinstance(owner, dict):
+            raise HeldoutLaunchError("Pod owner reference is invalid")
+        if (
+            owner.get("apiVersion") == "batch/v1"
+            and owner.get("kind") == "Job"
+            and owner.get("name") == job_name
+            and owner.get("uid") == job_uid
+            and owner.get("controller") is True
+        ):
+            return True
+    return False
+
+
 def _scoped_items(
     cluster: Cluster,
     resource: str,
@@ -1132,6 +1152,15 @@ def _owned_pods(cluster: Cluster, packet: LaunchPacket) -> list[dict[str, Any]]:
     )
     if any(not _owner_matches(item, packet.job_name) for item in pods):
         raise HeldoutLaunchError("scoped Pod read returned an object not owned by the Job")
+    return pods
+
+
+def _owned_pods_for_job(
+    cluster: Cluster, packet: LaunchPacket, job_uid: str
+) -> list[dict[str, Any]]:
+    pods = _owned_pods(cluster, packet)
+    if any(not _pod_binds_created_job(item, packet.job_name, job_uid) for item in pods):
+        raise HeldoutLaunchError("scoped Pod read is not controlled by the exact Job UID")
     return pods
 
 
@@ -1512,6 +1541,8 @@ def launch_package_once(
         created_pod = created_template.get("spec") if isinstance(created_template, dict) else None
         if not isinstance(created_pod, dict):
             raise HeldoutLaunchError("created Job Pod template is invalid")
+        if created_pod.get("priorityClassName") != "c1":
+            raise HeldoutLaunchError("created Job priority differs from sealed c1 policy")
         _assert_cpu_only(created_pod)
     except Exception as exc:
         observed = _created_name_observation(cluster, package.packet)
@@ -1772,7 +1803,7 @@ def collect_terminal(
         for item in workloads
     ):
         raise HeldoutLaunchError("scoped Workload read differs from the created Job")
-    pods = _owned_pods(cluster, packet)
+    pods = _owned_pods_for_job(cluster, packet, job_uid)
     try:
         database_exists = database.exists(packet.database)
         if database_exists:

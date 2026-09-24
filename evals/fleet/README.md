@@ -123,10 +123,13 @@ priority `c1`, have no retry, and have a bounded deadline.
 Daily capacity is reserved under the generic campaign's canonical local state
 directory while holding a file lock. The gate counts the frozen already-used
 census plus every persistent reservation. Version 1 reserves one source group
-at a time. Before any version 2 source Job can be created, `reserve-wave` must
-atomically publish one durable record covering every source group and campaign
-cell. Each later group launch adopts that exact record; partial coverage cannot
-create anything. An exact replay is idempotent, while a changed binding,
+at a time. Version 2 is the strict matched-study path: it requires exactly 16
+source groups and 160 campaign cells, derives the packet-set identity from all
+16 packet digests, and binds the exact campaign, adapter, and source-launcher
+code. Before any version 2 source Job can be created, `reserve-wave` loads that
+exact campaign plan and atomically publishes one durable record covering every
+source group and campaign cell. Each later group launch adopts that exact
+record; partial coverage cannot create anything. An exact replay is idempotent, while a changed binding,
 overlapping reservation, or total above 500 fails closed. Use the first
 authoritative census for that UTC day on the controller host and never replace
 it with a later corroborating census.

@@ -732,7 +732,15 @@ def step(state: Path, *, execute: bool = False, fail_fast: bool = False) -> dict
     )
     launch_limit = 1 if canary_hold else plan["scheduler"]["max_launches_per_step"]
     for target in plan["targets"]:
-        _state, next_action = _target_status(state, target)
+        target_state, next_action = _target_status(state, target)
+        if fail_fast and target_state.endswith("_launch_uncertain"):
+            errors.append(
+                {
+                    "experiment_key": target["experiment_key"],
+                    "error": "CampaignLaunchUncertain",
+                }
+            )
+            break
         if next_action == "none":
             continue
         phase, action = next_action.split("_", 1)
