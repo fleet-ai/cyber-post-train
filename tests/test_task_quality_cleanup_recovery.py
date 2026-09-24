@@ -261,6 +261,24 @@ def test_recovery_rejects_run_intent_mismatch_before_network(tmp_path, monkeypat
     assert methods == []
 
 
+@pytest.mark.parametrize(
+    "artifact",
+    ["PROVISION_RESPONSE.json", "INSTANCE_BINDING.json", "PROVISION_RECEIPT.json"],
+)
+def test_absence_recovery_rejects_cells_with_provision_evidence_before_network(
+    tmp_path, monkeypatch, artifact
+):
+    root, _, _ = _operation_root(tmp_path)
+    (root / "cells/cell-000" / artifact).write_text("{}")
+    _install_source_stubs(monkeypatch)
+    methods = _install_client(monkeypatch)
+
+    with pytest.raises(recovery.RecoveryError, match="normal cleanup path"):
+        recovery.recover(root, api_key="fixture", settle_seconds=0)
+
+    assert methods == []
+
+
 @pytest.mark.parametrize("artifact", ["CELL_INTENT.json", "CELL_TERMINAL.json"])
 def test_recovery_rejects_cross_wave_cell_evidence_before_network(tmp_path, monkeypatch, artifact):
     root, _, _ = _operation_root(tmp_path)

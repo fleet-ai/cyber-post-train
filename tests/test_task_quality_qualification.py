@@ -601,6 +601,41 @@ def test_probe_tools_rejects_schema_that_does_not_admit_negative_control(monkeyp
     assert calls[-1] == "DELETE"
 
 
+def test_receipt_publication_never_exposes_partial_or_replaces(tmp_path, monkeypatch):
+    path = tmp_path / "PROVISION_RESPONSE.json"
+    receipt = qualification.sealed({"schema": "fixture", "value": 1})
+    real_link = qualification.os.link
+
+    def fail_before_publish(source, destination):
+        assert json.loads(Path(source).read_text()) == receipt
+        assert Path(destination) == path
+        raise OSError("fixture publication failure")
+
+    monkeypatch.setattr(qualification.os, "link", fail_before_publish)
+    with pytest.raises(OSError, match="fixture publication failure"):
+        qualification._write_once(path, receipt)
+    assert not path.exists()
+    assert list(tmp_path.iterdir()) == []
+
+    monkeypatch.setattr(qualification.os, "link", real_link)
+    qualification._write_once(path, receipt)
+    original = path.read_bytes()
+    with pytest.raises(FileExistsError):
+        qualification._write_once(path, qualification.sealed({"schema": "fixture", "value": 2}))
+    assert path.read_bytes() == original
+
+
+def test_durable_directory_creation_fsyncs_child_and_parent(tmp_path, monkeypatch):
+    fsynced = []
+    monkeypatch.setattr(qualification, "_fsync_directory", fsynced.append)
+    directory = tmp_path / "cells"
+
+    qualification._mkdir_once_durable(directory)
+
+    assert directory.is_dir()
+    assert fsynced == [directory, tmp_path]
+
+
 @pytest.mark.parametrize(
     ("created_new_session", "expected_status"),
     [(True, "qualified"), (False, "infrastructure_invalid")],
@@ -703,6 +738,12 @@ def test_qualify_one_requires_new_session_and_records_no_content(
     assert '"reward"' not in rendered
     assert "score response" not in rendered
     assert "FLAG{" not in rendered
+    provision_response = json.loads((tmp_path / "cell/PROVISION_RESPONSE.json").read_text())
+    instance_binding = json.loads((tmp_path / "cell/INSTANCE_BINDING.json").read_text())
+    provision_receipt = json.loads((tmp_path / "cell/PROVISION_RECEIPT.json").read_text())
+    assert instance_binding["provision_response_sha256"] == provision_response["sha256"]
+    assert provision_receipt["provision_response_sha256"] == provision_response["sha256"]
+    assert provision_receipt["instance_binding_sha256"] == instance_binding["sha256"]
 
 
 def test_qualify_one_quarantines_ambiguous_provision_without_retry(tmp_path, monkeypatch):
@@ -783,6 +824,8 @@ def test_qualify_one_never_deletes_instance_from_misbound_provision_response(tmp
     )
     assert direct_deletes == 0
     assert receipt["qualification_status"] == "quarantined_ambiguous"
+    assert not (directory / "PROVISION_RESPONSE.json").exists()
+    assert not (directory / "INSTANCE_BINDING.json").exists()
     assert not (directory / "PROVISION_RECEIPT.json").exists()
 
 
@@ -837,10 +880,12 @@ def test_qualify_one_never_deletes_instance_before_owned_readback(tmp_path, monk
     )
     assert direct_deletes == 0
     assert receipt["qualification_status"] == "infrastructure_invalid"
+    assert (directory / "PROVISION_RESPONSE.json").is_file()
+    assert not (directory / "INSTANCE_BINDING.json").exists()
     assert not (directory / "PROVISION_RECEIPT.json").exists()
 
 
-def test_qualify_one_never_deletes_instance_before_create_claim_binding(tmp_path, monkeypatch):
+def test_qualify_one_claim_mismatch_fails_closed_without_delete(tmp_path, monkeypatch):
     binding = _binding()
     config = qualification._config(binding, "fixture-wave")
 
@@ -901,6 +946,748 @@ def test_qualify_one_never_deletes_instance_before_create_claim_binding(tmp_path
     assert direct_deletes == 0
     assert receipt["qualification_status"] == "infrastructure_invalid"
     assert not (directory / "PROVISION_RECEIPT.json").exists()
+    assert (directory / "PROVISION_RESPONSE.json").is_file()
+    assert (directory / "INSTANCE_BINDING.json").is_file()
+    assert receipt["checks"]["environment_cleanup_completed"] is False
+
+
+def test_qualify_one_claim_404_after_readback_persists_binding_and_deletes_once(
+    tmp_path, monkeypatch
+):
+    binding = _binding()
+    directory = tmp_path / "cell"
+
+    class Client:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(qualification, "_client", lambda _key: Client())
+    monkeypatch.setattr(qualification, "_account", lambda _client: None)
+    monkeypatch.setattr(qualification, "_fetch_binding", lambda *_args, **_kwargs: binding)
+    monkeypatch.setattr(
+        self_hosted, "assert_authoritative_routes_deployed", lambda *_args: {"mode": "fixture"}
+    )
+    monkeypatch.setattr(
+        qualification,
+        "_assert_create_claim_routes_deployed",
+        lambda *_args: {"mode": "openapi"},
+    )
+    deletes = 0
+
+    def request(_client, method, path, **_kwargs):
+        nonlocal deletes
+        if method == "POST" and path.endswith("/instances"):
+            return {
+                "task_key": binding["task_key"],
+                "task_version_id": binding["task_version_id"],
+                "instance_id": "fixture-instance",
+                "evidence_run_id": EVIDENCE_RUN,
+            }
+        if method == "GET" and path == "/v1/env/instances/fixture-instance":
+            return {
+                "instance_id": "fixture-instance",
+                "team_id": qualification.EXPECTED_TEAM_ID,
+                "env_key": binding["environment"]["id"],
+                "version": binding["environment"]["version"],
+                "status": "running",
+                "terminated_at": None,
+                "urls": {"root": "https://fixture.invalid"},
+            }
+        if method == "GET" and "/create-requests/" in path:
+            assert (directory / "PROVISION_RESPONSE.json").is_file()
+            assert (directory / "INSTANCE_BINDING.json").is_file()
+            raise self_hosted.FleetRequestError("GET", path, 404)
+        if method == "DELETE" and path == "/v1/env/instances/fixture-instance":
+            deletes += 1
+            return {"terminated_at": "2026-09-21T00:00:00Z"}
+        raise AssertionError((method, path))
+
+    monkeypatch.setattr(self_hosted, "_request", request)
+    receipt = qualification.qualify_one(
+        binding, wave_id="fixture-wave", directory=directory, api_key="secret"
+    )
+    assert receipt["qualification_status"] == "infrastructure_invalid"
+    assert receipt["failure"]["http_status"] == 404
+    assert receipt["checks"]["environment_cleanup_completed"] is True
+    assert receipt["ambiguous_external_mutation"] is False
+    assert deletes == 1
+    assert (directory / "PROVISION_RESPONSE.json").is_file()
+    assert (directory / "INSTANCE_BINDING.json").is_file()
+    assert not (directory / "PROVISION_RECEIPT.json").exists()
+
+
+def _write_preclaim_instance_binding(directory, binding, *, response_only=False):
+    config = qualification._config(binding, "fixture-wave")
+    request_id = self_hosted.provisioning_request_id(config)
+    provision_intent = qualification.sealed(
+        {
+            "schema": "cyber_task_quality_provision_intent_v1",
+            "run_id": config["run_id"],
+            "task_version_id": binding["task_version_id"],
+            "request_id": request_id,
+            "request_body_sha256": qualification.digest({}),
+        }
+    )
+    qualification._write_once(
+        directory / "PROVISION_INTENT.json",
+        provision_intent,
+    )
+    provision_response = qualification._provision_response(
+        binding,
+        config,
+        provision_intent=provision_intent,
+        request_id=request_id,
+        instance_id="fixture-instance",
+        evidence_run_id=EVIDENCE_RUN,
+    )
+    qualification._write_once(
+        directory / "PROVISION_RESPONSE.json",
+        provision_response,
+    )
+    if response_only:
+        return
+    qualification._write_once(
+        directory / "INSTANCE_BINDING.json",
+        qualification._instance_binding(
+            binding,
+            config,
+            provision_response=provision_response,
+        ),
+    )
+
+
+def test_cleanup_recovers_preclaim_binding_after_crash_and_deletes_once(tmp_path, monkeypatch):
+    binding = _binding()
+    directory = tmp_path / "cell"
+    directory.mkdir()
+    _write_preclaim_instance_binding(directory, binding)
+
+    class Client:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(qualification, "_client", lambda _key: Client())
+    monkeypatch.setattr(qualification, "_account", lambda _client: None)
+    monkeypatch.setattr(
+        qualification,
+        "_optional_instance",
+        lambda *_args: {
+            "instance_id": "fixture-instance",
+            "team_id": qualification.EXPECTED_TEAM_ID,
+            "env_key": binding["environment"]["id"],
+            "version": binding["environment"]["version"],
+            "terminated_at": None,
+        },
+    )
+    deletes = 0
+
+    def request(_client, method, path, **_kwargs):
+        nonlocal deletes
+        if method == "GET" and "/create-requests/" in path:
+            raise self_hosted.FleetRequestError("GET", path, 404)
+        assert method == "DELETE" and path == "/v1/env/instances/fixture-instance"
+        deletes += 1
+        return {"terminated_at": "2026-09-21T00:00:00Z"}
+
+    monkeypatch.setattr(self_hosted, "_request", request)
+    first = qualification.cleanup_one(
+        binding, directory=directory, wave_id="fixture-wave", api_key="secret"
+    )
+    second = qualification.cleanup_one(
+        binding, directory=directory, wave_id="fixture-wave", api_key="secret"
+    )
+    assert first == second
+    assert first["resolution"] == "recovery_delete_terminated"
+    assert deletes == 1
+
+
+def test_cleanup_recovers_response_only_crash_with_fresh_readback(tmp_path, monkeypatch):
+    binding = _binding()
+    directory = tmp_path / "cell"
+    directory.mkdir()
+    _write_preclaim_instance_binding(directory, binding, response_only=True)
+
+    class Client:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(qualification, "_client", lambda _key: Client())
+    monkeypatch.setattr(qualification, "_account", lambda _client: None)
+    monkeypatch.setattr(
+        qualification,
+        "_optional_instance",
+        lambda *_args: {
+            "instance_id": "fixture-instance",
+            "team_id": qualification.EXPECTED_TEAM_ID,
+            "env_key": binding["environment"]["id"],
+            "version": binding["environment"]["version"],
+            "status": "running",
+            "terminated_at": None,
+            "urls": {"root": "https://fixture.invalid"},
+        },
+    )
+    deletes = 0
+
+    def request(_client, method, path, **_kwargs):
+        nonlocal deletes
+        if method == "GET" and "/create-requests/" in path:
+            raise self_hosted.FleetRequestError("GET", path, 404)
+        assert method == "DELETE" and path == "/v1/env/instances/fixture-instance"
+        deletes += 1
+        return {"terminated_at": "2026-09-21T00:00:00Z"}
+
+    monkeypatch.setattr(self_hosted, "_request", request)
+    receipt = qualification.cleanup_one(
+        binding, directory=directory, wave_id="fixture-wave", api_key="secret"
+    )
+    assert receipt["resolution"] == "recovery_delete_terminated"
+    assert (directory / "INSTANCE_BINDING.json").is_file()
+    assert deletes == 1
+
+
+@pytest.mark.parametrize("claim_state", ["accepted", "materialized_mismatch"])
+def test_response_only_absence_never_hides_unresolved_or_contradictory_claim(
+    tmp_path, monkeypatch, claim_state
+):
+    binding = _binding()
+    config = qualification._config(binding, "fixture-wave")
+    directory = tmp_path / "cell"
+    directory.mkdir()
+    _write_preclaim_instance_binding(directory, binding, response_only=True)
+
+    class Client:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(qualification, "_client", lambda _key: Client())
+    monkeypatch.setattr(qualification, "_account", lambda _client: None)
+    monkeypatch.setattr(qualification, "_optional_instance", lambda *_args: None)
+
+    def request(_client, method, path, **_kwargs):
+        assert method == "GET" and "/create-requests/" in path
+        return {
+            "request_id": self_hosted.provisioning_request_id(config),
+            "run_id": config["run_id"],
+            "team_id": qualification.EXPECTED_TEAM_ID,
+            "state": "accepted" if claim_state == "accepted" else "materialized",
+            "instance_id": None if claim_state == "accepted" else "different-instance",
+        }
+
+    monkeypatch.setattr(self_hosted, "_request", request)
+    with pytest.raises(qualification.QualificationError, match="contradicts"):
+        qualification.cleanup_one(
+            binding, directory=directory, wave_id="fixture-wave", api_key="secret"
+        )
+    assert not (directory / "CLEANUP_RESOLUTION.json").exists()
+
+
+def test_response_only_claim_404_and_instance_absence_resolves_without_delete(
+    tmp_path, monkeypatch
+):
+    binding = _binding()
+    directory = tmp_path / "cell"
+    directory.mkdir()
+    _write_preclaim_instance_binding(directory, binding, response_only=True)
+
+    class Client:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(qualification, "_client", lambda _key: Client())
+    monkeypatch.setattr(qualification, "_account", lambda _client: None)
+    monkeypatch.setattr(qualification, "_optional_instance", lambda *_args: None)
+
+    def request(_client, method, path, **_kwargs):
+        assert method == "GET" and "/create-requests/" in path
+        raise self_hosted.FleetRequestError("GET", path, 404)
+
+    monkeypatch.setattr(self_hosted, "_request", request)
+    receipt = qualification.cleanup_one(
+        binding, directory=directory, wave_id="fixture-wave", api_key="secret"
+    )
+    assert receipt["resolution"] == "response_bound_instance_already_absent"
+    assert not (directory / "CLEANUP_RECOVERY_INTENT.json").exists()
+
+
+def test_cleanup_restart_after_delete_observes_absence_without_second_delete(tmp_path, monkeypatch):
+    binding = _binding()
+    directory = tmp_path / "cell"
+    directory.mkdir()
+    _write_preclaim_instance_binding(directory, binding)
+
+    class Client:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(qualification, "_client", lambda _key: Client())
+    monkeypatch.setattr(qualification, "_account", lambda _client: None)
+    instance_reads = iter(
+        [
+            {
+                "instance_id": "fixture-instance",
+                "team_id": qualification.EXPECTED_TEAM_ID,
+                "env_key": binding["environment"]["id"],
+                "version": binding["environment"]["version"],
+                "terminated_at": None,
+            },
+            None,
+        ]
+    )
+    monkeypatch.setattr(qualification, "_optional_instance", lambda *_args: next(instance_reads))
+    deletes = 0
+
+    def request(_client, method, path, **_kwargs):
+        nonlocal deletes
+        if method == "GET" and "/create-requests/" in path:
+            raise self_hosted.FleetRequestError("GET", path, 404)
+        assert method == "DELETE" and path == "/v1/env/instances/fixture-instance"
+        deletes += 1
+        return {"terminated_at": "2026-09-21T00:00:00Z"}
+
+    monkeypatch.setattr(self_hosted, "_request", request)
+    real_resolution = qualification._cleanup_resolution
+    crash_once = True
+
+    def crash_after_delete(*args, **kwargs):
+        nonlocal crash_once
+        if crash_once and kwargs.get("resolution") == "recovery_delete_terminated":
+            crash_once = False
+            raise RuntimeError("fixture crash after successful delete")
+        return real_resolution(*args, **kwargs)
+
+    monkeypatch.setattr(qualification, "_cleanup_resolution", crash_after_delete)
+    with pytest.raises(RuntimeError, match="fixture crash"):
+        qualification.cleanup_one(
+            binding, directory=directory, wave_id="fixture-wave", api_key="secret"
+        )
+    receipt = qualification.cleanup_one(
+        binding, directory=directory, wave_id="fixture-wave", api_key="secret"
+    )
+    assert receipt["resolution"] == "instance_already_absent"
+    assert deletes == 1
+
+
+def test_cleanup_rejects_mismatched_preclaim_binding_without_delete(tmp_path, monkeypatch):
+    binding = _binding()
+    directory = tmp_path / "cell"
+    directory.mkdir()
+    _write_preclaim_instance_binding(directory, binding)
+    path = directory / "INSTANCE_BINDING.json"
+    receipt = qualification._read(path, path.name)
+    receipt["environment_version"] = "wrong-version"
+    path.write_bytes(
+        qualification.canonical_bytes(
+            qualification.sealed({key: value for key, value in receipt.items() if key != "sha256"})
+        )
+    )
+
+    class Client:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(qualification, "_client", lambda _key: Client())
+    monkeypatch.setattr(qualification, "_account", lambda _client: None)
+    monkeypatch.setattr(
+        qualification,
+        "_optional_instance",
+        lambda *_args: pytest.fail("mismatched binding reached instance readback"),
+    )
+    monkeypatch.setattr(
+        self_hosted,
+        "_request",
+        lambda *_args, **_kwargs: pytest.fail("mismatched binding reached Fleet mutation"),
+    )
+    with pytest.raises(qualification.QualificationError, match="differs from the cleanup target"):
+        qualification.cleanup_one(
+            binding, directory=directory, wave_id="fixture-wave", api_key="secret"
+        )
+
+
+def test_cleanup_rejects_resolution_for_different_staged_instance_before_network(
+    tmp_path, monkeypatch
+):
+    binding = _binding()
+    config = qualification._config(binding, "fixture-wave")
+    directory = tmp_path / "cell"
+    directory.mkdir()
+    _write_preclaim_instance_binding(directory, binding)
+    qualification._cleanup_resolution(
+        directory,
+        binding=binding,
+        request_id=self_hosted.provisioning_request_id(config),
+        instance_id="different-instance",
+        resolution="instance_already_absent",
+    )
+    monkeypatch.setattr(
+        qualification,
+        "_client",
+        lambda _key: pytest.fail("mismatched resolution reached Fleet"),
+    )
+
+    with pytest.raises(qualification.QualificationError, match="locally bound instance"):
+        qualification.cleanup_one(
+            binding, directory=directory, wave_id="fixture-wave", api_key="secret"
+        )
+
+
+def test_cleanup_rejects_resolution_for_different_cleanup_control_instance_before_network(
+    tmp_path, monkeypatch
+):
+    binding = _binding()
+    config = qualification._config(binding, "fixture-wave")
+    directory = tmp_path / "cell"
+    directory.mkdir()
+    _write_preclaim_instance_binding(directory, binding)
+    (directory / "PROVISION_RESPONSE.json").unlink()
+    (directory / "INSTANCE_BINDING.json").unlink()
+    request_id = self_hosted.provisioning_request_id(config)
+    qualification._write_once(
+        directory / "CLEANUP_RECOVERY_INTENT.json",
+        qualification.sealed(
+            {
+                "schema": "cyber_task_quality_cleanup_recovery_intent_v1",
+                "binding_sha256": binding["binding_sha256"],
+                "request_id": request_id,
+                "instance_id": "fixture-instance",
+            }
+        ),
+    )
+    qualification._cleanup_resolution(
+        directory,
+        binding=binding,
+        request_id=request_id,
+        instance_id="different-instance",
+        resolution="instance_already_absent",
+    )
+    monkeypatch.setattr(
+        qualification,
+        "_client",
+        lambda _key: pytest.fail("mismatched cleanup control reached Fleet"),
+    )
+
+    with pytest.raises(qualification.QualificationError, match="locally bound instance"):
+        qualification.cleanup_one(
+            binding, directory=directory, wave_id="fixture-wave", api_key="secret"
+        )
+
+
+def test_cleanup_rejects_cleanup_control_disagreeing_with_staged_instance_before_network(
+    tmp_path, monkeypatch
+):
+    binding = _binding()
+    config = qualification._config(binding, "fixture-wave")
+    directory = tmp_path / "cell"
+    directory.mkdir()
+    _write_preclaim_instance_binding(directory, binding)
+    qualification._write_once(
+        directory / "CLEANUP_RECOVERY_INTENT.json",
+        qualification.sealed(
+            {
+                "schema": "cyber_task_quality_cleanup_recovery_intent_v1",
+                "binding_sha256": binding["binding_sha256"],
+                "request_id": self_hosted.provisioning_request_id(config),
+                "instance_id": "different-instance",
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        qualification,
+        "_client",
+        lambda _key: pytest.fail("mismatched local controls reached Fleet"),
+    )
+
+    with pytest.raises(qualification.QualificationError, match="bind different instances"):
+        qualification.cleanup_one(
+            binding, directory=directory, wave_id="fixture-wave", api_key="secret"
+        )
+
+
+def test_cleanup_resumes_recovery_intent_after_response_loss_and_claim_404(tmp_path, monkeypatch):
+    binding = _binding()
+    config = qualification._config(binding, "fixture-wave")
+    directory = tmp_path / "cell"
+    directory.mkdir()
+    _write_preclaim_instance_binding(directory, binding)
+    (directory / "PROVISION_RESPONSE.json").unlink()
+    (directory / "INSTANCE_BINDING.json").unlink()
+    request_id = self_hosted.provisioning_request_id(config)
+    qualification._write_once(
+        directory / "CLEANUP_RECOVERY_INTENT.json",
+        qualification.sealed(
+            {
+                "schema": "cyber_task_quality_cleanup_recovery_intent_v1",
+                "binding_sha256": binding["binding_sha256"],
+                "request_id": request_id,
+                "instance_id": "fixture-instance",
+            }
+        ),
+    )
+
+    class Client:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(qualification, "_client", lambda _key: Client())
+    monkeypatch.setattr(qualification, "_account", lambda _client: None)
+    monkeypatch.setattr(
+        qualification,
+        "_optional_instance",
+        lambda *_args: {
+            "instance_id": "fixture-instance",
+            "team_id": qualification.EXPECTED_TEAM_ID,
+            "env_key": binding["environment"]["id"],
+            "version": binding["environment"]["version"],
+            "terminated_at": None,
+        },
+    )
+    deletes = 0
+
+    def request(_client, method, path, **_kwargs):
+        nonlocal deletes
+        if method == "GET" and "/create-requests/" in path:
+            raise self_hosted.FleetRequestError("GET", path, 404)
+        assert method == "DELETE" and path == "/v1/env/instances/fixture-instance"
+        deletes += 1
+        return {"terminated_at": "2026-09-21T00:00:00Z"}
+
+    monkeypatch.setattr(self_hosted, "_request", request)
+    first = qualification.cleanup_one(
+        binding, directory=directory, wave_id="fixture-wave", api_key="secret"
+    )
+    second = qualification.cleanup_one(
+        binding, directory=directory, wave_id="fixture-wave", api_key="secret"
+    )
+    assert first == second
+    assert first["instance_id"] == "fixture-instance"
+    assert first["resolution"] == "recovery_delete_terminated"
+    assert deletes == 1
+
+
+def test_cleanup_recovery_intent_blocks_contradictory_claim_without_delete(tmp_path, monkeypatch):
+    binding = _binding()
+    config = qualification._config(binding, "fixture-wave")
+    directory = tmp_path / "cell"
+    directory.mkdir()
+    _write_preclaim_instance_binding(directory, binding)
+    (directory / "PROVISION_RESPONSE.json").unlink()
+    (directory / "INSTANCE_BINDING.json").unlink()
+    request_id = self_hosted.provisioning_request_id(config)
+    qualification._write_once(
+        directory / "CLEANUP_RECOVERY_INTENT.json",
+        qualification.sealed(
+            {
+                "schema": "cyber_task_quality_cleanup_recovery_intent_v1",
+                "binding_sha256": binding["binding_sha256"],
+                "request_id": request_id,
+                "instance_id": "fixture-instance",
+            }
+        ),
+    )
+
+    class Client:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(qualification, "_client", lambda _key: Client())
+    monkeypatch.setattr(qualification, "_account", lambda _client: None)
+
+    def request(_client, method, path, **_kwargs):
+        assert method == "GET" and "/create-requests/" in path
+        return {
+            "request_id": request_id,
+            "run_id": config["run_id"],
+            "team_id": qualification.EXPECTED_TEAM_ID,
+            "state": "materialized",
+            "instance_id": "different-instance",
+        }
+
+    monkeypatch.setattr(self_hosted, "_request", request)
+    monkeypatch.setattr(
+        qualification,
+        "_optional_instance",
+        lambda *_args: pytest.fail("contradictory claim reached instance readback"),
+    )
+    with pytest.raises(qualification.QualificationError, match="contradicts"):
+        qualification.cleanup_one(
+            binding, directory=directory, wave_id="fixture-wave", api_key="secret"
+        )
+
+
+def test_bare_cleanup_intent_cannot_authorize_response_loss_delete(tmp_path, monkeypatch):
+    binding = _binding()
+    directory = tmp_path / "cell"
+    directory.mkdir()
+    _write_preclaim_instance_binding(directory, binding)
+    (directory / "PROVISION_RESPONSE.json").unlink()
+    (directory / "INSTANCE_BINDING.json").unlink()
+    qualification._write_once(
+        directory / "CLEANUP_INTENT.json",
+        qualification.sealed(
+            {
+                "schema": "cyber_task_quality_cleanup_intent_v1",
+                "instance_id": "peer-instance",
+                "delete_attempts": 1,
+            }
+        ),
+    )
+
+    class Client:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(qualification, "_client", lambda _key: Client())
+    monkeypatch.setattr(qualification, "_account", lambda _client: None)
+    deletes = 0
+
+    def request(_client, method, path, **_kwargs):
+        nonlocal deletes
+        if method == "GET" and "/create-requests/" in path:
+            raise self_hosted.FleetRequestError("GET", path, 404)
+        if method == "DELETE":
+            deletes += 1
+        pytest.fail(f"bare cleanup intent reached mutation: {method} {path}")
+
+    monkeypatch.setattr(self_hosted, "_request", request)
+    monkeypatch.setattr(
+        qualification,
+        "_optional_instance",
+        lambda *_args: pytest.fail("bare cleanup intent reached instance readback"),
+    )
+    with pytest.raises(self_hosted.FleetRequestError):
+        qualification.cleanup_one(
+            binding, directory=directory, wave_id="fixture-wave", api_key="secret"
+        )
+    assert deletes == 0
+
+
+def test_cleanup_rejects_staged_instance_without_provision_intent_before_network(
+    tmp_path, monkeypatch
+):
+    binding = _binding()
+    directory = tmp_path / "cell"
+    directory.mkdir()
+    _write_preclaim_instance_binding(directory, binding)
+    (directory / "PROVISION_INTENT.json").unlink()
+    monkeypatch.setattr(
+        qualification,
+        "_client",
+        lambda _key: pytest.fail("orphaned staged evidence reached Fleet"),
+    )
+
+    with pytest.raises(qualification.QualificationError, match="no exact provision intent"):
+        qualification.cleanup_one(
+            binding, directory=directory, wave_id="fixture-wave", api_key="secret"
+        )
+
+
+def test_cleanup_rejects_claim_instance_contradicting_preclaim_binding(tmp_path, monkeypatch):
+    binding = _binding()
+    config = qualification._config(binding, "fixture-wave")
+    directory = tmp_path / "cell"
+    directory.mkdir()
+    _write_preclaim_instance_binding(directory, binding)
+
+    class Client:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(qualification, "_client", lambda _key: Client())
+    monkeypatch.setattr(qualification, "_account", lambda _client: None)
+
+    def request(_client, method, path, **_kwargs):
+        if method == "GET" and "/create-requests/" in path:
+            return {
+                "request_id": self_hosted.provisioning_request_id(config),
+                "run_id": config["run_id"],
+                "team_id": qualification.EXPECTED_TEAM_ID,
+                "state": "materialized",
+                "instance_id": "different-instance",
+            }
+        pytest.fail(f"contradictory claim reached mutation: {method} {path}")
+
+    monkeypatch.setattr(self_hosted, "_request", request)
+    with pytest.raises(qualification.QualificationError, match="contradicts"):
+        qualification.cleanup_one(
+            binding, directory=directory, wave_id="fixture-wave", api_key="secret"
+        )
+    assert not (directory / "CLEANUP_RECOVERY_INTENT.json").exists()
+    assert not (directory / "CLEANUP_RESOLUTION.json").exists()
+
+
+def test_cleanup_rejects_linked_provision_receipt_without_linked_files(tmp_path, monkeypatch):
+    binding = _binding()
+    config = qualification._config(binding, "fixture-wave")
+    directory = tmp_path / "cell"
+    directory.mkdir()
+    _write_preclaim_instance_binding(directory, binding)
+    provision_response = qualification._read(
+        directory / "PROVISION_RESPONSE.json", "PROVISION_RESPONSE.json"
+    )
+    instance_binding = qualification._read(
+        directory / "INSTANCE_BINDING.json", "INSTANCE_BINDING.json"
+    )
+    qualification._write_once(
+        directory / "PROVISION_RECEIPT.json",
+        qualification.sealed(
+            {
+                "schema": qualification.LINKED_PROVISION_RECEIPT_SCHEMA,
+                "request_id": self_hosted.provisioning_request_id(config),
+                "instance_id": "fixture-instance",
+                "evidence_run_id": EVIDENCE_RUN,
+                "task_version_id": binding["task_version_id"],
+                "provision_response_sha256": provision_response["sha256"],
+                "instance_binding_sha256": instance_binding["sha256"],
+            }
+        ),
+    )
+    (directory / "PROVISION_RESPONSE.json").unlink()
+    (directory / "INSTANCE_BINDING.json").unlink()
+
+    class Client:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(qualification, "_client", lambda _key: Client())
+    monkeypatch.setattr(qualification, "_account", lambda _client: None)
+    monkeypatch.setattr(
+        self_hosted,
+        "_request",
+        lambda *_args, **_kwargs: pytest.fail("incomplete linked receipt reached Fleet"),
+    )
+    with pytest.raises(qualification.QualificationError, match="incomplete or inconsistent"):
+        qualification.cleanup_one(
+            binding, directory=directory, wave_id="fixture-wave", api_key="secret"
+        )
+
+
+def test_cleanup_rejects_resolution_from_another_request_before_network(tmp_path, monkeypatch):
+    binding = _binding()
+    directory = tmp_path / "cell"
+    directory.mkdir()
+    _write_preclaim_instance_binding(directory, binding)
+    qualification._write_once_atomic(
+        directory / "CLEANUP_RESOLUTION.json",
+        qualification.sealed(
+            {
+                "schema": qualification.CLEANUP_RESOLUTION_SCHEMA,
+                "binding_sha256": binding["binding_sha256"],
+                "request_id": "different-request",
+                "instance_id": "fixture-instance",
+                "resolution": "instance_already_absent",
+                "instance_live_after": False,
+                "resumable_exact_target_only": True,
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        qualification,
+        "_client",
+        lambda *_args: pytest.fail("misbound resolution reached Fleet"),
+    )
+    with pytest.raises(qualification.QualificationError, match="exact target"):
+        qualification.cleanup_one(
+            binding, directory=directory, wave_id="fixture-wave", api_key="secret"
+        )
 
 
 def test_qualify_one_fails_before_provision_when_create_claim_routes_are_missing(
