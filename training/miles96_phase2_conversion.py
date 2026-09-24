@@ -93,8 +93,7 @@ def _validate_plan(plan: dict) -> None:
             plan.get("execution", {}).get("resources") != RESOURCES,
             plan.get("model", {}).get("root") != MODEL_ROOT,
             plan.get("model", {}).get("repo") != "Qwen/Qwen3.8-27B",
-            plan.get("model", {}).get("revision")
-            != "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+            plan.get("model", {}).get("revision") != "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
             digest(plan.get("model")) != MODEL_BINDING_SHA256,
         )
     ):
@@ -104,9 +103,9 @@ def _validate_plan(plan: dict) -> None:
 def job_request(plan: dict) -> dict:
     _validate_plan(plan)
     resources = plan["execution"]["resources"]
-    if quantity(resources["cpu_request"]) < 64 or quantity(
-        resources["memory_request"]
-    ) < quantity("512Gi"):
+    if quantity(resources["cpu_request"]) < 64 or quantity(resources["memory_request"]) < quantity(
+        "512Gi"
+    ):
         raise ValueError("conversion loading envelope drift")
     root = Path(__file__).resolve().parents[1]
     files = {
@@ -153,9 +152,10 @@ def validate_runtime(plan: dict, *, check_model: bool = True) -> list[str]:
     from fti.trainers.miles import run_fleet
 
     _validate_plan(plan)
-    if fti.__version__ != FTI_VERSION or base._hash(
-        Path(run_fleet.__file__)
-    ) != FTI_RUN_FLEET_SHA256:
+    if (
+        fti.__version__ != FTI_VERSION
+        or base._hash(Path(run_fleet.__file__)) != FTI_RUN_FLEET_SHA256
+    ):
         raise ValueError("FTI 0.10.27 source identity drift")
     if check_model:
         base.check_inputs(plan)

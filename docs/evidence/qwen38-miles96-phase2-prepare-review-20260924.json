@@ -30,9 +30,9 @@
     "queue_priority_class": "q1",
     "root_failure_alerts_off": true,
     "live_duplicate_count_at_review": 0,
-    "plan_sha256": "sha256:73888d6a981d2ded3c65a208d4b3f117961c9f78f3d90b17fd3e74e24770a795",
-    "request_sha256": "sha256:586dd11734f88ff67da9d0717276406c88f6e95f9f34001d619797e0db426bfe",
-    "jobs_api_preview_manifest_sha256": "sha256:beac1b81c84f74b958b80ae54df88e89f8a64127815e122075dd13930edfa135"
+    "plan_sha256": "sha256:ea9b89d64223848345743fe00aab6c905fdb1b41cab486bfa49ae24825f22687",
+    "request_sha256": "sha256:1bd5be1e800604575ee001a0a64a0348bded8a6ce41357674841e52de0c9ecf9",
+    "jobs_api_preview_manifest_sha256": "sha256:ed25fbf9078fcb04f96ef9d4482a450f42735ec301878c3302e819ef18d3a2ae"
   },
   "cpu_stage": {
     "name": "chris-q38-m96-p2-stage-v1",
@@ -45,17 +45,17 @@
     "root_failure_alerts_off": true,
     "full_byte_inventory": true,
     "atomic_create_once_promotion": true,
-    "packet_sha256": "sha256:a1906285b516e838a347eb0b6c62e3d2add3a283359d2103f706646543df48e2",
-    "bundle_sha256": "sha256:78f58d83478c60512786741a59c2f8fdae10a43ba82e0aa51c0e902a4efc1676",
+    "packet_sha256": "sha256:ecb934054e01bac1e356fc4da062a67058390769492cdebb769fbcca71ba092c",
+    "bundle_sha256": "sha256:fe16d8322a6c5ecdd4fcfdc814f29013d612737244344dbe9c664d00c45aea1e",
     "server_dry_runs": 2,
-    "stable_server_dry_run_sha256": "sha256:3ade078a8391f2b41b8c1115bbb0c0a4d94e7eaedf101d8de3b3e58d41cc983a"
+    "stable_server_dry_run_sha256": "sha256:eab38933aed79295d249b8e6fd237b3fe7449d6b360418df2d3ef2495d6b734b"
   },
   "source_files": {
-    "training/miles96_phase2_conversion.py": "sha256:ecac35acd348c9828626de1ecf859b49f65e5757c643edff54eff5fdb9a7763b",
-    "training/miles96_model_stage.py": "sha256:23e396ee226cf0bdc8787cfe0802084a81bb9b0a37fb9296dd17975a294f9aa4",
+    "training/miles96_phase2_conversion.py": "sha256:9c19dd544d1be2fe61fc64104711d19104f9d89599adc587934b21b2e265c23d",
+    "training/miles96_model_stage.py": "sha256:95744b6c280af32a48ed8fb1a35c37f9704cf9c2d5e4f53f5cabd7f37d8211d0",
     "training/miles_conversion.py": "sha256:df7916887a1edf0f3f217dcc907fb514f38cf1409e07a144bab78b491120d8f0",
     "tests/test_miles96_phase2_conversion.py": "sha256:7c707df90dbe46ea0c2a0e614f1621954e0a04c594532b2baa9aae7ce9063f0c",
-    "tests/test_miles96_model_stage.py": "sha256:82fcef1293ceb7ec29a1381d80f296b1cebeb8c255a95d7e159b876ab25fd10c"
+    "tests/test_miles96_model_stage.py": "sha256:b08244f0182e0f66ec42e3830a9ebd44dbe1c890969e36b3a9b166e8cacc5101"
   },
   "verification": {
     "tests": "142 passed, 2 skipped",

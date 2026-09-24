@@ -108,9 +108,7 @@ def test_packet_is_zero_gpu_create_once_alerts_off_and_source_read_only() -> Non
 def test_embedded_stager_is_exact() -> None:
     config_map = stage.build_packet()["bundle"]["items"][0]
     assert config_map["data"]["stage_module.py"] == Path(stage.__file__).read_text()
-    assert config_map["data"]["phase2_conversion.py"] == Path(
-        stage.conversion.__file__
-    ).read_text()
+    assert config_map["data"]["phase2_conversion.py"] == Path(stage.conversion.__file__).read_text()
     assert "chris-cpt-cleanup" not in json.dumps(config_map)
     assert config_map["data"]["driver.py"] == stage.DRIVER
 

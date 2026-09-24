@@ -266,7 +266,9 @@ def build_packet() -> dict[str, Any]:
         "phase2_conversion.py": Path(conversion.__file__).read_text(),
         "miles_conversion.py": Path(conversion.base.__file__).read_text(),
         "miles.py": Path(conversion.base.__file__).with_name("miles.py").read_text(),
-        "jobs.py": Path(conversion.__file__).resolve().parents[1]
+        "jobs.py": Path(conversion.__file__)
+        .resolve()
+        .parents[1]
         .joinpath("cyber_post_train/jobs.py")
         .read_text(),
         "conversion_plan.json": json.dumps(
