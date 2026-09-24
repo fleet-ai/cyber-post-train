@@ -1,8 +1,11 @@
 # Fleet blackbox evaluations
 
-Use `cyber-post-train eval` for a new experiment. It reuses the OpenCode runner
-and PostgreSQL claims without assuming 100 tasks, two models or pass@4.
-Older campaign launchers remain historical compatibility paths, not defaults.
+`cyber-post-train eval` is the historical v1 command surface. Accepted v1 plans
+pin its exact evaluator bytes and remain replay-only. New cluster studies must
+select an immutable runtime binding; the current successor is
+[`fleet-opencode-evaluator-runtime-v2.json`](../../configs/evaluation/fleet-opencode-evaluator-runtime-v2.json),
+whose entrypoint reuses the OpenCode runner and PostgreSQL claims without
+rewriting any v1 plan.
 
 ## Workflow
 
@@ -17,12 +20,13 @@ cyber-post-train eval status
 Prepare is offline. Preflight uses GETs to verify Fleet-team access, exact
 task/runtime/verifier bindings, ready inference routes and staged Linux/amd64
 Docker images, including the release label and actual OpenCode version. The
-execution host checks its images again before claims. Its offline startup check
+execution host checks its images again before claims. The v2 offline startup check
 uses the actual controller UID, an explicitly set HOME and a private mounted
 directory. It starts the pinned binary once and directly creates and removes a
 private probe file in every OpenCode state/config/cache/data directory. This catches
 permission errors without using `opencode db path`, whose full application-runtime
-startup latency is unrelated to image or HOME validity. Build the agent with
+startup latency is unrelated to image or HOME validity. The v1 evaluator retains
+its old probe solely because historical plans bind those bytes. Build the agent with
 `evals/fleet/Dockerfile.opencode` and freeze its resulting digest. Preflight
 creates no challenge or scored session. Init writes only
 an empty dedicated PostgreSQL database; it is not a migration/reset command.

@@ -1,0 +1,48 @@
+{
+  "effects": {
+    "cluster_mutations": 0,
+    "eval_launches": 0,
+    "model_calls": 0
+  },
+  "entrypoint": "evals.fleet.cluster_entry_v2",
+  "entrypoint_files_sha256": {
+    "evals/fleet/cluster_entry.py": "c3a1dd1b1fae2ef833e29c7e377b16b4820bd05917a0729300e866ccf5f5e14b",
+    "evals/fleet/cluster_entry_v2.py": "9d17e8f426252918b7b85554118cd690c4f32c12378a92e83203ed4f0419376c"
+  },
+  "historical_v1": {
+    "evaluate_py_sha256": "33b88cf783bffdfa7fc194e8107afbd6721e762cb5d7020da9057c8d797e761e",
+    "plans_resealed": false,
+    "runtime_entrypoint_changed": false
+  },
+  "qualification_evidence": {
+    "path": "docs/evidence/qwen38-fleet-opencode-startup-preflight-20260924.json",
+    "receipt_sha256": "sha256:1dd30e4b1790decf360d457291272920713fd85a4b48fed27b5c5404bff7a227"
+  },
+  "runtime_files_sha256": {
+    "evals/fleet/evaluate.py": "33b88cf783bffdfa7fc194e8107afbd6721e762cb5d7020da9057c8d797e761e",
+    "evals/fleet/evaluate_v2.py": "bab451b8e8bed4f2838f5baeaccbd3b9c4a47ab9c337061adb0f64a8a47f5c56",
+    "evals/fleet/exact_pass4_crypto.py": "477b0531fbc34103ed91ff03668616a56f05687ede8c2c9ebb4e9dd2106337d5",
+    "evals/fleet/fixed_proxy.py": "a65270cb021cbc8e2fe9b00d901b4b70e9ddc98dd58d93e9f695b1768dfb984d",
+    "evals/fleet/opencode_self_hosted.py": "428e9f2e4d4c758c4f682cbed314cf96b866d051b34fa0eea8757a3aad97aa1d",
+    "evals/fleet/rollout_ledger.py": "633914e92d6a0fde6f7040f1fddf9a056c43ed9a41301f0baab1ae856397518c",
+    "evals/fleet/rollout_postgres.py": "74b946005267efa6611861135f135558ac32e10383e7c0619d278af8d8b1ccd9",
+    "evals/fleet/rollout_worker.py": "6782d014143a430c2c5523a2161f453a804e7203a07ee9e24792d705be0c224e"
+  },
+  "runtime_id": "fleet-opencode-evaluator-v2",
+  "schema": "cyber_fleet_evaluator_runtime_binding_v1",
+  "scientific_plan_schema": "cyber_fleet_eval_v1",
+  "sha256": "sha256:d219db8a823780a5b3c638e9caf11340d0bccdc9cbc877478a377bea3690312e",
+  "startup_probe": {
+    "database_runtime_command_executed": false,
+    "deadline_seconds": 300,
+    "network": "none",
+    "required_version": "1.18.27",
+    "writable_directories": [
+      "/home/node/.config/opencode",
+      "/home/node/.cache/opencode",
+      "/home/node/.local/state/opencode",
+      "/home/node/.local/share/opencode"
+    ]
+  },
+  "status": "qualified_not_launched"
+}
