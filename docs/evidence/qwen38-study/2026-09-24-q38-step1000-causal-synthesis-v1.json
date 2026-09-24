@@ -52,8 +52,8 @@
     },
     "checkpoint_inventory": {
       "path": "docs/evidence/qwen38-sft-checkpoint-inventory-20260924.json",
-      "file_sha256": "sha256:92301f62513165005d75977fedc6dd242081bdb07e3f918f92258f928619531c",
-      "logical_sha256": "sha256:9bcf1e145bba5ccb492e19a6bb9c99d76c987626224f9da45bd54cd25241c184"
+      "file_sha256": "sha256:17279949592257a3ea84ef32cce5d1f8dae68556151694feb5dabeaa5447ea2c",
+      "logical_sha256": "sha256:d58a2f650a316f84676eb89a72dfda0d50350f2ad2b81cee7078f58b516ee3d0"
     }
   },
   "historical_regression_signal": {
@@ -324,5 +324,5 @@
     "cluster_or_serving_mutations": 0,
     "private_data_materializations": 0
   },
-  "sha256": "sha256:0845b77d610e5dc6e536db8d32a7daddb77a427a8977f721c9879cd80b3612fc"
+  "sha256": "sha256:daeb26c3f193b7c1cb569b337d08a2775d9d72adae6f4392abbee3420e3b52d3"
 }
