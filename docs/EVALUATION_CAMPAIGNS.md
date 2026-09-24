@@ -141,7 +141,19 @@ After reviewing the frozen plan and previews, permit bounded creates:
 python -m evals.campaign step /restricted/eval-campaign --execute
 ```
 
-Run `step` repeatedly. `status` reports score-blind aggregate states and
-experiment keys. `record` can import one already-produced,
-identity-bound receipt; it never creates work. Reconcile `*_launch_uncertain`
-against the provider and import the recovered receipt—never replay the POST.
+For a foreground fire-and-forget run, use the same explicit execution gate:
+
+```sh
+python -m evals.campaign run /restricted/eval-campaign --execute
+```
+
+`run` repeats score-blind steps, polling only when a round makes no immediate
+progress. Per-cell infrastructure failures remain terminal evidence and do not
+stop siblings. It exits when every cell is terminal, or when the remaining
+cells are explicitly held by an uncertain launch or a failed serial canary; it
+never replays an uncertain create.
+
+`status` reports score-blind aggregate states and experiment keys. `record` can
+import one already-produced, identity-bound receipt; it never creates work.
+Reconcile `*_launch_uncertain` against the provider and import the recovered
+receipt—never replay the POST.

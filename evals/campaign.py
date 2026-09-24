@@ -10,6 +10,8 @@ import os
 import re
 import subprocess
 import tempfile
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -718,6 +720,50 @@ def step(state: Path, *, execute: bool = False) -> dict[str, Any]:
     return {"advanced": advanced, "errors": errors, **status(state)}
 
 
+def run(
+    state: Path,
+    *,
+    poll_seconds: float = 30.0,
+    sleep: Callable[[float], None] = time.sleep,
+) -> dict[str, Any]:
+    """Run score-blind campaign steps until every target is terminal or held."""
+
+    if type(poll_seconds) not in (int, float) or not 0 < poll_seconds < float("inf"):
+        raise CampaignError("invalid_poll_seconds")
+    plan = load_plan(state)
+    targets = {target["experiment_key"]: target for target in plan["targets"]}
+    while True:
+        result = step(state, execute=True)
+        states = {
+            target["experiment_key"]: _target_status(state, target) for target in plan["targets"]
+        }
+        held = [
+            {"experiment_key": key, "reason": "launch_uncertain"}
+            for key, (target_state, _action) in states.items()
+            if target_state.endswith("_launch_uncertain")
+        ]
+        active = {key for key, (_target_state, action) in states.items() if action != "none"}
+        canary_barrier = plan["scheduler"]["serial_canaries"] and any(
+            targets[key]["canary"] and action == "none" and target_state != "complete"
+            for key, (target_state, action) in states.items()
+        )
+        if canary_barrier:
+            serial_holds = {key for key in active if not targets[key]["canary"]}
+            held.extend(
+                {"experiment_key": key, "reason": "serial_canary_not_accepted"}
+                for key in sorted(serial_holds)
+            )
+            active -= serial_holds
+        if not active:
+            return {
+                **result,
+                "run_status": "held" if held else "terminal",
+                "held_targets": held,
+            }
+        if result["advanced"] == 0:
+            sleep(float(poll_seconds))
+
+
 def main(argv: list[str] | None = None) -> None:
     """Run the small campaign controller without changing the shared project CLI."""
     parser = argparse.ArgumentParser()
@@ -730,6 +776,10 @@ def main(argv: list[str] | None = None) -> None:
     step_parser = subparsers.add_parser("step")
     step_parser.add_argument("directory", type=Path)
     step_parser.add_argument("--execute", action="store_true")
+    run_parser = subparsers.add_parser("run")
+    run_parser.add_argument("directory", type=Path)
+    run_parser.add_argument("--execute", action="store_true", required=True)
+    run_parser.add_argument("--poll-seconds", type=float, default=30.0)
     record_parser = subparsers.add_parser("record")
     record_parser.add_argument("directory", type=Path)
     record_parser.add_argument("--experiment-key", required=True)
@@ -743,6 +793,8 @@ def main(argv: list[str] | None = None) -> None:
         result = status(args.directory)
     elif args.command == "step":
         result = step(args.directory, execute=args.execute)
+    elif args.command == "run":
+        result = run(args.directory, poll_seconds=args.poll_seconds)
     else:
         result = record(
             args.directory,

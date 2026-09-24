@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 import evals.campaign as campaign
-from evals.campaign import CampaignError, build_plan, digest, prepare, record, status, step
+from evals.campaign import CampaignError, build_plan, digest, prepare, record, run, status, step
 
 SHA = "sha256:" + "1" * 64
 
@@ -31,6 +31,7 @@ p.add_argument("--bad-alert", action="store_true")
 p.add_argument("--provider", default="fleet")
 p.add_argument("--defer-once", action="store_true")
 p.add_argument("--bad-provider-gate", action="store_true")
+p.add_argument("--fail-launch", action="store_true")
 a = p.parse_args()
 packet = json.loads(Path(a.packet).read_text())
 value = {
@@ -67,6 +68,10 @@ elif a.action == "ready":
         value |= {"status": "ready"}
     value["preview_receipt_sha256"] = previous["receipt_sha256"]
 elif a.action == "launch":
+    if a.fail_launch:
+        marker = Path(a.packet).with_name("launch-attempts")
+        marker.write_text((marker.read_text() if marker.exists() else "") + "x")
+        raise SystemExit(1)
     readiness = json.loads(Path(a.readiness).read_text())
     value |= {"status": "created", "remote_id": "remote-" + packet["experiment_key"][-12:],
               "preview_receipt_sha256": previous["receipt_sha256"],
@@ -107,6 +112,7 @@ def _driver(
     bad_alert: bool = False,
     defer_once: bool = False,
     bad_provider_gate: bool = False,
+    fail_launch: bool = False,
 ) -> dict:
     provider = provider or ("fleet" if phase == "rollout" else "local")
     common = [sys.executable, str(script)]
@@ -155,6 +161,8 @@ def _driver(
     ]
     if bad_provider_gate:
         launch.append("--bad-provider-gate")
+    if fail_launch:
+        launch.append("--fail-launch")
     return {
         "provider": provider,
         "submission": "jobs_api" if provider == "fleet" else "none",
@@ -187,6 +195,7 @@ def _config(
     bad_alert: bool = False,
     defer_once: bool = False,
     bad_provider_gate: bool = False,
+    fail_launch: bool = False,
 ) -> dict:
     models = []
     for model_id, character in (("base", "2"), ("checkpoint", "3")):
@@ -237,6 +246,7 @@ def _config(
                     bad_alert=bad_alert,
                     defer_once=defer_once,
                     bad_provider_gate=bad_provider_gate,
+                    fail_launch=fail_launch,
                 ),
                 "score_driver": _driver(script, "score"),
             }
@@ -437,3 +447,85 @@ def test_running_observation_does_not_block_later_terminal_evidence(tmp_path: Pa
         next(row for row in status(state)["targets"] if row["experiment_key"] == key)["state"]
         == "score_pending"
     )
+
+
+def test_run_reaches_terminal_while_preserving_infrastructure_failures(tmp_path: Path):
+    script = tmp_path / "driver.py"
+    script.write_text(DRIVER)
+    state = _prepare(tmp_path, _config(script))
+
+    result = run(state, poll_seconds=1, sleep=lambda _seconds: None)
+
+    assert result["run_status"] == "terminal"
+    assert result["held_targets"] == []
+    assert result["counts"] == {"complete": 8, "rollout_infrastructure_invalid": 8}
+
+
+def test_run_waits_through_capacity_deferral(tmp_path: Path):
+    script = tmp_path / "driver.py"
+    script.write_text(DRIVER)
+    state = _prepare(tmp_path, _config(script, defer_once=True))
+    sleeps: list[float] = []
+
+    result = run(state, poll_seconds=3, sleep=sleeps.append)
+
+    assert result["run_status"] == "terminal"
+    assert sleeps == [3.0]
+
+
+def test_run_holds_ambiguous_launch_without_replay(tmp_path: Path):
+    script = tmp_path / "driver.py"
+    script.write_text(DRIVER)
+    state = _prepare(tmp_path, _config(script, fail_launch=True))
+
+    result = run(state, poll_seconds=1, sleep=lambda _seconds: None)
+
+    assert result["run_status"] == "held"
+    assert len(result["held_targets"]) == 16
+    assert {row["reason"] for row in result["held_targets"]} == {"launch_uncertain"}
+    markers = list((state / "targets").glob("*/launch-attempts"))
+    assert len(markers) == 16
+    assert all(path.read_text() == "x" for path in markers)
+
+    rerun = run(state, poll_seconds=1, sleep=lambda _seconds: None)
+    assert rerun["run_status"] == "held"
+    assert all(path.read_text() == "x" for path in markers)
+
+
+def test_run_reports_serial_canary_barrier_as_explicit_hold(tmp_path: Path):
+    script = tmp_path / "driver.py"
+    script.write_text(DRIVER)
+    config = _config(script)
+    config["scheduler"]["serial_canaries"] = True
+    config["benchmarks"][0]["targets"][0]["canary"] = True
+    state = _prepare(tmp_path, config)
+
+    result = run(state, poll_seconds=1, sleep=lambda _seconds: None)
+
+    assert result["run_status"] == "held"
+    assert result["counts"] == {"rollout_infrastructure_invalid": 8, "rollout_ready": 8}
+    assert len(result["held_targets"]) == 8
+    assert {row["reason"] for row in result["held_targets"]} == {"serial_canary_not_accepted"}
+
+
+def test_run_does_not_hold_failed_canary_when_scheduler_is_not_serial(tmp_path: Path):
+    script = tmp_path / "driver.py"
+    script.write_text(DRIVER)
+    config = _config(script)
+    config["benchmarks"][0]["targets"][0]["canary"] = True
+    state = _prepare(tmp_path, config)
+
+    result = run(state, poll_seconds=1, sleep=lambda _seconds: None)
+
+    assert result["run_status"] == "terminal"
+    assert result["held_targets"] == []
+    assert result["counts"] == {"complete": 8, "rollout_infrastructure_invalid": 8}
+
+
+def test_run_cli_requires_explicit_execute(tmp_path: Path):
+    script = tmp_path / "driver.py"
+    script.write_text(DRIVER)
+    state = _prepare(tmp_path, _config(script))
+
+    with pytest.raises(SystemExit, match="2"):
+        campaign.main(["run", str(state)])
