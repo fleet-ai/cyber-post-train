@@ -16,6 +16,14 @@ path inventory. The large local WebExploitBench materializations, project temp
 directories, extra worktrees, and unused primary-checkout files were removed.
 No cluster or cloud artifacts were deleted as part of this local reset.
 
+A second scan found **12 independent project clones** and one Codex cache
+clone, with their own linked checkouts; these were removed too. The final
+checkout has **18 tracked files and fewer than 10,000 text lines**, one local `main`
+branch, and one remote `main` branch. Its tests and GitHub size check passed.
+Free disk space was approximately **75 GiB before** and **212 GiB after** the
+cleanup. This is an observed change in available space, not a sum of directory
+sizes: filesystem sharing and other activity affect it.
+
 The deletion inventory, per-path journal, Git refs, and an all-refs history
 bundle are in the small local archive at
 `/Users/christan/Desktop/cyber-post-train-consolidation.thpSFi`.
