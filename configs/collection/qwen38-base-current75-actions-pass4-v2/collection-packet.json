@@ -36,7 +36,7 @@
     "visible_reasoning_included": false
   },
   "eval_config_sha256": "sha256:bb9e2c5bd6a7c9924f16cb86474012e9dd19b24ec2c571be7082c7eef7addf9c",
-  "eval_plan_sha256": "sha256:fb0d54ecca6bb5a8942016dbf339e7b51c902ec39458eb610b4d1eae2585154f",
+  "eval_plan_sha256": "sha256:22ee8eef7949c1db748a4cc025a50e04b4ce3ebaebed11096d3b5d99a77c8277",
   "execution_safety": {
     "alternate_path_retry_allowed": false,
     "automatic_replay_of_ambiguous_cells": false,
@@ -80,15 +80,15 @@
     },
     "cluster_wrapper_supported": true,
     "dedicated_empty_ledger_required": true,
-    "dedicated_ledger_id": "sha256:3d7a8ceb5970ee74e2b9ef5a68636ea01452dca6303aa46ccabf575b086cd307",
+    "dedicated_ledger_id": "sha256:6bd4f3551b30fae780e4f49becde86c5bdf22781e96ac8354b7fe4ed2de50a71",
     "exclusive_pre_mutation_intent_required": true,
     "execution_mode": "authorized_amd64_cpu_job_v1",
     "external_submission": false,
-    "identity_map_sha256": "sha256:475e4cfdefa89431982a2df9be473669ee754c9a7193cc53197a70e80034caee",
+    "identity_map_sha256": "sha256:c9d663f65a323f24cf3f443f3c7d7986920367043fdfca4736c67d5dac61e6d9",
     "maximum_planned_cells": 200,
     "operation_authorization_required": true,
-    "operation_authorization_sha256": "sha256:1597d141b236a9f8fea16e92bf0b4a4f9b16045677931bf72bb5ca26618e4684",
-    "operation_root_name": "q38-base-train50-actions-p4-v1-fb0d54ecca6b",
+    "operation_authorization_sha256": "sha256:1a1a0e21c76aeb3fd00c5583e5a3eb5fc1ea86b48a19641b76fb35eb5733a67e",
+    "operation_root_name": "q38-base-train50-actions-p4-v1-22ee8eef7949",
     "planned_cells": 200,
     "same_path_retry_allowed": false
   },
@@ -101,11 +101,11 @@
     "distinct_visible_action_target_tokens",
     "family_token_concentration"
   ],
-  "operation_authorization_sha256": "sha256:1597d141b236a9f8fea16e92bf0b4a4f9b16045677931bf72bb5ca26618e4684",
+  "operation_authorization_sha256": "sha256:1a1a0e21c76aeb3fd00c5583e5a3eb5fc1ea86b48a19641b76fb35eb5733a67e",
   "root_role_anchor_id": "fleet-blackbox-current-study-20260914-v2",
   "runtime_bindings_sha256": "sha256:849542785db0cb71fdc9ecd29e1008c8af26e0bf25ad0dd74e22b6d6fb3cb694",
   "schema": "cyber_trajectory_collection_packet_v2",
-  "sha256": "sha256:d164781e9d704611c35637a23a61976bab0372906cfd65ee2ccd014a9d1caeba",
+  "sha256": "sha256:f59989dc54d6b92503df5e37f19fa9f258a604c7644cdc2e887ceac5b174373b",
   "source": {
     "kind": "self",
     "model": {

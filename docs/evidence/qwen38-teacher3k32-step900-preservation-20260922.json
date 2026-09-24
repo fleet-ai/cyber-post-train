@@ -88,16 +88,16 @@
     "external_benchmark_content_or_outcomes_used": false,
     "optimizer_updates": 0
   },
-  "sha256": "sha256:9b9145c52d634233be90272cd25231ca95de6f5a6d569b7f876e82c41a465e5c",
+  "sha256": "sha256:76c1ac05d5685cab1aadc82066564e5dd8ac098ee62cc1b4af86552e29cd60a9",
   "source_eval_packet": {
-    "file_sha256": "sha256:659bc2f7140f1acec6624ec29b2b8d64a4db300ac61196586ff75184eb6b23c4",
+    "file_sha256": "sha256:a1132c5b1f68e210651a8c296a65080595d849d9b3e9ea1aa6183c5865c1a47b",
     "launchable": false,
     "path": "configs/evaluation/qwen38-teacher3k-32k-step900-fleet-dev17-seed43-preparation-v1.json",
     "resolved_pending_states": [
       "observed_zero_gpu_promotion.bf16_export.state",
       "observed_zero_gpu_promotion.cpu_layout_check.state"
     ],
-    "sha256": "sha256:46833ddc3408fb469889d5f6907061da6eb035ecaf67fef283a96d5a07165afb",
+    "sha256": "sha256:f3a5dad6cf443d5d9a695a691c1897622360583c1e93c368e19f5c715f0847dc",
     "status": "blocked_not_launchable"
   },
   "stage_plan": {

@@ -417,7 +417,7 @@ def test_seed44_stageb_corrected_successor_is_unique_alert_off_and_prevalidated(
     assert recovery.job["spec"]["template"]["spec"]["initContainers"][0]["name"] == "dind"
     assert recovery.proof["successor_binding"] == {
         "successor_plan_sha256": (
-            "sha256:01800d16141ea8ed9a5e914e6fe78476a413efdac26fc62dafaef880e4075a65"
+            "sha256:34fb2687000d0f14a468d502b0851a8336b90812c2e1202a5bd7b200d21683c8"
         ),
         "predecessor_successor_plan_sha256": (
             "sha256:b6fdbb9d86cb7c54e283d530ba9ad6806431469ca8644bd0016711325005f71b"

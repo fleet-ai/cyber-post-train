@@ -65,7 +65,7 @@
     "base": {
       "config": "configs/evaluation/qwen38-base-fleet-dev17-opencode-seed43-pass1-v1.json",
       "config_sha256": "sha256:b52db3194f8682bcf88fb96049a1f3cf14afa8b3b7ab18932b0209f394d90b7c",
-      "evaluation_plan_sha256": "sha256:2cc8822ec7e3c0c5ef7cebfde9b7a7300eb03b097a4b4c6f84ec278839bbdc51",
+      "evaluation_plan_sha256": "sha256:e6a945da4bbf0e701b512bbf8c7014a9bb2414b600ae24d961738a91005c0d5b",
       "model_alias": "qwen3.8-27b-base",
       "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
       "session_model": "qwen/qwen3.8-27b",
@@ -81,7 +81,7 @@
     "fresh75": {
       "config": "configs/evaluation/qwen38-fresh75-fleet-dev17-opencode-seed43-pass1-v1.json",
       "config_sha256": "sha256:90c0b6b942deecb0571e85e81419b4411d53e5c11fd0aa280afd2628ef79be80",
-      "evaluation_plan_sha256": "sha256:d030f378ceb6591defe77fbb0319cc580cc99d3ab2229c7fff81e1ace490a43d",
+      "evaluation_plan_sha256": "sha256:c23c7ebb73b0c3c7207d489ab0631d0d08a400283d6545a307a72ad423929d29",
       "model_alias": "fresh75-step230",
       "model_revision": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
       "session_model": "qwen/chris-q38-fresh75-step230-web-v2",
@@ -97,7 +97,7 @@
     "self44": {
       "config": "configs/evaluation/qwen38-self-sft-step44-fleet-dev17-opencode-seed43-pass1-v1.json",
       "config_sha256": "sha256:c8c71394eeadee25801b771e25060445581c25215e0592f07e1b5884799664ce",
-      "evaluation_plan_sha256": "sha256:37ca1e4f573c4c2fc4c9bea2ecb0567763df03de7a7ed2da49ea48273c08dafd",
+      "evaluation_plan_sha256": "sha256:a4d04762253a760ea74258f0aef32cb301ec27622eb738f0ddc4274de11100c8",
       "model_alias": "self-sft-step44",
       "model_revision": "sha256:a0e55bebe9d78ac76c012446ae0147a421cd333e2a6bf2bb6f4fb3450fa776fe",
       "session_model": "qwen/chris-q38-self-sft-step44-v1",
@@ -113,7 +113,7 @@
     "teacher186": {
       "config": "configs/evaluation/qwen38-teacher-v5-fleet-dev17-opencode-seed43-pass1-v1.json",
       "config_sha256": "sha256:9af42e2fbd84c51c219228fe75a515c448d694c6df0e69e70dfb3e1e9ed02ee5",
-      "evaluation_plan_sha256": "sha256:fefc68a10f0d569376239e2e67dd91bc7bef2e4d9be20d054f4252bbd52d803a",
+      "evaluation_plan_sha256": "sha256:90343cfc1d085540fba8d344a29393a1721a4d5e74e3b5685a0e57b05770df89",
       "model_alias": "teacher-v5-step186",
       "model_revision": "sha256:e6d59f5a58ce54b913d775cd71b81c64bd54637b53795df82baec0f71efefaf9",
       "session_model": "qwen/chris-q38-teacher-v5-step186-web-v1",
@@ -155,5 +155,5 @@
     "duplicate_output_database_job_and_workload_absence_required": true,
     "fresh_live_parity_required_for_each_served_checkpoint": true
   },
-  "sha256": "85334a48a36c126a1134ab2e0ba6211e2fce5de06c4fce6bbcef5304ab9b4f4a"
+  "sha256": "b11b6c21fdd69516e0d3312b8ba3995447251aa6c370b03a738106589179a33f"
 }

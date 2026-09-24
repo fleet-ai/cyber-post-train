@@ -35,7 +35,7 @@
     "visible_reasoning_included": false
   },
   "eval_config_sha256": "sha256:d663b0c6b87b4d3247c17335dd5fabb008bb6ff5b754b8e0c3ebd9db44da7ec9",
-  "eval_plan_sha256": "sha256:8eb2b46b7743bb4ca23224b13b8ef59727ff12bcf1a48a5edc189ff8c65f14d4",
+  "eval_plan_sha256": "sha256:51b00184b3e3ea7b7011e265612e334d7ec5551cc0e6c1261466a2672ff2742f",
   "execution_safety": {
     "automatic_replay_of_ambiguous_cells": false,
     "cluster_wrapper_enablement_requires": {
@@ -70,7 +70,7 @@
   "root_role_anchor_id": "fleet-blackbox-current-study-20260914-v2",
   "runtime_bindings_sha256": "sha256:849542785db0cb71fdc9ecd29e1008c8af26e0bf25ad0dd74e22b6d6fb3cb694",
   "schema": "cyber_trajectory_collection_packet_v1",
-  "sha256": "sha256:7aa740b18773d1145b28d2cb49da4b72bb324eedbf898707f7cf88a0cd0df98f",
+  "sha256": "sha256:49a7db5f34595adb16aad9063472fa7ac5692581c4b72d00c7293c8ac1dfa803",
   "source": {
     "kind": "self",
     "model": {

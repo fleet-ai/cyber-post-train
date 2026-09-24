@@ -1081,6 +1081,11 @@ def test_cell_status_exposes_score_blind_agent_lifecycle(
         "agent_exit_code": exit_code,
         "agent_termination": termination,
     }
+    rollout_postgres.start(
+        pg_dsn,
+        **owned_cell,
+        session_id=record["session_id"],
+    )
     rollout_postgres.record_local_result(pg_dsn, **owned_cell, record=record)
     rollout_postgres.accept(pg_dsn, **owned_cell, receipt_digest="a" * 64)
     status = rollout_postgres.cell_status(

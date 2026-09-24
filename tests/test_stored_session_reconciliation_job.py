@@ -164,6 +164,11 @@ def test_v3_terminal_evidence_is_sanitized_complete_and_self_digesting():
 def test_v3_successor_changes_only_repair_bytes_and_fresh_create_once_identities():
     v2 = json.loads(V2_PLAN.read_text())
     v3 = json.loads(PLAN.read_text())
+    runtime_source_updates = {
+        "evals/fleet/evaluate.py",
+        "evals/fleet/rollout_postgres.py",
+    }
+    repair_source = "evals/fleet/stored_session_reconciliation.py"
     assert v3["source"] == v2["source"]
     assert v3["safety"] == v2["safety"]
     assert {key: value for key, value in v3["runtime"].items() if key != "run_script_sha256"} == {
@@ -172,11 +177,19 @@ def test_v3_successor_changes_only_repair_bytes_and_fresh_create_once_identities
     assert {
         key: value
         for key, value in v3["code_sha256"].items()
-        if key != "evals/fleet/stored_session_reconciliation.py"
+        if key not in runtime_source_updates | {repair_source}
     } == {
         key: value
         for key, value in v2["code_sha256"].items()
-        if key != "evals/fleet/stored_session_reconciliation.py"
+        if key not in runtime_source_updates | {repair_source}
+    }
+    assert {key: v3["code_sha256"][key] for key in runtime_source_updates} == {
+        "evals/fleet/evaluate.py": (
+            "9a9b3decbb98f9fe3a9d69fd2f9917ad1ac61269dcb0306e61cf52e6d4f18166"
+        ),
+        "evals/fleet/rollout_postgres.py": (
+            "0fec4b605b5ee920333a0116a9abebd22d46163dff6f9a827ae577fd825026ee"
+        ),
     }
     changed_execution = {
         key for key in v3["execution"] if v3["execution"][key] != v2["execution"][key]

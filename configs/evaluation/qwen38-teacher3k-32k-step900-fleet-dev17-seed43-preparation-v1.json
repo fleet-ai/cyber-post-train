@@ -37,8 +37,8 @@
   },
   "frozen_protocol": {
     "path": "configs/evaluation/qwen38-fleet-dev17-seed43-matched-protocol-v1.json",
-    "file_sha256": "sha256:12ff102e82a848d760587ef0af4848e7b288ca4f5e0acfe248cd60dfe0dd17aa",
-    "sha256": "sha256:85334a48a36c126a1134ab2e0ba6211e2fce5de06c4fce6bbcef5304ab9b4f4a",
+    "file_sha256": "sha256:c1dbc4cec68f9747e3f57374cbbd01b90c2339562f39c292b8e981cd8d429d55",
+    "sha256": "sha256:b11b6c21fdd69516e0d3312b8ba3995447251aa6c370b03a738106589179a33f",
     "task_set_path": "configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json",
     "task_set_file_sha256": "sha256:79c834e739246da29aca9513965ecfc7032f8df7744eb2245ce0303aba1b97c5",
     "binding_roster_path": "configs/evaluation/qwen38-fleet-dev17-exact-binding-roster-20260922-v1.json",
@@ -275,5 +275,5 @@
     "flags_or_answers_included": false,
     "credentials_included": false
   },
-  "sha256": "46833ddc3408fb469889d5f6907061da6eb035ecaf67fef283a96d5a07165afb"
+  "sha256": "f3a5dad6cf443d5d9a695a691c1897622360583c1e93c368e19f5c715f0847dc"
 }

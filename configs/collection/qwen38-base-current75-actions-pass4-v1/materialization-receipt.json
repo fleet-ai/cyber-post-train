@@ -9,7 +9,7 @@
   "inventory_task_versions": 75,
   "model_calls": 0,
   "output_logical_sha256": {
-    "collection-packet.json": "sha256:7aa740b18773d1145b28d2cb49da4b72bb324eedbf898707f7cf88a0cd0df98f",
+    "collection-packet.json": "sha256:49a7db5f34595adb16aad9063472fa7ac5692581c4b72d00c7293c8ac1dfa803",
     "collection-request.json": "sha256:c5c4fd223a62e8a11185580eed7362d2aa0fe1c1c159b38ae067e03e9c88e6c8",
     "eval-config.json": "sha256:d663b0c6b87b4d3247c17335dd5fabb008bb6ff5b754b8e0c3ebd9db44da7ec9",
     "family-split.json": "sha256:8859da6ac391add1b405ee5c453924657dfd9a14b2826dfa2a681456556af4df",
@@ -25,7 +25,7 @@
   "reasoning_targets_included": false,
   "root_role_anchor_id": "fleet-blackbox-current-study-20260914-v2",
   "schema": "cyber_collection_campaign_materialization_receipt_v1",
-  "sha256": "sha256:862efc9b53a1b342c55f612fc4770f4ab01581086f435c529e7395710ec881e1",
+  "sha256": "sha256:15367363ec1c2d3791c92059dabc40b274549a897fe22f0135e742b7dc7f1fa0",
   "source_input_logical_sha256": {
     "family_split": "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
     "inventory": "sha256:23cfc25af183ff474e914443682e4707162110ddc2aa16103a13d984fe05b83c",

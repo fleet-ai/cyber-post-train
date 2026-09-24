@@ -22,7 +22,9 @@
   },
   "code_sha256_overrides": {
     "single_rollout_repair": {
-      "evals/fleet/cluster_entry.py": "c3a1dd1b1fae2ef833e29c7e377b16b4820bd05917a0729300e866ccf5f5e14b"
+      "evals/fleet/cluster_entry.py": "c3a1dd1b1fae2ef833e29c7e377b16b4820bd05917a0729300e866ccf5f5e14b",
+      "evals/fleet/evaluate.py": "9a9b3decbb98f9fe3a9d69fd2f9917ad1ac61269dcb0306e61cf52e6d4f18166",
+      "evals/fleet/rollout_postgres.py": "0fec4b605b5ee920333a0116a9abebd22d46163dff6f9a827ae577fd825026ee"
     }
   },
   "contract": {
@@ -54,5 +56,5 @@
     "scoring_calls": 0,
     "accepted_cell_replays": 0
   },
-  "sha256": "sha256:01800d16141ea8ed9a5e914e6fe78476a413efdac26fc62dafaef880e4075a65"
+  "sha256": "sha256:34fb2687000d0f14a468d502b0851a8336b90812c2e1202a5bd7b200d21683c8"
 }
