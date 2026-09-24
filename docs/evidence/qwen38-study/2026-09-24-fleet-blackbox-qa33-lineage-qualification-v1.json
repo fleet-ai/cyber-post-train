@@ -1,0 +1,32 @@
+{
+  "counts": {
+    "candidate_task_versions": 33,
+    "exact_live_lineage_bound": 33,
+    "runtime_receipt_qualified": 0,
+    "teacher3k_exact_version_exposed": 12,
+    "teacher3k_shared_atom_exposed": 17,
+    "teacher3k_shared_atom_unexposed": 16
+  },
+  "lineage_census": {
+    "path": "configs/data/fleet-blackbox-shared-atom-lineage-census-20260924-v1.json",
+    "sha256": "sha256:70bb11654272dd0adfa9519522df028a9d5a7f1fea42d98b2b47bfdb5271a07c"
+  },
+  "qualification_boundary": {
+    "checked_in_qa_status_is_not_a_runtime_receipt": true,
+    "next_gate": "A later authorized zero-model qualification must prove environment startup, tool reachability, verifier execution, a finite outcome, and cleanup.",
+    "paid_or_mutating_qualification_performed": false,
+    "read_only_task_metadata_proves_lineage_only": true
+  },
+  "safety": {
+    "external_mutations": 0,
+    "launch_authorized": false,
+    "private_content_persisted": false
+  },
+  "schema": "fleet_blackbox_qa33_lineage_qualification_decision_v1",
+  "sha256": "sha256:6f8d3925d7da8668ef4d2e3d2f2b7c13c159d929811f6e6c490df286ee76082a",
+  "split": {
+    "path": "configs/data/fleet-blackbox-lineage-safe-split-20260924-v2.json",
+    "sha256": "sha256:76e0169c189dd5a0ec2c9858f7172a9d958357cef88c86a8c596b8c8da5663a1"
+  },
+  "status": "lineage_bound_no_new_runtime_qualification"
+}

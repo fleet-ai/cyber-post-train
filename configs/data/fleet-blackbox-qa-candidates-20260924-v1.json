@@ -1,0 +1,245 @@
+{
+  "evidence": [
+    "current production catalog version with attached verifier",
+    "cross-session QA classified clean or agent_failure rather than broken_task",
+    "not accepted until runtime, grading, finite-result, and cleanup receipts join"
+  ],
+  "private_content_persisted": false,
+  "purpose": "new current blackbox candidates awaiting exact receipt validation",
+  "schema": "fleet_current_blackbox_qa_candidates_v1",
+  "sha256": "sha256:4f61fd78b4d92c933030f026e0137abe199e0157fd72b2f959df0354df489be8",
+  "task_count": 33,
+  "tasks": [
+    {
+      "qa_status": "clean",
+      "task_id": "bcffbc2d-09a9-45d7-ba47-d87886494070",
+      "task_key": "cysec1-2-cmp-current-fakelook-479866c125cf_blackbox-5b27af6739dbd86fdae0f077__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "20b2e9cc-d57c-44a0-867a-a04c3bd28959"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "dfb41733-f8cb-41cb-8b9b-22e8f3de1c4f",
+      "task_key": "cysec1-2-cmp-current-fakelook-fira-fubspot-2a643bbb1d64_atoms-3_blackbox-b67e2696b64984754979c0e1__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "d43d46d3-024e-4d6b-bf4a-533853ecfa11"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "7aef33b2-8b11-43f9-8c4c-a5fb8ec387de",
+      "task_key": "cysec1-2-cmp-current-fakelook-fira-fubspot-2a643bbb1d64_atoms-4_blackbox-e51af769d0c497fdbeb30f38__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "25361d2a-ee44-4188-86cf-a38b9dd37a7c"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "81718946-d617-4c83-9014-9fbc39d8e95a",
+      "task_key": "cysec1-2-cmp-current-fakelook-fira-fubspot-2a643bbb1d64_blackbox-4c32480dc843fb32af50a55c__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "b0fee2bb-1e5a-41fb-8abf-1e1ed01366aa"
+    },
+    {
+      "qa_status": "clean",
+      "task_id": "939d0a89-26fc-4187-9347-ca3d960e3479",
+      "task_key": "cysec1-2-cmp-fentry-stratum-14a2ace2d4d6_blackbox-f5b856e40f4fb6232bef7401__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "fcc26237-9397-4741-ba45-373bbf610357"
+    },
+    {
+      "qa_status": "clean",
+      "task_id": "df34d28b-b751-403b-bf1e-e9e958a3c82e",
+      "task_key": "cysec1-2-cmp-fentry-stratum-c6602e880fc1_blackbox-f362c656c02a38f69822b559__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "ba14aa86-c84b-4d91-82e4-a4f7c9731e47"
+    },
+    {
+      "qa_status": "clean",
+      "task_id": "88e2a896-08aa-4c92-9a0e-8408782ba7c1",
+      "task_key": "cysec1-2-cmp-fentry-stratum-defb0afed77a_blackbox-b54f13fd774854fa9b67f326__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "560cfe36-8c55-4725-87a7-05bb64d5aa1c"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "bc3aff4b-aecd-4dc8-8ec0-836b4cb89c55",
+      "task_key": "cysec1-2-cmp-fira-fubspot-5920f8ab8e60_atoms-1_blackbox-ff81e84746e20bf88cc46a25__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "6de86cf8-1ad9-4ec4-b82f-2fb7972e19d8"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "90e6863b-5f92-4365-84f6-0cade754462b",
+      "task_key": "cysec1-2-cmp-fira-fubspot-5920f8ab8e60_atoms-2_blackbox-f1b536bf1a2d734337f4c56b__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "4caa99ec-6780-46a2-9eef-4addeaa06e4f"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "db2f8d1d-670d-46c1-8b56-70682837b95c",
+      "task_key": "cysec1-2-concur-gen_atoms-1_blackbox-037a0ab835da0ace037be4aa__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "370f4ab5-253c-460e-b31c-c07c509afdfd"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "b2ad9d69-400e-4353-bfa0-f68a5eaf6a03",
+      "task_key": "cysec1-2-concur-gen_atoms-1_blackbox-69dbce4cfb18102716ac227e__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "5835fe7d-8381-4b78-83d2-851a59a20b1f"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "450d073d-3cba-4cd3-a0f5-27e3069c31bb",
+      "task_key": "cysec1-2-concur-gen_atoms-1_blackbox-7006280eca0d5ae5834f3ffb__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "82c108c1-8fb2-45ef-9dd6-9f360b3dea1d"
+    },
+    {
+      "qa_status": "clean",
+      "task_id": "ad41ad1d-e092-4839-8217-f02f5e0c6ba0",
+      "task_key": "cysec1-2-concur-gen_atoms-1_blackbox-703e845ecc4c1e020bb99309__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "ae236a07-128d-4556-ba2b-25a248818497"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "1534791f-8dc6-4f8d-bea0-96355dd5fece",
+      "task_key": "cysec1-2-concur-gen_atoms-1_blackbox-b90c75596785661b9dd172e4__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "3c2337e4-3db1-4e9e-a525-5a855af786b6"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "1e8384be-3abc-4a73-93e9-c00aa15aecbb",
+      "task_key": "cysec1-2-current-fubspot-gen_fubspot-engagement-delegated-record-owner__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "c56fb19c-a889-43fb-8906-cd134723d25d"
+    },
+    {
+      "qa_status": "clean",
+      "task_id": "130572e7-50e9-41e9-9132-fdf74ed8f0b1",
+      "task_key": "cysec1-2-current-fubspot-gen_single-atom-fubspot-engagement-feed-scope-default__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "99df3685-2419-4852-8913-829ce0fd9bbd"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "b7558900-687a-4184-a3d6-48f34857ff36",
+      "task_key": "cysec1-2-current-gen_atoms-1_blackbox-23e49a65ce67a543012d347f__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "ffd2b1b7-4475-4835-a485-65fc87fa2d3d"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "cf52b571-c9db-45f5-a05b-9498bf6db8d4",
+      "task_key": "cysec1-2-fakelook-gen_atoms-1_blackbox-842e0dc193a193c9eb4a604c__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "bcd785a2-1d1f-408d-a4a4-3c9b5f6c1498"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "2bd4126c-da01-435a-b5f8-c08dddc535e8",
+      "task_key": "cysec1-2-fanaplan-gen_atoms-1_blackbox-7019bf4172995bc00049c742__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "35651def-3eaf-46c3-baa4-87de64eab297"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "295af8da-f345-48ce-90d9-eb777abd39d6",
+      "task_key": "cysec1-2-fanaplan-gen_atoms-1_blackbox-cdb31753a558f886fb2888d2__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "f83ab071-49e0-4955-ab3a-33c212751b65"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "25b99ab5-9ca7-46fa-8782-7473aa1b2a17",
+      "task_key": "cysec1-2-fcompliance-gen_atoms-1_blackbox-015ed15aa913f3ad8f1bbecc__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "c04ae533-65c2-4c73-96d4-60c425409505"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "c12e8a7e-853d-4393-99ee-87e44af0c44c",
+      "task_key": "cysec1-2-fcompliance-gen_atoms-1_blackbox-f6c904e6b06fb15749cf4bb1__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "7ff69e40-bfde-4050-9b80-5bd435113e93"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "3e5bcb67-7f61-4a0c-bd7c-e4681c1329cc",
+      "task_key": "cysec1-2-fentry-current-gen_single-atom-issue-scope-lock-release-bypass__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "0554e862-6a1f-4ae9-a956-0d00b78c5f3a"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "937ecac6-54b2-4ebd-bb6b-75d8a097e0ed",
+      "task_key": "cysec1-2-fira-gen_atoms-1_blackbox-ac13e64b06a20ce5ed154649__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "bc363531-0aa0-45ef-a3dd-c3512cc4d53e"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "fe1536f5-b9fa-42d4-9fe7-f05348c759b3",
+      "task_key": "cysec1-2-fubspot-gen_atoms-1_blackbox-804775ae84ecf3e1be19299f__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "f2033bb1-5c1c-4832-b69c-0644cce431dd"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "48e489fa-f49c-4b64-81c7-93f4475decca",
+      "task_key": "cysec1-2-oracle-epm-gen_atoms-1_blackbox-355dbbce889c3b59bf9d30c9__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "2426d2d7-3915-4dc5-90a0-4d3eb6b05187"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "f8f1cc32-0cd0-43c5-90f1-420e935c46a7",
+      "task_key": "cysec1-2-oracle-epm-gen_atoms-1_blackbox-4a9834565d708cae5aa90158__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "e3cb7ab5-8e29-4eeb-8492-89fecffe61a3"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "6a2f9d92-9bba-46cf-a456-a9b1a07adbd9",
+      "task_key": "cysec1-2-oracle-epm-gen_atoms-1_blackbox-ce33d8ca04b31c295036598a__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "9e636194-8cff-4395-b665-080c0951b5b1"
+    },
+    {
+      "qa_status": "clean",
+      "task_id": "c0873bf4-1d89-409e-a429-5a49ab2043c5",
+      "task_key": "cysec1-2-rops-gen_single-atom-channel-access-gate-denial-dropped__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "87e400f5-ccc8-4514-bcd3-35f548dd2165"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "1b2ddf8c-a09a-42b6-b5af-0b8f3090a625",
+      "task_key": "cysec1-2-rops-gen_single-atom-latch-chat-scoped-search-fail-open__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "e2b449f7-1b09-4aea-9bd4-e5043866938b"
+    },
+    {
+      "qa_status": "clean",
+      "task_id": "4171a487-f05d-4b9d-8a7b-e8c662ed6660",
+      "task_key": "cysec1-2-rops-gen_single-atom-persistent-credential-context-cookie__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "3682f83a-18dc-402b-b63a-45ed6616ba59"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "7702352f-e336-434c-baaf-82b0b2464492",
+      "task_key": "cysec1-2-rops-gen_single-atom-team-visibility-membership-gate-gap__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "c33c863f-8be0-49e3-8c86-914a120cc029"
+    },
+    {
+      "qa_status": "agent_failure",
+      "task_id": "384b648f-1e36-4fd1-a618-c272455b26de",
+      "task_key": "cysec1-2-rops-gen_single-atom-user-profile-credential-escrow__blackbox_ctf_v1",
+      "task_shape": "blackbox",
+      "task_version_id": "450ce6db-2653-453b-9083-7cc3d2f7f629"
+    }
+  ]
+}

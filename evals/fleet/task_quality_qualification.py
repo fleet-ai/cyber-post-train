@@ -31,7 +31,6 @@ from typing import Any
 import httpx
 
 from evals.fleet import opencode_self_hosted as self_hosted
-from evals.fleet import rollout_worker
 
 PLAN_SCHEMA = "cyber_task_quality_qualification_plan_v1"
 RUN_INTENT_SCHEMA = "cyber_task_quality_qualification_run_intent_v1"
@@ -42,9 +41,11 @@ ATTEMPTED_CATALOG_SCHEMA = "cyber_task_quality_qualification_attempted_catalog_v
 AGGREGATE_SCHEMA = "cyber_task_quality_qualification_aggregate_receipt_v1"
 CLEANUP_RESOLUTION_SCHEMA = "cyber_task_quality_cleanup_resolution_v1"
 CLEANUP_AGGREGATE_SCHEMA = "cyber_task_quality_cleanup_aggregate_v1"
+PACKAGED_SOURCE_SCHEMA = "cyber_task_quality_packaged_source_attestation_v1"
 INVENTORY_SCHEMA = "fleet_current_production_blackbox_inventory_v1"
 COVERAGE_SCHEMA = "fleet_current_blackbox_training_coverage_v1"
 SPLIT_SCHEMA = "cyber_representative_study_split_v2"
+HELDOUT_PROTOCOL_SCHEMA = "cyber_fleet_existing_checkpoint_holdout_protocol_v2"
 EXPECTED_TEAM_ID = "a1025f0b-ad67-49fc-a023-51800ab43e84"
 CREATE_CLAIM_ROUTE_TEMPLATE = "/v1/env/instances/create-requests/{request_id}"
 SESSION_MODEL = "fleet/task-quality-runtime-probe-v1"
@@ -56,6 +57,20 @@ REQUIRED_CONTRACT = {
 }
 SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+PACKAGED_SOURCE_ENV = "CYBER_TASK_QUALITY_SOURCE_ATTESTATION"
+PACKAGED_RUNTIME_IMAGE = (
+    "ghcr.io/astral-sh/uv:python3.12-bookworm@"
+    "sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+)
+RUNTIME_AUTHORITY = {
+    "multi_app_aggregation_mode": "fractional",
+    "provisioning_route_template": (
+        "/v1/rollout-rewards/{task_key}/versions/{task_version_id}/instances"
+    ),
+    "required_cyber_contract": REQUIRED_CONTRACT,
+    "scoring_mode": "partial",
+    "scoring_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}",
+}
 
 
 class QualificationError(RuntimeError):
@@ -115,9 +130,94 @@ def source_provenance(*, require_merged: bool = True) -> dict[str, Any]:
     }
 
 
-def _source_matches_plan(source: object) -> None:
+def _packaged_source_matches_plan(
+    path: Path,
+    source: dict[str, Any],
+    *,
+    plan_sha256: str | None,
+    exact_task_identity: dict[str, Any] | None,
+) -> None:
+    attestation = _read(path, "packaged source attestation")
+    _sealed(attestation, PACKAGED_SOURCE_SCHEMA, "packaged source attestation")
+    if set(attestation) != {
+        "schema",
+        "plan_sha256",
+        "source",
+        "image",
+        "dependency_pins",
+        "files",
+        "merge_witness",
+        "exact_task_identity",
+        "sha256",
+    }:
+        raise QualificationError("packaged source attestation fields are invalid")
+    if (
+        attestation.get("source") != source
+        or attestation.get("plan_sha256") != plan_sha256
+        or attestation.get("exact_task_identity") != exact_task_identity
+    ):
+        raise QualificationError("packaged source differs from the frozen plan")
+    if attestation.get("image") != PACKAGED_RUNTIME_IMAGE or attestation.get("dependency_pins") != {
+        "httpx": "0.28.1"
+    }:
+        raise QualificationError("packaged source dependency pins are invalid")
+    witness = attestation.get("merge_witness")
+    if (
+        not isinstance(witness, dict)
+        or witness.get("canonical_remote") != "https://github.com/fleet-ai/cyber-post-train.git"
+        or witness.get("source_commit") != source.get("git_commit")
+        or witness.get("is_ancestor") is not True
+        or not isinstance(witness.get("observed_main_commit"), str)
+        or re.fullmatch(r"[0-9a-f]{40}", witness["observed_main_commit"]) is None
+    ):
+        raise QualificationError("packaged source merge witness is invalid")
+    files = attestation.get("files")
+    root = Path(__file__).resolve().parents[2]
+    expected = {
+        "evals/__init__.py": root / "evals/__init__.py",
+        "evals/fleet/__init__.py": root / "evals/fleet/__init__.py",
+        "evals/fleet/task_quality_qualification.py": Path(__file__).resolve(),
+        "evals/fleet/opencode_self_hosted.py": Path(self_hosted.__file__).resolve(),
+        "evals/fleet/task_quality_qualification_job_entry.py": (
+            root / "evals/fleet/task_quality_qualification_job_entry.py"
+        ),
+    }
+    if not isinstance(files, dict) or set(files) != set(expected):
+        raise QualificationError("packaged source file set is incomplete")
+    for relative, observed_path in expected.items():
+        binding = files.get(relative)
+        if (
+            not isinstance(binding, dict)
+            or set(binding) != {"file_sha256"}
+            or observed_path.is_symlink()
+            or not observed_path.is_file()
+            or binding.get("file_sha256") != file_digest(observed_path)
+        ):
+            raise QualificationError("packaged source bytes differ from the attestation")
+    if (
+        source.get("controller_file_sha256")
+        != files["evals/fleet/task_quality_qualification.py"]["file_sha256"]
+    ):
+        raise QualificationError("packaged controller differs from the frozen plan")
+
+
+def _source_matches_plan(
+    source: object,
+    *,
+    plan_sha256: str | None = None,
+    exact_task_identity: dict[str, Any] | None = None,
+) -> None:
     if not isinstance(source, dict) or source.get("merged_to_origin_main") is not True:
         raise QualificationError("qualification plan is not authorized from merged source")
+    packaged = os.environ.get(PACKAGED_SOURCE_ENV)
+    if packaged:
+        _packaged_source_matches_plan(
+            Path(packaged),
+            source,
+            plan_sha256=plan_sha256,
+            exact_task_identity=exact_task_identity,
+        )
+        return
     observed = source_provenance(require_merged=True)
     exact_fields = {"git_commit", "git_tree", "controller_path", "controller_file_sha256"}
     if any(source.get(field) != observed.get(field) for field in exact_fields):
@@ -431,6 +531,60 @@ def _input(path: Path, schema: str, label: str) -> dict[str, Any]:
     return value
 
 
+def _input_one_of(path: Path, schemas: set[str], label: str) -> dict[str, Any]:
+    value = _read(path, label)
+    schema = value.get("schema")
+    if schema not in schemas or value.get("sha256") != digest(
+        {key: item for key, item in value.items() if key != "sha256"}
+    ):
+        raise QualificationError(f"{label} is not an exact supported sealed input")
+    return value
+
+
+def _protected_rows(split: dict[str, Any]) -> tuple[list[dict[str, Any]], int]:
+    """Normalize the original split and the repaired clean-heldout protocol."""
+    if split.get("schema") == SPLIT_SCHEMA:
+        rows = split.get("tasks")
+        if not isinstance(rows, list):
+            raise QualificationError("protected split task roster is invalid")
+        protected = [
+            row
+            for row in rows
+            if isinstance(row, dict) and row.get("split") in {"dev", "final_test"}
+        ]
+        final_count = sum(row.get("split") == "final_test" for row in protected)
+        if len(protected) != 25 or final_count != 8:
+            raise QualificationError(
+                "protected split must contain exactly 17 dev and eight final tasks"
+            )
+        return protected, final_count
+
+    selection = split.get("selection")
+    rows = selection.get("tasks") if isinstance(selection, dict) else None
+    if not isinstance(rows, list) or not rows:
+        raise QualificationError("repaired held-out protocol task roster is invalid")
+    protected = []
+    for row in rows:
+        if not isinstance(row, dict) or row.get("source_role") not in {"dev", "final_test"}:
+            raise QualificationError("repaired held-out protocol role is invalid")
+        family = row.get("reviewed_task_family")
+        if not isinstance(family, str) or not family.startswith("cyber/atoms/"):
+            raise QualificationError("repaired held-out protocol family is invalid")
+        protected.append(
+            {
+                "task_key": row.get("task_key"),
+                "task_version_id": row.get("task_version_id"),
+                "split": row["source_role"],
+                "reviewed_task_family": family,
+            }
+        )
+    if selection.get("exact_task_version_count") != len(protected):
+        raise QualificationError("repaired held-out protocol count is invalid")
+    if len({(row["task_key"], row["task_version_id"]) for row in protected}) != len(protected):
+        raise QualificationError("repaired held-out protocol contains duplicate task versions")
+    return protected, sum(row["split"] == "final_test" for row in protected)
+
+
 def build_plan(
     *,
     inventory: dict[str, Any],
@@ -446,6 +600,7 @@ def build_plan(
     concurrency: int,
     source: dict[str, Any],
     excluded_catalog: dict[str, Any] | None = None,
+    exact_task_identity: tuple[str, str] | None = None,
 ) -> dict[str, Any]:
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", wave_id):
         raise QualificationError("wave ID is not DNS-safe")
@@ -453,6 +608,17 @@ def build_plan(
         raise QualificationError("wave limit/concurrency must be within 1..64")
     if not qa_statuses or not qa_statuses <= {"clean", "agent_failure", "not_analyzed"}:
         raise QualificationError("wave QA statuses are unsupported")
+    if exact_task_identity is not None:
+        exact_task_key, exact_task_version_id = exact_task_identity
+        if (
+            not isinstance(exact_task_key, str)
+            or not exact_task_key
+            or not isinstance(exact_task_version_id, str)
+        ):
+            raise QualificationError("exact task identity is invalid")
+        _uuid(exact_task_version_id, "exact task version")
+        if limit != 1 or concurrency != 1:
+            raise QualificationError("exact task selection requires limit=1 and concurrency=1")
     if "not_analyzed" in qa_statuses and (
         excluded_catalog is None or excluded_catalog.get("schema") != ATTEMPTED_CATALOG_SCHEMA
     ):
@@ -471,27 +637,28 @@ def build_plan(
     }
     if len(row_by_identity) != len(inventory_rows):
         raise QualificationError("inventory contains malformed or duplicate task versions")
-    protected_rows = split.get("tasks")
-    if not isinstance(protected_rows, list):
-        raise QualificationError("protected split task roster is invalid")
+    protected_rows, final_count = _protected_rows(split)
     heldout_rows: list[dict[str, Any]] = []
-    final_count = 0
     for row in protected_rows:
-        if not isinstance(row, dict) or row.get("split") not in {"dev", "final_test"}:
-            continue
         key = (row.get("task_key"), row.get("task_version_id"))
         selected = row_by_identity.get(key)
         if selected is None:
             raise QualificationError("protected held-out task is absent from the current inventory")
         heldout_rows.append(selected)
-        final_count += int(row.get("split") == "final_test")
-    if len(heldout_rows) != 25 or final_count != 8:
-        raise QualificationError(
-            "protected split must contain exactly 17 dev and eight final tasks"
-        )
     heldout_bindings = [
         _fetch_binding(client, row, require_tool_declaration=False) for row in heldout_rows
     ]
+    reviewed_families = {
+        (row["task_key"], row["task_version_id"]): row.get("reviewed_task_family")
+        for row in protected_rows
+        if row.get("reviewed_task_family") is not None
+    }
+    for binding in heldout_bindings:
+        reviewed = reviewed_families.get((binding["task_key"], binding["task_version_id"]))
+        if reviewed is not None:
+            expected_key = reviewed.rsplit("@", 1)[0]
+            if expected_key not in binding["atom_artifact_keys"]:
+                raise QualificationError("protected held-out reviewed family differs live")
     heldout_atom_keys = {
         atom for binding in heldout_bindings for atom in binding["atom_artifact_keys"]
     }
@@ -534,6 +701,10 @@ def build_plan(
             and row.get("task_key") in missing_keys
             and row.get("qa_status") in qa_statuses
             and (row.get("task_key"), row.get("task_version_id")) not in excluded_ids
+            and (
+                exact_task_identity is None
+                or (row.get("task_key"), row.get("task_version_id")) == exact_task_identity
+            )
         ),
         key=lambda row: (str(row.get("task_key")), str(row.get("task_version_id"))),
     )
@@ -577,12 +748,20 @@ def build_plan(
         },
         "selection": {
             "qa_statuses": sorted(qa_statuses),
+            "exact_task_identity": (
+                {
+                    "task_key": exact_task_identity[0],
+                    "task_version_id": exact_task_identity[1],
+                }
+                if exact_task_identity is not None
+                else None
+            ),
             "requested_limit": limit,
             "selected_task_versions": len(selected_bindings),
             "maximum_task_versions_per_family": 1,
             "excluded_counts": excluded_counts,
-            "protected_heldout_task_versions": 25,
-            "protected_final_task_versions": 8,
+            "protected_heldout_task_versions": len(heldout_rows),
+            "protected_final_task_versions": final_count,
             "protected_heldout_atom_key_count": len(heldout_atom_keys),
             "protected_heldout_atom_keys_sha256": digest(sorted(heldout_atom_keys)),
             "zero_protected_heldout_atom_intersection": True,
@@ -633,7 +812,7 @@ def _config(binding: dict[str, Any], wave_id: str) -> dict[str, Any]:
         },
         "verifier": binding["verifier"],
         "authority": {
-            **rollout_worker.AUTHORITY,
+            **RUNTIME_AUTHORITY,
             "scoring_payload_mode": self_hosted.RUNTIME_EVIDENCE_ONLY_V3,
         },
         "model": {"session_model": SESSION_MODEL},
@@ -1209,7 +1388,11 @@ def qualify_one(
 
 def execute_plan(plan: dict[str, Any], root: Path, *, api_key: str) -> dict[str, Any]:
     _sealed(plan, PLAN_SCHEMA, "qualification plan")
-    _source_matches_plan(plan.get("source"))
+    _source_matches_plan(
+        plan.get("source"),
+        plan_sha256=plan.get("sha256"),
+        exact_task_identity=plan.get("selection", {}).get("exact_task_identity"),
+    )
     if plan.get("execution", {}).get("external_mutations_authorized") is not True:
         raise QualificationError("qualification plan does not authorize external mutations")
     intent = sealed(
@@ -1606,7 +1789,11 @@ def cleanup_one(
 
 def cleanup_plan(plan: dict[str, Any], root: Path, *, api_key: str) -> dict[str, Any]:
     _sealed(plan, PLAN_SCHEMA, "qualification plan")
-    _source_matches_plan(plan.get("source"))
+    _source_matches_plan(
+        plan.get("source"),
+        plan_sha256=plan.get("sha256"),
+        exact_task_identity=plan.get("selection", {}).get("exact_task_identity"),
+    )
     resolved = 0
     unresolved = 0
     receipt_digests: list[str] = []
@@ -1657,9 +1844,21 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
     split_path = Path(args.protected_split)
     inventory = _input(inventory_path, INVENTORY_SCHEMA, "current inventory")
     coverage = _input(coverage_path, COVERAGE_SCHEMA, "receipt coverage")
-    split = _input(split_path, SPLIT_SCHEMA, "protected family split")
+    split = _input_one_of(
+        split_path,
+        {SPLIT_SCHEMA, HELDOUT_PROTOCOL_SCHEMA},
+        "protected family split",
+    )
     excluded = (
         _read(Path(args.exclude_catalog), "excluded catalog") if args.exclude_catalog else None
+    )
+    exact_identity_values = (args.exact_task_key, args.exact_task_version_id)
+    if (exact_identity_values[0] is None) != (exact_identity_values[1] is None):
+        raise QualificationError("exact task key and version must be supplied together")
+    exact_task_identity = (
+        None
+        if exact_identity_values[0] is None
+        else (exact_identity_values[0], exact_identity_values[1])
     )
     with _client(os.environ.get("FLEET_API_KEY", "")) as client:
         _account(client)
@@ -1677,6 +1876,7 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
             concurrency=args.concurrency,
             source=source_provenance(require_merged=not args.allow_unmerged_preview),
             excluded_catalog=excluded,
+            exact_task_identity=exact_task_identity,
         )
     root = Path(args.private_base) / (
         f"task-quality-{args.wave_id}-{plan['sha256'].removeprefix('sha256:')[:12]}"
@@ -1734,6 +1934,8 @@ def parse_args() -> argparse.Namespace:
     prepare_parser.add_argument("--limit", type=int, required=True)
     prepare_parser.add_argument("--concurrency", type=int, required=True)
     prepare_parser.add_argument("--exclude-catalog")
+    prepare_parser.add_argument("--exact-task-key")
+    prepare_parser.add_argument("--exact-task-version-id")
     prepare_parser.add_argument("--private-base", required=True)
     prepare_parser.add_argument("--allow-unmerged-preview", action="store_true")
     run_parser = commands.add_parser("run")

@@ -1,0 +1,2322 @@
+{
+  "candidate_task_versions": [
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/current/persons-cross-tenant-executive-identity"
+      ],
+      "component_id": "sha256:46767a9820e753e09fd4f7562842d091a015124276b3c85dd8da0316dda9e344",
+      "qa_status": "clean",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-cmp-current-fakelook-479866c125cf_blackbox-5b27af6739dbd86fdae0f077__blackbox_ctf_v1",
+      "task_version_id": "20b2e9cc-d57c-44a0-867a-a04c3bd28959",
+      "teacher3k_exact_version_exposed": true,
+      "teacher3k_shared_atom_exposed": true,
+      "teacher3k_shared_atom_keys": [
+        "cyber/atoms/current/persons-cross-tenant-executive-identity"
+      ]
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/current/persons-cross-tenant-executive-identity",
+        "cyber/atoms/fira/remotelink-diagnostics-command-injection-v2",
+        "cyber/atoms/fubspot/engagement-cross-tenant-fira-credential"
+      ],
+      "component_id": "sha256:46767a9820e753e09fd4f7562842d091a015124276b3c85dd8da0316dda9e344",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-cmp-current-fakelook-fira-fubspot-2a643bbb1d64_atoms-3_blackbox-b67e2696b64984754979c0e1__blackbox_ctf_v1",
+      "task_version_id": "d43d46d3-024e-4d6b-bf4a-533853ecfa11",
+      "teacher3k_exact_version_exposed": false,
+      "teacher3k_shared_atom_exposed": true,
+      "teacher3k_shared_atom_keys": [
+        "cyber/atoms/current/persons-cross-tenant-executive-identity",
+        "cyber/atoms/fira/remotelink-diagnostics-command-injection-v2",
+        "cyber/atoms/fubspot/engagement-cross-tenant-fira-credential"
+      ]
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/current/persons-cross-tenant-executive-identity",
+        "cyber/atoms/fakelook/chat-author-header-impersonation",
+        "cyber/atoms/fira/remotelink-diagnostics-command-injection-v2",
+        "cyber/atoms/fubspot/engagement-cross-tenant-fira-credential"
+      ],
+      "component_id": "sha256:46767a9820e753e09fd4f7562842d091a015124276b3c85dd8da0316dda9e344",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-cmp-current-fakelook-fira-fubspot-2a643bbb1d64_atoms-4_blackbox-e51af769d0c497fdbeb30f38__blackbox_ctf_v1",
+      "task_version_id": "25361d2a-ee44-4188-86cf-a38b9dd37a7c",
+      "teacher3k_exact_version_exposed": false,
+      "teacher3k_shared_atom_exposed": true,
+      "teacher3k_shared_atom_keys": [
+        "cyber/atoms/current/persons-cross-tenant-executive-identity",
+        "cyber/atoms/fakelook/chat-author-header-impersonation",
+        "cyber/atoms/fira/remotelink-diagnostics-command-injection-v2",
+        "cyber/atoms/fubspot/engagement-cross-tenant-fira-credential"
+      ]
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/fubspot/engagement-cross-tenant-fira-credential"
+      ],
+      "component_id": "sha256:46767a9820e753e09fd4f7562842d091a015124276b3c85dd8da0316dda9e344",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-cmp-current-fakelook-fira-fubspot-2a643bbb1d64_blackbox-4c32480dc843fb32af50a55c__blackbox_ctf_v1",
+      "task_version_id": "b0fee2bb-1e5a-41fb-8abf-1e1ed01366aa",
+      "teacher3k_exact_version_exposed": true,
+      "teacher3k_shared_atom_exposed": true,
+      "teacher3k_shared_atom_keys": [
+        "cyber/atoms/fubspot/engagement-cross-tenant-fira-credential"
+      ]
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/fentry/event-cross-tenant-stratum-credential"
+      ],
+      "component_id": "sha256:bef48bc2c266afd92f9f600536e89210628b8b93882bc28549598d5b86ee1097",
+      "qa_status": "clean",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-cmp-fentry-stratum-14a2ace2d4d6_blackbox-f5b856e40f4fb6232bef7401__blackbox_ctf_v1",
+      "task_version_id": "fcc26237-9397-4741-ba45-373bbf610357",
+      "teacher3k_exact_version_exposed": true,
+      "teacher3k_shared_atom_exposed": true,
+      "teacher3k_shared_atom_keys": [
+        "cyber/atoms/fentry/event-cross-tenant-stratum-credential"
+      ]
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/fentry/event-cross-tenant-stratum-credential"
+      ],
+      "component_id": "sha256:bef48bc2c266afd92f9f600536e89210628b8b93882bc28549598d5b86ee1097",
+      "qa_status": "clean",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-cmp-fentry-stratum-c6602e880fc1_blackbox-f362c656c02a38f69822b559__blackbox_ctf_v1",
+      "task_version_id": "ba14aa86-c84b-4d91-82e4-a4f7c9731e47",
+      "teacher3k_exact_version_exposed": true,
+      "teacher3k_shared_atom_exposed": true,
+      "teacher3k_shared_atom_keys": [
+        "cyber/atoms/fentry/event-cross-tenant-stratum-credential"
+      ]
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/fentry/event-cross-tenant-stratum-credential"
+      ],
+      "component_id": "sha256:bef48bc2c266afd92f9f600536e89210628b8b93882bc28549598d5b86ee1097",
+      "qa_status": "clean",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-cmp-fentry-stratum-defb0afed77a_blackbox-b54f13fd774854fa9b67f326__blackbox_ctf_v1",
+      "task_version_id": "560cfe36-8c55-4725-87a7-05bb64d5aa1c",
+      "teacher3k_exact_version_exposed": true,
+      "teacher3k_shared_atom_exposed": true,
+      "teacher3k_shared_atom_keys": [
+        "cyber/atoms/fentry/event-cross-tenant-stratum-credential"
+      ]
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/fubspot/engagement-cross-tenant-fira-credential"
+      ],
+      "component_id": "sha256:46767a9820e753e09fd4f7562842d091a015124276b3c85dd8da0316dda9e344",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-cmp-fira-fubspot-5920f8ab8e60_atoms-1_blackbox-ff81e84746e20bf88cc46a25__blackbox_ctf_v1",
+      "task_version_id": "6de86cf8-1ad9-4ec4-b82f-2fb7972e19d8",
+      "teacher3k_exact_version_exposed": false,
+      "teacher3k_shared_atom_exposed": true,
+      "teacher3k_shared_atom_keys": [
+        "cyber/atoms/fubspot/engagement-cross-tenant-fira-credential"
+      ]
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/remotelink-diagnostics-command-injection-v2",
+        "cyber/atoms/fubspot/engagement-cross-tenant-fira-credential"
+      ],
+      "component_id": "sha256:46767a9820e753e09fd4f7562842d091a015124276b3c85dd8da0316dda9e344",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-cmp-fira-fubspot-5920f8ab8e60_atoms-2_blackbox-f1b536bf1a2d734337f4c56b__blackbox_ctf_v1",
+      "task_version_id": "4caa99ec-6780-46a2-9eef-4addeaa06e4f",
+      "teacher3k_exact_version_exposed": false,
+      "teacher3k_shared_atom_exposed": true,
+      "teacher3k_shared_atom_keys": [
+        "cyber/atoms/fira/remotelink-diagnostics-command-injection-v2",
+        "cyber/atoms/fubspot/engagement-cross-tenant-fira-credential"
+      ]
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/concur/per-diem-quote-id-range-bypass"
+      ],
+      "component_id": "sha256:08732a1875d77ed38e079d32a90b6571c9ab475d68c8fa30867e13ec2d570449",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-concur-gen_atoms-1_blackbox-037a0ab835da0ace037be4aa__blackbox_ctf_v1",
+      "task_version_id": "370f4ab5-253c-460e-b31c-c07c509afdfd",
+      "teacher3k_exact_version_exposed": false,
+      "teacher3k_shared_atom_exposed": false,
+      "teacher3k_shared_atom_keys": []
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/concur/expense-report-fields-sqli"
+      ],
+      "component_id": "sha256:908114e62077fd97ed3828dffa2cbd8c95c73e90b7ce2af75a3fa5bd8f058d8f",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-concur-gen_atoms-1_blackbox-69dbce4cfb18102716ac227e__blackbox_ctf_v1",
+      "task_version_id": "5835fe7d-8381-4b78-83d2-851a59a20b1f",
+      "teacher3k_exact_version_exposed": false,
+      "teacher3k_shared_atom_exposed": false,
+      "teacher3k_shared_atom_keys": []
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/concur/report-search-template-sqli"
+      ],
+      "component_id": "sha256:be7106a159c3b43ac6701aeb394a489f6d14a7a3c88e77c1b48c8fc4fc04756a",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-concur-gen_atoms-1_blackbox-7006280eca0d5ae5834f3ffb__blackbox_ctf_v1",
+      "task_version_id": "82c108c1-8fb2-45ef-9dd6-9f360b3dea1d",
+      "teacher3k_exact_version_exposed": false,
+      "teacher3k_shared_atom_exposed": false,
+      "teacher3k_shared_atom_keys": []
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/concur/extract-job-status-missing-auth"
+      ],
+      "component_id": "sha256:2d9ece4620167eca71c829e9ae37644999a82a138d8ef8ade7484bdd8cf4ade5",
+      "qa_status": "clean",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-concur-gen_atoms-1_blackbox-703e845ecc4c1e020bb99309__blackbox_ctf_v1",
+      "task_version_id": "ae236a07-128d-4556-ba2b-25a248818497",
+      "teacher3k_exact_version_exposed": false,
+      "teacher3k_shared_atom_exposed": false,
+      "teacher3k_shared_atom_keys": []
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/concur/extract-job-playground-leak"
+      ],
+      "component_id": "sha256:66fbd8c2ff7e6a6b32412cfdf9aafa5e54b4600860416b1414d0ca612390d654",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-concur-gen_atoms-1_blackbox-b90c75596785661b9dd172e4__blackbox_ctf_v1",
+      "task_version_id": "3c2337e4-3db1-4e9e-a525-5a855af786b6",
+      "teacher3k_exact_version_exposed": false,
+      "teacher3k_shared_atom_exposed": false,
+      "teacher3k_shared_atom_keys": []
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/fubspot/engagement-owner-delegated-to-record-owner"
+      ],
+      "component_id": "sha256:036ea4c5491dd92ac61900939f5bb57dfc9cf6ef2fd3fac755c0175b32149b58",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-current-fubspot-gen_fubspot-engagement-delegated-record-owner__blackbox_ctf_v1",
+      "task_version_id": "c56fb19c-a889-43fb-8906-cd134723d25d",
+      "teacher3k_exact_version_exposed": true,
+      "teacher3k_shared_atom_exposed": true,
+      "teacher3k_shared_atom_keys": [
+        "cyber/atoms/fubspot/engagement-owner-delegated-to-record-owner"
+      ]
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/fubspot/engagement-feed-scope-missing-default"
+      ],
+      "component_id": "sha256:90b338f30bdb418c2011a9cdcff9b37702f9cfde9914293f5eae95d5f64a801e",
+      "qa_status": "clean",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-current-fubspot-gen_single-atom-fubspot-engagement-feed-scope-default__blackbox_ctf_v1",
+      "task_version_id": "99df3685-2419-4852-8913-829ce0fd9bbd",
+      "teacher3k_exact_version_exposed": true,
+      "teacher3k_shared_atom_exposed": true,
+      "teacher3k_shared_atom_keys": [
+        "cyber/atoms/fubspot/engagement-feed-scope-missing-default"
+      ]
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/current/checkout-csrf-key-hash-disclosure"
+      ],
+      "component_id": "sha256:3f30799021adb4166928ee3f15bc5b8a0c23e9a51cae92a7cb0a413d8b4a2be8",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-current-gen_atoms-1_blackbox-23e49a65ce67a543012d347f__blackbox_ctf_v1",
+      "task_version_id": "ffd2b1b7-4475-4835-a485-65fc87fa2d3d",
+      "teacher3k_exact_version_exposed": false,
+      "teacher3k_shared_atom_exposed": false,
+      "teacher3k_shared_atom_keys": []
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/directory-select-private-fields"
+      ],
+      "component_id": "sha256:57ff34f9b75e51d61c9d2ea7a071c0d24765d1b0f8328deae654cdcac38a02f5",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-fakelook-gen_atoms-1_blackbox-842e0dc193a193c9eb4a604c__blackbox_ctf_v1",
+      "task_version_id": "bcd785a2-1d1f-408d-a4a4-3c9b5f6c1498",
+      "teacher3k_exact_version_exposed": false,
+      "teacher3k_shared_atom_exposed": false,
+      "teacher3k_shared_atom_keys": []
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/fanaplan/office-connect-origin-history-dump"
+      ],
+      "component_id": "sha256:b6385aaecc89e14cecf3c777b8808be0cae42fc2696d2f222d4662381d59939d",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-fanaplan-gen_atoms-1_blackbox-7019bf4172995bc00049c742__blackbox_ctf_v1",
+      "task_version_id": "35651def-3eaf-46c3-baa4-87de64eab297",
+      "teacher3k_exact_version_exposed": false,
+      "teacher3k_shared_atom_exposed": false,
+      "teacher3k_shared_atom_keys": []
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/fanaplan/version-update-status-mass-assignment"
+      ],
+      "component_id": "sha256:0e34561f9e149f4e6335638191cbd8761705fd445a7f9f5a460a1ca87cdf282d",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-fanaplan-gen_atoms-1_blackbox-cdb31753a558f886fb2888d2__blackbox_ctf_v1",
+      "task_version_id": "f83ab071-49e0-4955-ab3a-33c212751b65",
+      "teacher3k_exact_version_exposed": false,
+      "teacher3k_shared_atom_exposed": false,
+      "teacher3k_shared_atom_keys": []
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/fcompliance/event-log-audit-export-unbounded"
+      ],
+      "component_id": "sha256:0b1c3cd0fedf210faf53cd4e482639006c06a128531bec435c37d1b544cddc20",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-fcompliance-gen_atoms-1_blackbox-015ed15aa913f3ad8f1bbecc__blackbox_ctf_v1",
+      "task_version_id": "c04ae533-65c2-4c73-96d4-60c425409505",
+      "teacher3k_exact_version_exposed": false,
+      "teacher3k_shared_atom_exposed": false,
+      "teacher3k_shared_atom_keys": []
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/fcompliance/customer-trust-favicon-url-forward"
+      ],
+      "component_id": "sha256:899f2a7961874568c54a6ba656779844ac24c9946cb96f44df92fc88804e928f",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-fcompliance-gen_atoms-1_blackbox-f6c904e6b06fb15749cf4bb1__blackbox_ctf_v1",
+      "task_version_id": "7ff69e40-bfde-4050-9b80-5bd435113e93",
+      "teacher3k_exact_version_exposed": false,
+      "teacher3k_shared_atom_exposed": false,
+      "teacher3k_shared_atom_keys": []
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/fentry/issue-scope-lock-release-bypass"
+      ],
+      "component_id": "sha256:ddca54c4311e97781e52b4e2a0171e25d277a237750e5cf10bbbeafe937d5386",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-fentry-current-gen_single-atom-issue-scope-lock-release-bypass__blackbox_ctf_v1",
+      "task_version_id": "0554e862-6a1f-4ae9-a956-0d00b78c5f3a",
+      "teacher3k_exact_version_exposed": true,
+      "teacher3k_shared_atom_exposed": true,
+      "teacher3k_shared_atom_keys": [
+        "cyber/atoms/fentry/issue-scope-lock-release-bypass"
+      ]
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/wiki-page-list-content-property-sqli"
+      ],
+      "component_id": "sha256:b4cec33999076e0b6439390bc85754b6f771732095b2db7e764dc5ee23545de6",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-fira-gen_atoms-1_blackbox-ac13e64b06a20ce5ed154649__blackbox_ctf_v1",
+      "task_version_id": "bc363531-0aa0-45ef-a3dd-c3512cc4d53e",
+      "teacher3k_exact_version_exposed": false,
+      "teacher3k_shared_atom_exposed": false,
+      "teacher3k_shared_atom_keys": []
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/fubspot/ticket-import-hs-ticket-id-sqli"
+      ],
+      "component_id": "sha256:3d6649625f72d653bc23f71e8775dcee832a931e42b5749d644cad73debd5e0b",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-fubspot-gen_atoms-1_blackbox-804775ae84ecf3e1be19299f__blackbox_ctf_v1",
+      "task_version_id": "f2033bb1-5c1c-4832-b69c-0644cce431dd",
+      "teacher3k_exact_version_exposed": false,
+      "teacher3k_shared_atom_exposed": false,
+      "teacher3k_shared_atom_keys": []
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/oracle_epm/job-application-existence-oracle"
+      ],
+      "component_id": "sha256:404f6b7a7cb685f5225c735b1df08ceaff44ac6cff6e9c6108d9901a2c5c0df5",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-oracle-epm-gen_atoms-1_blackbox-355dbbce889c3b59bf9d30c9__blackbox_ctf_v1",
+      "task_version_id": "2426d2d7-3915-4dc5-90a0-4d3eb6b05187",
+      "teacher3k_exact_version_exposed": false,
+      "teacher3k_shared_atom_exposed": false,
+      "teacher3k_shared_atom_keys": []
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/oracle_epm/enable-features-setup-auth-skip"
+      ],
+      "component_id": "sha256:9398662795adb4e2ac3e1c789d876f05d73e4aabdee1c3f13c063da6d735c23b",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-oracle-epm-gen_atoms-1_blackbox-4a9834565d708cae5aa90158__blackbox_ctf_v1",
+      "task_version_id": "e3cb7ab5-8e29-4eeb-8492-89fecffe61a3",
+      "teacher3k_exact_version_exposed": false,
+      "teacher3k_shared_atom_exposed": false,
+      "teacher3k_shared_atom_keys": []
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/oracle_epm/inbox-postponed-resume-unbounded"
+      ],
+      "component_id": "sha256:35930e6a38343e3d2f666c6eabe111798659d9c7619397364a7a19ca58e1ca3c",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-oracle-epm-gen_atoms-1_blackbox-ce33d8ca04b31c295036598a__blackbox_ctf_v1",
+      "task_version_id": "9e636194-8cff-4395-b665-080c0951b5b1",
+      "teacher3k_exact_version_exposed": false,
+      "teacher3k_shared_atom_exposed": false,
+      "teacher3k_shared_atom_keys": []
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/channel-access-gate-denial-dropped"
+      ],
+      "component_id": "sha256:f4607d8285b0ec4d662d8d0b6f74bf672d9f434384680673f278f5e54c9ef99a",
+      "qa_status": "clean",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-rops-gen_single-atom-channel-access-gate-denial-dropped__blackbox_ctf_v1",
+      "task_version_id": "87e400f5-ccc8-4514-bcd3-35f548dd2165",
+      "teacher3k_exact_version_exposed": true,
+      "teacher3k_shared_atom_exposed": true,
+      "teacher3k_shared_atom_keys": [
+        "cyber/atoms/fakelook/channel-access-gate-denial-dropped"
+      ]
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/chat-scoped-search-exception-fail-open"
+      ],
+      "component_id": "sha256:ab3379ec51ad73ce37f60db70a709247d3db04299bd34d5a587eb656a502a24a",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-rops-gen_single-atom-latch-chat-scoped-search-fail-open__blackbox_ctf_v1",
+      "task_version_id": "e2b449f7-1b09-4aea-9bd4-e5043866938b",
+      "teacher3k_exact_version_exposed": false,
+      "teacher3k_shared_atom_exposed": true,
+      "teacher3k_shared_atom_keys": [
+        "cyber/atoms/fakelook/chat-scoped-search-exception-fail-open"
+      ]
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/persistent-credential-context-cookie"
+      ],
+      "component_id": "sha256:a42b22836cc1eb4dd6b7b4767e7884011b4bc76aba84c6bfaa4f7b46c3614336",
+      "qa_status": "clean",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-rops-gen_single-atom-persistent-credential-context-cookie__blackbox_ctf_v1",
+      "task_version_id": "3682f83a-18dc-402b-b63a-45ed6616ba59",
+      "teacher3k_exact_version_exposed": true,
+      "teacher3k_shared_atom_exposed": true,
+      "teacher3k_shared_atom_keys": [
+        "cyber/atoms/fakelook/persistent-credential-context-cookie"
+      ]
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/team-visibility-membership-gate-gap"
+      ],
+      "component_id": "sha256:cc3855c23ea122e59f0726cc33f3859dee1227bf49501ed0cba95517a1c3e165",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-rops-gen_single-atom-team-visibility-membership-gate-gap__blackbox_ctf_v1",
+      "task_version_id": "c33c863f-8be0-49e3-8c86-914a120cc029",
+      "teacher3k_exact_version_exposed": true,
+      "teacher3k_shared_atom_exposed": true,
+      "teacher3k_shared_atom_keys": [
+        "cyber/atoms/fakelook/team-visibility-membership-gate-gap"
+      ]
+    },
+    {
+      "admission": "excluded_missing_complete_runtime_receipts",
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/user-profile-credential-escrow"
+      ],
+      "component_id": "sha256:ba03e94d788da6d5aa4b4af4691e8883a0d35341eb295336e2133e60f5bb8383",
+      "qa_status": "agent_failure",
+      "runtime_receipt_qualified": false,
+      "task_key": "cysec1-2-rops-gen_single-atom-user-profile-credential-escrow__blackbox_ctf_v1",
+      "task_version_id": "450ce6db-2653-453b-9083-7cc3d2f7f629",
+      "teacher3k_exact_version_exposed": true,
+      "teacher3k_shared_atom_exposed": true,
+      "teacher3k_shared_atom_keys": [
+        "cyber/atoms/fakelook/user-profile-credential-escrow"
+      ]
+    }
+  ],
+  "components": [
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fubspot/engagement-owner-delegated-to-record-owner"
+      ],
+      "component_id": "sha256:036ea4c5491dd92ac61900939f5bb57dfc9cf6ef2fd3fac755c0175b32149b58",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-current-fubspot-gen_fubspot-engagement-delegated-record-owner__blackbox_ctf_v1",
+          "task_version_id": "c56fb19c-a889-43fb-8906-cd134723d25d"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/search-history-retention-bypass"
+      ],
+      "component_id": "sha256:0408c82cc9a0d3cb5a195584a15dabc3e633b20a6350c4c9b18da80764f99083",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fakelook-gen_blackbox-2c504442adc773ca9a82c247__blackbox_ctf_v1",
+          "task_version_id": "53d2f089-6502-4208-9795-d6ba7277fa9a"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fubspot/federated-session-revocation-bypass"
+      ],
+      "component_id": "sha256:067a502bd9c76e31d7943897c45409c02f1cbdcd0eeeee255f4496d30813e719",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fubspot-gen_blackbox-401a45aae0038d8f9cb6420b__blackbox_ctf_v1",
+          "task_version_id": "5f0c9b28-fe2f-41e0-b73f-0e7749f64195"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/sigma-report-run-read-verb-downgrade"
+      ],
+      "component_id": "sha256:06d6be76dd03143e1c489295e5c639bc56b85f68b9dcf10594be4cd5d322b71a",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-current-gen_blackbox-9afe9e08da314948b573657e__blackbox_ctf_v1",
+          "task_version_id": "dd8dd22e-75c0-4b93-8f8e-ea8a292d92bb"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/sigma-schema-hql-injection"
+      ],
+      "component_id": "sha256:073ad4a5353f9743b89f7444b80121d849ad6d375f0907bb05b2f912d9947cdb",
+      "inherited_role": "dev",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-current-gen_blackbox-58a5b481cf56ffb7954e7396__blackbox_ctf_v1",
+          "task_version_id": "d6c906fc-ef92-4ce6-ab9c-54a9b7eb9037"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/concur/per-diem-quote-id-range-bypass"
+      ],
+      "component_id": "sha256:08732a1875d77ed38e079d32a90b6571c9ab475d68c8fa30867e13ec2d570449",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-concur-gen_atoms-1_blackbox-037a0ab835da0ace037be4aa__blackbox_ctf_v1",
+          "task_version_id": "370f4ab5-253c-460e-b31c-c07c509afdfd"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fcompliance/event-log-audit-export-unbounded"
+      ],
+      "component_id": "sha256:0b1c3cd0fedf210faf53cd4e482639006c06a128531bec435c37d1b544cddc20",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-fcompliance-gen_atoms-1_blackbox-015ed15aa913f3ad8f1bbecc__blackbox_ctf_v1",
+          "task_version_id": "c04ae533-65c2-4c73-96d4-60c425409505"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/webhook-dispatch-existence-leak"
+      ],
+      "component_id": "sha256:0c857977b11fb2fd484356ff9f70f53cd28cefa4c3ce545f57ff4494b82aaa3b",
+      "inherited_role": "dev",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-current-gen_blackbox-ac3376172d9071d3d519f24e__blackbox_ctf_v1",
+          "task_version_id": "139ff10d-8c00-4bd6-9437-e6fbcccf2f4d"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/checkout-original-uri-desync"
+      ],
+      "component_id": "sha256:0d81381f422222c76664e2fa5d291400358d46dfafcdbbfe85368bc54316b771",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-current-gen_blackbox-0708aea62e0d8ccf09331568__blackbox_ctf_v1",
+          "task_version_id": "54425601-6fd2-43d8-8cb9-e565b767676a"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/webhook-endpoint-secret-retrieve-disclosure"
+      ],
+      "component_id": "sha256:0ddb4edc2b0d04e4b3382c3e2f6ca961df0271ea3ac265a7bf2c1a90f5f10b7c",
+      "inherited_role": "dev",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-current-gen_blackbox-92984d2033e2e0b2f9df1861__blackbox_ctf_v1",
+          "task_version_id": "037704a7-fc03-4cf6-a8da-3f3e3933717e"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fanaplan/version-update-status-mass-assignment"
+      ],
+      "component_id": "sha256:0e34561f9e149f4e6335638191cbd8761705fd445a7f9f5a460a1ca87cdf282d",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-fanaplan-gen_atoms-1_blackbox-cdb31753a558f886fb2888d2__blackbox_ctf_v1",
+          "task_version_id": "f83ab071-49e0-4955-ab3a-33c212751b65"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/drive-path-address-traversal"
+      ],
+      "component_id": "sha256:11d80d8c6958ef0a90e9681fb861c8619a13550f7c5cc2ae7ab25ab9b825918c",
+      "inherited_role": "dev",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fakelook-gen_blackbox-03faebe1772eea3cd1e8e2cb__blackbox_ctf_v1",
+          "task_version_id": "f1ce26fc-39b6-442c-a03c-3c18f99e119f"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/signature-template-expression-injection"
+      ],
+      "component_id": "sha256:12249cf16df03a711cd7c2fb775ad9fdb2f7c78d958741645c3103b5922dd99b",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fakelook-gen_blackbox-1c280f0d27547720dc6b4287__blackbox_ctf_v1",
+          "task_version_id": "5144890e-3515-497e-aaff-044d062eb664"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/logout-session-replay"
+      ],
+      "component_id": "sha256:1798a390a5336b0719ed74df84632ab82395e4c54774cb63aba3f3b3feeba070",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fira-gen_blackbox-30fe0df0968b9561fa5f987b__blackbox_ctf_v1",
+          "task_version_id": "4b134baa-bbd7-4448-894d-2444e89a46e7"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fentry/recovery-code-replay"
+      ],
+      "component_id": "sha256:195212b8ffa07ce0be35e43482a84a8e8d915e268f8d58787c53fa0675db5457",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fentry-gen_blackbox-c91d9987f2668308939c8e1a__blackbox_ctf_v1",
+          "task_version_id": "2df3b04b-87bd-4012-b5aa-e16d50698288"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fubspot/saved-view-detail-ownership-bypass"
+      ],
+      "component_id": "sha256:2165327dc57438aa2208b0ac5acfb343c904dd6ecd8f2a0589043c40413790f5",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fubspot-gen_blackbox-bb3f496e48b40493bee8aa92__blackbox_ctf_v1",
+          "task_version_id": "b66062df-4c6a-419f-8568-82e152e9df73"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/concur/extract-job-status-missing-auth"
+      ],
+      "component_id": "sha256:2d9ece4620167eca71c829e9ae37644999a82a138d8ef8ade7484bdd8cf4ade5",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-concur-gen_atoms-1_blackbox-703e845ecc4c1e020bb99309__blackbox_ctf_v1",
+          "task_version_id": "ae236a07-128d-4556-ba2b-25a248818497"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/vault-group-principal-derived-from-owned-issues"
+      ],
+      "component_id": "sha256:309046eaca44fa995aa8990f41e7b14593ec15835433d016cd1be516801e50c2",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fira-gen_blackbox-529751381aa5ed41b3935adb__blackbox_ctf_v1",
+          "task_version_id": "2c62b98d-61e8-4216-bc84-c61bc4cd5ccb"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/oracle_epm/inbox-postponed-resume-unbounded"
+      ],
+      "component_id": "sha256:35930e6a38343e3d2f666c6eabe111798659d9c7619397364a7a19ca58e1ca3c",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-oracle-epm-gen_atoms-1_blackbox-ce33d8ca04b31c295036598a__blackbox_ctf_v1",
+          "task_version_id": "9e636194-8cff-4395-b665-080c0951b5b1"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/meeting-join-javascript-url"
+      ],
+      "component_id": "sha256:35adb49e14943137284e95f00c5b5133daf21243d8efccf285c7ebe4aec62231",
+      "inherited_role": "dev",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fakelook-gen_blackbox-2be01f831d54fff2f9038e9d__blackbox_ctf_v1",
+          "task_version_id": "78971e60-851b-4f6a-85d8-ecb3391d2af2"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/meeting-join-host-notes-cookie-scope"
+      ],
+      "component_id": "sha256:394b2ff7ec4d8f1a466b87071c45dc5751771bec61dbffaa751fd9b01543b20f",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fakelook-gen_blackbox-c067bea84afaa8b8aa093234__blackbox_ctf_v1",
+          "task_version_id": "50ab8f20-7fc5-4e9f-afad-9fb03fae9b4d"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fubspot/ticket-import-hs-ticket-id-sqli"
+      ],
+      "component_id": "sha256:3d6649625f72d653bc23f71e8775dcee832a931e42b5749d644cad73debd5e0b",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-fubspot-gen_atoms-1_blackbox-804775ae84ecf3e1be19299f__blackbox_ctf_v1",
+          "task_version_id": "f2033bb1-5c1c-4832-b69c-0644cce431dd"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/webhook-settings-secret-read-disclosure"
+      ],
+      "component_id": "sha256:3ecc2ad702969a1125862b410ce4a0b31965d26ae99b8faa9c079a413672c74f",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-current-gen_blackbox-8b929ebef54fb6207d898e95__blackbox_ctf_v1",
+          "task_version_id": "02dd4e3f-d85d-4bf8-9976-eae2f102384d"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/checkout-csrf-key-hash-disclosure"
+      ],
+      "component_id": "sha256:3f30799021adb4166928ee3f15bc5b8a0c23e9a51cae92a7cb0a413d8b4a2be8",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-current-gen_atoms-1_blackbox-23e49a65ce67a543012d347f__blackbox_ctf_v1",
+          "task_version_id": "ffd2b1b7-4475-4835-a485-65fc87fa2d3d"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/oracle_epm/job-application-existence-oracle"
+      ],
+      "component_id": "sha256:404f6b7a7cb685f5225c735b1df08ceaff44ac6cff6e9c6108d9901a2c5c0df5",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-oracle-epm-gen_atoms-1_blackbox-355dbbce889c3b59bf9d30c9__blackbox_ctf_v1",
+          "task_version_id": "2426d2d7-3915-4dc5-90a0-4d3eb6b05187"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/confluence-refusal-title-disclosure"
+      ],
+      "component_id": "sha256:42205ca429054d7896c9931581b99721eae58e13dff1033c5efad96a4aa52d28",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-rops-gen_single-atom-confluence-refusal-title-disclosure__blackbox_ctf_v1",
+          "task_version_id": "47180c40-447d-4b8c-9387-ca8bae891e46"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/connect-account-header-desync"
+      ],
+      "component_id": "sha256:4409e67c7d47012b8eda653342ac609c9da8b08eba1cf2c50e01ea572ce8fb35",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-current-gen_blackbox-46ee1c53981e8b0f027052aa__blackbox_ctf_v1",
+          "task_version_id": "ac6a6cfa-ea44-4c11-bb2e-c2bb2d142c8e"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/persons-cross-tenant-executive-identity",
+        "cyber/atoms/fakelook/chat-author-header-impersonation",
+        "cyber/atoms/fira/remotelink-diagnostics-command-injection-v2",
+        "cyber/atoms/fubspot/engagement-cross-tenant-fira-credential"
+      ],
+      "component_id": "sha256:46767a9820e753e09fd4f7562842d091a015124276b3c85dd8da0316dda9e344",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 6
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-cmp-current-fakelook-479866c125cf_blackbox-5b27af6739dbd86fdae0f077__blackbox_ctf_v1",
+          "task_version_id": "20b2e9cc-d57c-44a0-867a-a04c3bd28959"
+        },
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-cmp-current-fakelook-fira-fubspot-2a643bbb1d64_atoms-3_blackbox-b67e2696b64984754979c0e1__blackbox_ctf_v1",
+          "task_version_id": "d43d46d3-024e-4d6b-bf4a-533853ecfa11"
+        },
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-cmp-current-fakelook-fira-fubspot-2a643bbb1d64_atoms-4_blackbox-e51af769d0c497fdbeb30f38__blackbox_ctf_v1",
+          "task_version_id": "25361d2a-ee44-4188-86cf-a38b9dd37a7c"
+        },
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-cmp-current-fakelook-fira-fubspot-2a643bbb1d64_blackbox-4c32480dc843fb32af50a55c__blackbox_ctf_v1",
+          "task_version_id": "b0fee2bb-1e5a-41fb-8abf-1e1ed01366aa"
+        },
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-cmp-fira-fubspot-5920f8ab8e60_atoms-1_blackbox-ff81e84746e20bf88cc46a25__blackbox_ctf_v1",
+          "task_version_id": "6de86cf8-1ad9-4ec4-b82f-2fb7972e19d8"
+        },
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-cmp-fira-fubspot-5920f8ab8e60_atoms-2_blackbox-f1b536bf1a2d734337f4c56b__blackbox_ctf_v1",
+          "task_version_id": "4caa99ec-6780-46a2-9eef-4addeaa06e4f"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/federation-jwk-alg-confusion"
+      ],
+      "component_id": "sha256:46bb1bf71e7c0de9f74ede6ebd7b806c85ee206b2d4f4b58513d3c8efefe7a7a",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fakelook-gen_blackbox-5863ceeee099e5f9247cc2c6__blackbox_ctf_v1",
+          "task_version_id": "8d84b316-d741-44f8-aaa5-7a0f0d7b8d3a"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fentry/ingest-metadata-prototype-pollution"
+      ],
+      "component_id": "sha256:49a1a4b7622e98202abf91aad25745f02dc7805aa05b281ff707c077c20c375d",
+      "inherited_role": "final_test",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fentry-gen_blackbox-229f415d73156f279e7b6825__blackbox_ctf_v1",
+          "task_version_id": "8c0b249c-8946-4ec3-8609-d74631af547e"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/user-search-raw-row-disclosure"
+      ],
+      "component_id": "sha256:4c3b028b413f3dbbbe59749cd180f9a0c0be11b63dc7a50a7e99ef78b828efe2",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fira-gen_blackbox-7a43a87d867eca1312af0a8f__blackbox_ctf_v1",
+          "task_version_id": "43dc2c52-f283-4454-8987-69c6cbbd4160"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fentry/csrf-cookie-password-hash-leak"
+      ],
+      "component_id": "sha256:4ef022cea7afa802c81498bcac9c8b891de6c39ecbb3c8c38cdce3a2818aba23",
+      "inherited_role": "dev",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fentry-gen_blackbox-625d795f54976fc78cc5255f__blackbox_ctf_v1",
+          "task_version_id": "2cb87286-a35e-4ba0-a949-1d93dfbd229a"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/ambient-identity-header-trust"
+      ],
+      "component_id": "sha256:4f3347507f558cf148dcd069539c9e73c21f6d8cba62e120f20d2b9acce9211f",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fakelook-gen_blackbox-9063fa10a36b73f9044c608f__blackbox_ctf_v1",
+          "task_version_id": "dcf2aefc-e34d-4a4a-8aa9-b18a3b754d5a"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/checkout-billing-details-echo"
+      ],
+      "component_id": "sha256:51b9c582843a596ab68d45ef7ef85dd9075390042a7a5653bca53e761b13c9cb",
+      "inherited_role": "final_test",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-current-gen_blackbox-58a4ac6886feda0738f2feb8__blackbox_ctf_v1",
+          "task_version_id": "e33aaed0-491b-46e8-8891-55d99c80ef56"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/directory-select-private-fields"
+      ],
+      "component_id": "sha256:57ff34f9b75e51d61c9d2ea7a071c0d24765d1b0f8328deae654cdcac38a02f5",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-fakelook-gen_atoms-1_blackbox-842e0dc193a193c9eb4a604c__blackbox_ctf_v1",
+          "task_version_id": "bcd785a2-1d1f-408d-a4a4-3c9b5f6c1498"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/statement-archive-encoded-separator-traversal"
+      ],
+      "component_id": "sha256:5a8ad7df60edf9d9315ff8946f8db73a821d4f883de7df5151d412b5cae7037c",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-current-gen_blackbox-c5ba6fa280b5731a06d45214__blackbox_ctf_v1",
+          "task_version_id": "63e6ea95-1b08-44ec-aea7-244d9c6253af"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/event-snapshot-live-object-hydrate"
+      ],
+      "component_id": "sha256:5b146e07247550c2e88823adad74eed317beece6b50389f334cfdaee7cfb3e80",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-current-gen_blackbox-f294215ad60b41799b9f7bac__blackbox_ctf_v1",
+          "task_version_id": "e4068901-ba6e-4faf-b30c-7535aa11f0fc"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/webhook-catalog-unauth-preview"
+      ],
+      "component_id": "sha256:5b9f2ca8258821e5d22c86a7361433362b3379da2b7bf31e464dc8ec9b153822",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-current-gen_blackbox-734b2d86c51fb16ffe102235__blackbox_ctf_v1",
+          "task_version_id": "daa5bbbb-0f63-481f-be8e-1d217c12740e"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/concur/extract-job-playground-leak"
+      ],
+      "component_id": "sha256:66fbd8c2ff7e6a6b32412cfdf9aafa5e54b4600860416b1414d0ca612390d654",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-concur-gen_atoms-1_blackbox-b90c75596785661b9dd172e4__blackbox_ctf_v1",
+          "task_version_id": "3c2337e4-3db1-4e9e-a525-5a855af786b6"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/password-reset-token-any-session"
+      ],
+      "component_id": "sha256:6c6faabe9576b83e1b78b1282ef6b0a8c3e625f99ab01473dc862edd117ebce3",
+      "inherited_role": "final_test",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fakelook-gen_blackbox-ab56dfb6116356c402290fa8__blackbox_ctf_v1",
+          "task_version_id": "9375a9b9-04e5-4f6f-ad47-286121278992"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fentry/envelope-clte-ingest-desync"
+      ],
+      "component_id": "sha256:6e7d8d10b87a44a4bf8b03932344b11627129ff7d73a87160878916cddad9bb1",
+      "inherited_role": "dev",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fentry-gen_blackbox-54997075dbb8019cd6e2e0ba__blackbox_ctf_v1",
+          "task_version_id": "d4f5e664-d4fd-4492-a103-429260ad9e99"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/vault-ancestor-breadcrumb-scope-leak"
+      ],
+      "component_id": "sha256:6ff164b806cdfb50244cfe23bd07253bfe1d88ee62f4cf984b16ab083157e75b",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fira-gen_blackbox-aacc90d872cf2f38171417b8__blackbox_ctf_v1",
+          "task_version_id": "493bc3d8-7806-4e38-9bc3-e964a5c26f5b"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/login-parameter-preview-stored-xss"
+      ],
+      "component_id": "sha256:71694dad34070a855460b2737b06ac738549eb560813f3296efa3e788e7b49f5",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fira-gen_blackbox-f8d6badcc03f916a8d15b9d0__blackbox_ctf_v1",
+          "task_version_id": "0920e798-c7e7-4da6-9d5e-ebeba45ec05a"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/webhook-endpoint-check-csrf"
+      ],
+      "component_id": "sha256:7173b31b202de0ffd9f675cb55fe8be9b6a74cf1b49a688f5e9c7c142e9c5fe5",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-current-gen_blackbox-124bb98758975c4aa3ebbe82__blackbox_ctf_v1",
+          "task_version_id": "1fdbcb5b-4582-47dc-a794-29e7a40682da"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/directory-search-password-hash-disclosure"
+      ],
+      "component_id": "sha256:775505e4391d62de6be94bb25a797684a12ef9bba19afdc1e4635bd92247fef7",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fira-gen_blackbox-d2c7c52bd034f85240037110__blackbox_ctf_v1",
+          "task_version_id": "b51782f9-cb9f-4603-be81-a16eab4b8a36"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/signature-stationery-preview-traversal"
+      ],
+      "component_id": "sha256:859f8e9292d4bb626ccbf9f69bada895f3018f4771c51dd6cd746f495bf8c19b",
+      "inherited_role": "dev",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fakelook-gen_blackbox-9db42d6bba9934e37106b1cf__blackbox_ctf_v1",
+          "task_version_id": "1407dcf7-46ad-4b82-8aa1-f88307dd8264"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/webhook-endpoint-detail-secret-disclosure"
+      ],
+      "component_id": "sha256:8884dfc21928dbf1c088d1270cd26e40669c49652cfe64ef00afcc028f7a5cca",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-current-gen_blackbox-568ad16844c3398d57ef1eaa__blackbox_ctf_v1",
+          "task_version_id": "09a3fea6-f691-4841-9218-d04459041a1f"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/attachment-content-mailbox-skip"
+      ],
+      "component_id": "sha256:88ef5365d79f607dce6e87202ccd0b341d9c0947564786d1ded28205f8cd898e",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fakelook-gen_blackbox-fb581ab1aa4a347bb5f6fd65__blackbox_ctf_v1",
+          "task_version_id": "d6634975-2918-4037-9cd2-467f365e39b0"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fcompliance/customer-trust-favicon-url-forward"
+      ],
+      "component_id": "sha256:899f2a7961874568c54a6ba656779844ac24c9946cb96f44df92fc88804e928f",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-fcompliance-gen_atoms-1_blackbox-f6c904e6b06fb15749cf4bb1__blackbox_ctf_v1",
+          "task_version_id": "7ff69e40-bfde-4050-9b80-5bd435113e93"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/concur/expense-report-fields-sqli"
+      ],
+      "component_id": "sha256:908114e62077fd97ed3828dffa2cbd8c95c73e90b7ce2af75a3fa5bd8f058d8f",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-concur-gen_atoms-1_blackbox-69dbce4cfb18102716ac227e__blackbox_ctf_v1",
+          "task_version_id": "5835fe7d-8381-4b78-83d2-851a59a20b1f"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fubspot/engagement-feed-scope-missing-default"
+      ],
+      "component_id": "sha256:90b338f30bdb418c2011a9cdcff9b37702f9cfde9914293f5eae95d5f64a801e",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-current-fubspot-gen_single-atom-fubspot-engagement-feed-scope-default__blackbox_ctf_v1",
+          "task_version_id": "99df3685-2419-4852-8913-829ce0fd9bbd"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fubspot/search-filter-budget-bypass"
+      ],
+      "component_id": "sha256:9150e463b6a3fb4dd7d44653a2582d4bcfa960ab84c77690d647f73a454ab50c",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fubspot-gen_blackbox-2c4543c99976ddc656588bfe__blackbox_ctf_v1",
+          "task_version_id": "bf88b387-f5b5-4452-b539-4ad48f0c177e"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/csrf-token-credential-hash-leak"
+      ],
+      "component_id": "sha256:918e9fe8483eb09af7c83c676acf7c7a1c29208d9f51696f4cd0c2dde911409c",
+      "inherited_role": "final_test",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-current-gen_blackbox-bc363f8239aeeaa3f648046a__blackbox_ctf_v1",
+          "task_version_id": "ba912601-1184-4dcd-9e9d-2fce22543e4b"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fentry/totp-status-secret-leak"
+      ],
+      "component_id": "sha256:935d7a4745d70298d4edd0522432f1e85e9dead4b9075da36771da59a5a24b98",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fentry-gen_blackbox-46793210126eea4722e90448__blackbox_ctf_v1",
+          "task_version_id": "fb8f2178-7dd8-429a-8d3c-f14b21a51e02"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/oracle_epm/enable-features-setup-auth-skip"
+      ],
+      "component_id": "sha256:9398662795adb4e2ac3e1c789d876f05d73e4aabdee1c3f13c063da6d735c23b",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-oracle-epm-gen_atoms-1_blackbox-4a9834565d708cae5aa90158__blackbox_ctf_v1",
+          "task_version_id": "e3cb7ab5-8e29-4eeb-8492-89fecffe61a3"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/sigma-saved-report-path-traversal"
+      ],
+      "component_id": "sha256:95d8a301ce79ce0cb51e7ca3b26034ad4c550d68829d68a0edc8a766d7c1a3f3",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-current-gen_blackbox-72f3c039c2ee3e89c7e5bf6a__blackbox_ctf_v1",
+          "task_version_id": "386dff0d-6a22-4654-ba05-5262f61483b9"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fubspot/ticket-document-preview-xss"
+      ],
+      "component_id": "sha256:9e7e915317f29d9eabee6a69f00cec5cf7bbe48cd2389cb60028fe3ed5020a51",
+      "inherited_role": "final_test",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fubspot-gen_blackbox-6c0962e92122d89a62d04a45__blackbox_ctf_v1",
+          "task_version_id": "ee77cfbf-ceed-487f-a19d-3922aaaf4bad"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/invoice-list-scan-budget-scope-fallback"
+      ],
+      "component_id": "sha256:a2f5aa33352cdae795bca00185f46e68285e37b4569a6e05fd3a79bb2d73290f",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-current-gen_blackbox-c17f94bad9b70de3dfa6f05c__blackbox_ctf_v1",
+          "task_version_id": "f31ebe83-0ff1-4660-bcba-59ffa4b82d5a"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/attachment-content-location-path-traversal"
+      ],
+      "component_id": "sha256:a3ffcd0471683a57814f46b331a55ea2ec566867ad16a78eaa959d3740a05e59",
+      "inherited_role": "final_test",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fakelook-gen_blackbox-d59f9f2960c2fdb1e2cdd8e1__blackbox_ctf_v1",
+          "task_version_id": "5287e180-64ea-487b-982a-d08a38c05fa2"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/persistent-credential-context-cookie"
+      ],
+      "component_id": "sha256:a42b22836cc1eb4dd6b7b4767e7884011b4bc76aba84c6bfaa4f7b46c3614336",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-rops-gen_single-atom-persistent-credential-context-cookie__blackbox_ctf_v1",
+          "task_version_id": "3682f83a-18dc-402b-b63a-45ed6616ba59"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/resend-clears-email-confirmation-gate"
+      ],
+      "component_id": "sha256:a49cf8c739a577609424fce888a0bee0317409fd7085c41a55de41817b70a147",
+      "inherited_role": "dev",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fira-gen_blackbox-3b29fc5db0365e6e61c585c4__blackbox_ctf_v1",
+          "task_version_id": "fb68f600-9850-4cc2-86e7-a4f554e5f93f"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/attachment-export-bundle-traversal"
+      ],
+      "component_id": "sha256:a4b4dbbaa3e921fa29ba5c50e5bca1c582e23afd162289253136d41cac8da51c",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fira-gen_blackbox-5ea6bdcd678f45f8cc0ba673__blackbox_ctf_v1",
+          "task_version_id": "ab2fd90d-1ee5-4451-a866-260ddf5c336d"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fentry/password-reset-token-response-leak"
+      ],
+      "component_id": "sha256:a4ec5aaad21a835618f34c56c9c6f1ddb76ab1a49845a42bb1253f0c631c64fc",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fentry-gen_blackbox-5a6f99394fadd1aea40875d9__blackbox_ctf_v1",
+          "task_version_id": "6a3023fd-4022-47a4-9ae5-6d15a892bd9b"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/checkout-receipt-html-reflect"
+      ],
+      "component_id": "sha256:a588ee69a67de7fc855156f63526ec628ee0f6cab5e1f78403646f894891c6c3",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-current-gen_blackbox-6e75d5980fc7f883ad6c80ae__blackbox_ctf_v1",
+          "task_version_id": "d73098dc-4f03-4761-8a81-cc9ec914286c"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/email-confirm-token-replay"
+      ],
+      "component_id": "sha256:a6da2514afcfea53a58711490a04325dde6cb0a84975cb0302aed84a4bf249bc",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fira-gen_blackbox-c68da3536fee9b4c6f6ef490__blackbox_ctf_v1",
+          "task_version_id": "36dd3619-68f1-464a-859a-9eccd7c70994"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/activity-batch-unbounded-issue-ids"
+      ],
+      "component_id": "sha256:a84e5b85403d7938f8ca1673b0a51bcc345598e7f1a87b840856c1b0e3b2a780",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fira-gen_blackbox-d2740f59f9308860692b1ded__blackbox_ctf_v1",
+          "task_version_id": "60f864ae-49bc-43ee-ae54-4ff8a8e71226"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/activity-feed-visibility-skip"
+      ],
+      "component_id": "sha256:aa26e5f396a577f100cca2a974ca40b42a7f7bd7ad4b375b4a581d7acb53d8ba",
+      "inherited_role": "dev",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fira-gen_blackbox-e65cdc976b0a6686b51ce423__blackbox_ctf_v1",
+          "task_version_id": "51b23680-27fa-4bdd-a077-16669f3f0e18"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/login-continue-untrusted-redirect"
+      ],
+      "component_id": "sha256:aa4f4661b4525cea72d4880f7b7f908e069de94fdb44bc93f048dac7430b9f7b",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fira-gen_blackbox-d15d056570961f463e4e6ba8__blackbox_ctf_v1",
+          "task_version_id": "c3fbe2bd-b9e6-41b1-a47f-5342fdc28053"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/chat-scoped-search-exception-fail-open"
+      ],
+      "component_id": "sha256:ab3379ec51ad73ce37f60db70a709247d3db04299bd34d5a587eb656a502a24a",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-rops-gen_single-atom-latch-chat-scoped-search-fail-open__blackbox_ctf_v1",
+          "task_version_id": "e2b449f7-1b09-4aea-9bd4-e5043866938b"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/identity-return-target-open-redirect"
+      ],
+      "component_id": "sha256:aec28ec5b9d3056fced0621b481e3d585d18fb14d410a884ec80accf6fe8a827",
+      "inherited_role": "dev",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-current-gen_blackbox-34787f9b18ae651884289538__blackbox_ctf_v1",
+          "task_version_id": "2e363dca-e74d-4855-a002-6761dc7f9f0f"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fubspot/settings-users-totp-secret-disclosure"
+      ],
+      "component_id": "sha256:af3ff6556a02f794d11d3f352901c3f4e0d0035c2aa2e1f89071d43c8d417892",
+      "inherited_role": "dev",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fubspot-gen_blackbox-438e3127ab9af7efad692398__blackbox_ctf_v1",
+          "task_version_id": "383a2b61-e82b-4426-9a2b-d5372c92e346"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/mime-gzip-transfer-decode-skip"
+      ],
+      "component_id": "sha256:af4cd61cd9004fdd29f495929a6321643ec389fb5f6a70b1887c0ac7241fe553",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fakelook-gen_blackbox-7647df87d82993fdb4d8942d__blackbox_ctf_v1",
+          "task_version_id": "96977ecb-4d8c-4c4f-a5e0-02d925bdc724"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fentry/event-detail-org-scope-bypass"
+      ],
+      "component_id": "sha256:b00138e87cb6263eed8a9ac47e8bcd6a3850948fff822e89a8ade1418598131b",
+      "inherited_role": "dev",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fentry-gen_blackbox-38f07564c9639347d11eca37__blackbox_ctf_v1",
+          "task_version_id": "05d09c55-ccdf-4d26-b06d-b851a2314a35"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/connect-acting-account-header-trust"
+      ],
+      "component_id": "sha256:b2e3817198ac6af1c4c57c930ae1a33e0da4ada34c8dcbb441c005b8172aa960",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-current-gen_blackbox-9d641429faef16a05bff575e__blackbox_ctf_v1",
+          "task_version_id": "2f2681bf-c1f7-4056-b6e4-cb2e5058f027"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/team-first-owner-bootstrap"
+      ],
+      "component_id": "sha256:b48d2b1416315fceb10abaf4ddd8c0499b472509d6e2c9ac4d4c6b40f6f552c6",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fakelook-gen_blackbox-96331d7b7fd4a38983ccab2b__blackbox_ctf_v1",
+          "task_version_id": "47483c98-ec42-4543-89f3-555a33e8f820"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/wiki-page-list-content-property-sqli"
+      ],
+      "component_id": "sha256:b4cec33999076e0b6439390bc85754b6f771732095b2db7e764dc5ee23545de6",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-fira-gen_atoms-1_blackbox-ac13e64b06a20ce5ed154649__blackbox_ctf_v1",
+          "task_version_id": "bc363531-0aa0-45ef-a3dd-c3512cc4d53e"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/user-signature-read-owner-check-dropped"
+      ],
+      "component_id": "sha256:b4ff90e50a914ae470b531340bd6f8ad939a60eb5f5d37405a2f68afeda2570e",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fakelook-gen_blackbox-7317189e8fefb9033c5be097__blackbox_ctf_v1",
+          "task_version_id": "2fdc9511-f5fe-4386-a4a5-a5a16a30f359"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fanaplan/office-connect-origin-history-dump"
+      ],
+      "component_id": "sha256:b6385aaecc89e14cecf3c777b8808be0cae42fc2696d2f222d4662381d59939d",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-fanaplan-gen_atoms-1_blackbox-7019bf4172995bc00049c742__blackbox_ctf_v1",
+          "task_version_id": "35651def-3eaf-46c3-baa4-87de64eab297"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fubspot/csrf-cookie-password-hash-disclosure"
+      ],
+      "component_id": "sha256:b64fc17483d6ac52c129190ddc94fcb924cfe204b426c023dc2f6900fb4e9483",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fubspot-gen_blackbox-cace9d0a59a8bd2f56076c63__blackbox_ctf_v1",
+          "task_version_id": "e32f1402-ec95-4df3-9c04-8e5e0400242c"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/user-profile-credential-escrow"
+      ],
+      "component_id": "sha256:ba03e94d788da6d5aa4b4af4691e8883a0d35341eb295336e2133e60f5bb8383",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-rops-gen_single-atom-user-profile-credential-escrow__blackbox_ctf_v1",
+          "task_version_id": "450ce6db-2653-453b-9083-7cc3d2f7f629"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/password-reset-continue-xss"
+      ],
+      "component_id": "sha256:bc2913d95e1381a2ad6e11225182c9db221d54b81a52306ca5465d74af3982a9",
+      "inherited_role": "dev",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fira-gen_blackbox-1865d9918e1ac5d264706d43__blackbox_ctf_v1",
+          "task_version_id": "eefe304c-499d-4c9e-b09c-8aa0fab87213"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/concur/report-search-template-sqli"
+      ],
+      "component_id": "sha256:be7106a159c3b43ac6701aeb394a489f6d14a7a3c88e77c1b48c8fc4fc04756a",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-concur-gen_atoms-1_blackbox-7006280eca0d5ae5834f3ffb__blackbox_ctf_v1",
+          "task_version_id": "82c108c1-8fb2-45ef-9dd6-9f360b3dea1d"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fentry/event-cross-tenant-stratum-credential"
+      ],
+      "component_id": "sha256:bef48bc2c266afd92f9f600536e89210628b8b93882bc28549598d5b86ee1097",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 3
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-cmp-fentry-stratum-14a2ace2d4d6_blackbox-f5b856e40f4fb6232bef7401__blackbox_ctf_v1",
+          "task_version_id": "fcc26237-9397-4741-ba45-373bbf610357"
+        },
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-cmp-fentry-stratum-c6602e880fc1_blackbox-f362c656c02a38f69822b559__blackbox_ctf_v1",
+          "task_version_id": "ba14aa86-c84b-4d91-82e4-a4f7c9731e47"
+        },
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-cmp-fentry-stratum-defb0afed77a_blackbox-b54f13fd774854fa9b67f326__blackbox_ctf_v1",
+          "task_version_id": "560cfe36-8c55-4725-87a7-05bb64d5aa1c"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/restricted-comment-listing-skip"
+      ],
+      "component_id": "sha256:c37f64fd0724ff31a434e9f216bd93fea6cc46dcc9a6a9175272f7ff135f622e",
+      "inherited_role": "dev",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fira-gen_blackbox-5b51b6dcb4193e59b96b1b13__blackbox_ctf_v1",
+          "task_version_id": "b6efa2e4-7743-4b8b-a014-832d90cd5e39"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fentry/session-revocation-not-enforced"
+      ],
+      "component_id": "sha256:c87ecdd5ce930e382299cd2139b26491ddfb459a51626c57074cb08a1924f7e3",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fentry-gen_blackbox-8b7c28d59cbc439114db9a56__blackbox_ctf_v1",
+          "task_version_id": "fd07b96f-7aa4-4041-862b-5aa7411eff4b"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/team-visibility-membership-gate-gap"
+      ],
+      "component_id": "sha256:cc3855c23ea122e59f0726cc33f3859dee1227bf49501ed0cba95517a1c3e165",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-rops-gen_single-atom-team-visibility-membership-gate-gap__blackbox_ctf_v1",
+          "task_version_id": "c33c863f-8be0-49e3-8c86-914a120cc029"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fubspot/password-reset-token-get-echo"
+      ],
+      "component_id": "sha256:cc7165831e29d9a2e2b64f1f4c1e56bcd8b0bdfc3def67e0dd67cfa13153db6c",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fubspot-gen_blackbox-3e95b3814ffa6ad7be96940b__blackbox_ctf_v1",
+          "task_version_id": "484625a1-a0ee-4e12-b566-40eccc26802e"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/comment-visibility-list-bypass"
+      ],
+      "component_id": "sha256:d108bfc76b37bcb27996c3cc8f887c9ab80b1fc251c1b0710fc765c59c698fbd",
+      "inherited_role": "final_test",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fira-gen_blackbox-2637dbd94a61305dbd406c3c__blackbox_ctf_v1",
+          "task_version_id": "f8533754-39ad-4683-b9c1-d26bc24dfd14"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/ws-ticket-cookie-exhaustion"
+      ],
+      "component_id": "sha256:d12b83a0c6fbd56a3f7c30f18a35494ec18c19890cdc660bbd804671a3851465",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fira-gen_blackbox-075644943172978687d45528__blackbox_ctf_v1",
+          "task_version_id": "b164ad89-7b40-4baf-a9e8-2eb880c61730"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/rpc-transport-action-downgrade"
+      ],
+      "component_id": "sha256:d2144d6fe61f436422b2d7b173b5649a0e6fccaf6ed8a89d3677dc277ef658a0",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-current-gen_blackbox-3a1c4858db3e787986bfb723__blackbox_ctf_v1",
+          "task_version_id": "65c8cc68-6ada-421f-ad0a-eb1d81fc9141"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fentry/notification-preview-template-path-traversal"
+      ],
+      "component_id": "sha256:d75007df50ed98e04d8125adbbd5c47701c3be81a9e4f38309c2a97a14c2e51f",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fentry-gen_blackbox-34652ac7eb0d3cc85ab093a6__blackbox_ctf_v1",
+          "task_version_id": "a0e4a473-b544-4006-b4fa-8e6b6bfb0a50"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fentry/issue-scope-lock-release-bypass"
+      ],
+      "component_id": "sha256:ddca54c4311e97781e52b4e2a0171e25d277a237750e5cf10bbbeafe937d5386",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-fentry-current-gen_single-atom-issue-scope-lock-release-bypass__blackbox_ctf_v1",
+          "task_version_id": "0554e862-6a1f-4ae9-a956-0d00b78c5f3a"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/directory-trusted-origin-notes-disclosure"
+      ],
+      "component_id": "sha256:e8775ddaba75acfd9191eeba59f428945d1e093d56f848bdcade8f892ffc157f",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fakelook-gen_blackbox-63daa3971bcc9a8c52e3ff4c__blackbox_ctf_v1",
+          "task_version_id": "6324fee5-2e3f-4538-a9e2-026d82ebb8a3"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/user-detail-credential-insertion"
+      ],
+      "component_id": "sha256:e9c716484ab58074bc25a83d281be381cc40cb7252bedc3fc5c0c17880b2eebf",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fira-gen_blackbox-f464547baf18c14b28013c66__blackbox_ctf_v1",
+          "task_version_id": "4b48f9cf-a5c4-4e86-814d-ebe86957e725"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fentry/password-reset-grant-replay"
+      ],
+      "component_id": "sha256:ecd9d7c64ce682591964ea87d87eeb39a3a44723c873663a8b9a817398c10d3b",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fentry-gen_blackbox-d9b1e451e727ec6ec4b610f0__blackbox_ctf_v1",
+          "task_version_id": "8ad6a73f-7ec8-4435-b868-a84327ed4c85"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fentry/logout-session-replay"
+      ],
+      "component_id": "sha256:f44f23b32861b39562385cd5f64b1c97c81035dcca81c70014c2afb261733b83",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fentry-gen_blackbox-ebd29ca3d4ae284704202ebc__blackbox_ctf_v1",
+          "task_version_id": "3aafc5a8-2144-4bc3-919f-fcbbebd9f0d7"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/signature-merge-second-pass"
+      ],
+      "component_id": "sha256:f458e26900ba6053464b2e36e56c0ad6de4a576caf98303fb5071e4d57e6c5eb",
+      "inherited_role": "dev",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fakelook-gen_blackbox-8095d44c3871865064a0702c__blackbox_ctf_v1",
+          "task_version_id": "e13f62eb-170a-40c6-86bf-3c3f3829e3d8"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/channel-access-gate-denial-dropped"
+      ],
+      "component_id": "sha256:f4607d8285b0ec4d662d8d0b6f74bf672d9f434384680673f278f5e54c9ef99a",
+      "inherited_role": null,
+      "source_counts": {
+        "qa_candidate_unqualified": 1
+      },
+      "task_versions": [
+        {
+          "source": "qa_candidate_unqualified",
+          "task_key": "cysec1-2-rops-gen_single-atom-channel-access-gate-denial-dropped__blackbox_ctf_v1",
+          "task_version_id": "87e400f5-ccc8-4514-bcd3-35f548dd2165"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/current/connect-dashboard-origin-customer-read"
+      ],
+      "component_id": "sha256:f935b9ffbf8912b69fe93d49f1ade42102f3a1d7cad83129b474412ef7667b64",
+      "inherited_role": "dev",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-current-gen_blackbox-3a7455937196b81cf5999fb5__blackbox_ctf_v1",
+          "task_version_id": "18079a9c-cb79-4013-aa08-54092c415165"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fakelook/rule-test-stationery-html-reflect"
+      ],
+      "component_id": "sha256:f96bf8246e200080fad1cbe11020f305c70effa60f1a27bbb9a29866d23a90ea",
+      "inherited_role": "train",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fakelook-gen_blackbox-034abd32497f89b7ceafe6a3__blackbox_ctf_v1",
+          "task_version_id": "3981d848-0689-47da-8f44-9f7e2132c3ce"
+        }
+      ]
+    },
+    {
+      "atom_artifact_keys": [
+        "cyber/atoms/fira/login-confirm-continue-open-redirect"
+      ],
+      "component_id": "sha256:fa1398625af967f7a9d339af75deae07033d75f1f1d1cfa7ffe6b3cdf399d332",
+      "inherited_role": "final_test",
+      "source_counts": {
+        "receipt_proven": 1
+      },
+      "task_versions": [
+        {
+          "source": "receipt_proven",
+          "task_key": "cysec1-2-fira-gen_blackbox-322896ad3182769453b9944a__blackbox_ctf_v1",
+          "task_version_id": "8e5c7c45-7259-420d-ba12-0381465d864e"
+        }
+      ]
+    }
+  ],
+  "counts": {
+    "atom_artifact_keys": 104,
+    "candidate_components": 26,
+    "candidate_components_overlapping_receipt_proven": 0,
+    "components": 101,
+    "components_by_task_version_count": {
+      "1": 99,
+      "3": 1,
+      "6": 1
+    },
+    "exact_task_versions": 108,
+    "qa_candidate_task_versions": 33,
+    "receipt_proven_task_versions": 75
+  },
+  "grouping": {
+    "composites_union_all_constituent_atoms": true,
+    "same_task_key_versions_stay_together": true,
+    "successor_atom_versions_share_artifact_key": true,
+    "unit": "transitive closure of shared immutable atom artifact keys"
+  },
+  "qualification_authority_git_commit": "915b385196842674114a4e9891d4e2cd02613d57",
+  "safety": {
+    "external_mutations": 0,
+    "launch_authorized": false
+  },
+  "schema": "fleet_blackbox_shared_atom_lineage_census_v1",
+  "sha256": "sha256:70bb11654272dd0adfa9519522df028a9d5a7f1fea42d98b2b47bfdb5271a07c",
+  "sources": {
+    "configs/data/fleet-blackbox-lineage-safe-split-20260924-v1.json": {
+      "file_sha256": "sha256:d40c0fc2fd7db91103978777c364354e68d5e6fae57311a44e583902a09c9580",
+      "logical_sha256": "sha256:b613abaae0e5b52ef279a46a4ab0145dba4517442d1e4198fd52af7de0161d10"
+    },
+    "configs/data/fleet-blackbox-qa-candidates-20260924-v1.json": {
+      "file_sha256": "sha256:b3d551863655bc8ad92c76bb1b2b0f87c8bcec812b5c42987fc9c0c28c1a5b2a",
+      "logical_sha256": "sha256:4f61fd78b4d92c933030f026e0137abe199e0157fd72b2f959df0354df489be8"
+    },
+    "configs/data/fleet-blackbox-qa33-live-lineage-20260924-v1.json": {
+      "file_sha256": "sha256:8f5a0e8f08a8b193ef785bd18741f46f9355fa24b49694b49e9f7ca07c58373a",
+      "logical_sha256": "sha256:7622ce3870f74a3a9896575d1e42a122826743b6cf15307f1d411694135bea6b"
+    },
+    "configs/data/fleet-blackbox-receipt-proven-20260924-v1.json": {
+      "file_sha256": "sha256:6c211259a29376de195411e5cc182bb6f26c5b8027ab86fec855b44f064b0fd0",
+      "logical_sha256": "sha256:23cfc25af183ff474e914443682e4707162110ddc2aa16103a13d984fe05b83c"
+    },
+    "configs/data/qwen38-teacher3k-training-lineage-map-20260924-v1.json": {
+      "file_sha256": "sha256:49be490fed7726e49b92197853f3b2a5504f08dee1617ac6e2cdbfa69d02e5ea",
+      "logical_sha256": "sha256:6e067606fc04162c8765b288982651773aa28c6f72390fe83428a20b9b39e75f"
+    },
+    "docs/evidence/qwen38-study/2026-09-24-fleet-blackbox-lineage-safe-split-design-v1.json": {
+      "file_sha256": "sha256:5507acff41b5684f503e0208aa37efd4741d9fce5b38299ae3d4987fafe67465",
+      "logical_sha256": "sha256:5338adac4e0abed6e5416f05b538349feabf82e1717f4f3253be687750376ee1"
+    }
+  }
+}

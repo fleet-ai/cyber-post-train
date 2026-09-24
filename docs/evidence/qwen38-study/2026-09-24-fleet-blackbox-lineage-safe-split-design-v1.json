@@ -1,0 +1,654 @@
+{
+  "balance": {
+    "balanced_dimensions": [
+      "application",
+      "environment",
+      "difficulty",
+      "vulnerability_family"
+    ],
+    "current_representation": {
+      "application": {
+        "labels_not_representable_in_every_split": [],
+        "max_absolute_share_gap": {
+          "dev": 0.03450980392156863,
+          "final_test": 0.03166666666666666,
+          "train": 0.006666666666666668
+        },
+        "population_group_counts": {
+          "current": 21,
+          "fakelook": 17,
+          "fentry": 11,
+          "fira": 19,
+          "fubspot": 7
+        },
+        "split_group_counts": {
+          "dev": {
+            "current": 5,
+            "fakelook": 4,
+            "fentry": 3,
+            "fira": 4,
+            "fubspot": 1
+          },
+          "final_test": {
+            "current": 2,
+            "fakelook": 2,
+            "fentry": 1,
+            "fira": 2,
+            "fubspot": 1
+          },
+          "train": {
+            "current": 14,
+            "fakelook": 11,
+            "fentry": 7,
+            "fira": 13,
+            "fubspot": 5
+          }
+        }
+      },
+      "difficulty": {
+        "labels_not_representable_in_every_split": [
+          "easy"
+        ],
+        "max_absolute_share_gap": {
+          "dev": 0.03450980392156866,
+          "final_test": 0.045,
+          "train": 0.006666666666666666
+        },
+        "population_group_counts": {
+          "easy": 1,
+          "hard": 6,
+          "medium": 68
+        },
+        "split_group_counts": {
+          "dev": {
+            "hard": 1,
+            "medium": 16
+          },
+          "final_test": {
+            "hard": 1,
+            "medium": 7
+          },
+          "train": {
+            "easy": 1,
+            "hard": 4,
+            "medium": 45
+          }
+        }
+      },
+      "environment": {
+        "labels_not_representable_in_every_split": [
+          "cysec1-2-rops-gen"
+        ],
+        "max_absolute_share_gap": {
+          "dev": 0.03450980392156863,
+          "final_test": 0.03166666666666666,
+          "train": 0.006666666666666668
+        },
+        "population_group_counts": {
+          "cysec1-2-current-gen": 21,
+          "cysec1-2-fakelook-gen": 17,
+          "cysec1-2-fentry-gen": 11,
+          "cysec1-2-fira-gen": 18,
+          "cysec1-2-fubspot-gen": 7,
+          "cysec1-2-rops-gen": 1
+        },
+        "split_group_counts": {
+          "dev": {
+            "cysec1-2-current-gen": 5,
+            "cysec1-2-fakelook-gen": 4,
+            "cysec1-2-fentry-gen": 3,
+            "cysec1-2-fira-gen": 4,
+            "cysec1-2-fubspot-gen": 1
+          },
+          "final_test": {
+            "cysec1-2-current-gen": 2,
+            "cysec1-2-fakelook-gen": 2,
+            "cysec1-2-fentry-gen": 1,
+            "cysec1-2-fira-gen": 2,
+            "cysec1-2-fubspot-gen": 1
+          },
+          "train": {
+            "cysec1-2-current-gen": 14,
+            "cysec1-2-fakelook-gen": 11,
+            "cysec1-2-fentry-gen": 7,
+            "cysec1-2-fira-gen": 12,
+            "cysec1-2-fubspot-gen": 5,
+            "cysec1-2-rops-gen": 1
+          }
+        }
+      },
+      "vulnerability_family": {
+        "labels_not_representable_in_every_split": [
+          "category:CWE-200",
+          "category:access-control",
+          "category:authentication-and-identity",
+          "category:authentication-and-session",
+          "category:authentication-boundary",
+          "category:authentication-replay",
+          "category:authorization",
+          "category:authorization-boundary",
+          "category:authorization-classification",
+          "category:authorization-principal-self-assignment",
+          "category:availability",
+          "category:broken-authentication",
+          "category:broken-file-access",
+          "category:broken-object-level-authorization",
+          "category:broken-tenant-isolation",
+          "category:capture-replay",
+          "category:comment-visibility-bypass",
+          "category:cors-browser-origin-trust",
+          "category:credential-in-response-leak",
+          "category:cryptographic-signature-verification",
+          "category:csrf",
+          "category:denial-of-service",
+          "category:filesystem-path-traversal",
+          "category:function-level-privilege",
+          "category:http-desync",
+          "category:hydration",
+          "category:identity-and-session-management",
+          "category:information-disclosure",
+          "category:information-exposure",
+          "category:injection",
+          "category:input-validation-and-canonicalization",
+          "category:missing-resource-limit",
+          "category:object-authorization",
+          "category:object-hydration-authz-bypass",
+          "category:object-level-authz",
+          "category:observable-discrepancy",
+          "category:origin-validation",
+          "category:path-traversal",
+          "category:protocol-desync",
+          "category:request-smuggling",
+          "category:resource-consumption",
+          "category:resource-exhaustion",
+          "category:secret-disclosure",
+          "category:sensitive-data-disclosure",
+          "category:sensitive-data-exposure",
+          "category:session",
+          "category:session-lifecycle",
+          "category:session-replay",
+          "category:stored-xss",
+          "category:template-second-pass-evaluation",
+          "category:unauthenticated-pii-disclosure",
+          "category:uncontrolled-resource-consumption",
+          "category:url-validation-canonicalization",
+          "category:webhook-integration-trust",
+          "category:xss-javascript-url",
+          "class:CSRF",
+          "class:CWE-770",
+          "class:HTTP-request-desync",
+          "class:IDOR",
+          "class:SQLi",
+          "class:broken-object-authorization",
+          "class:code-injection",
+          "class:credential-disclosure",
+          "class:csrf-unprotected-credential-echo",
+          "class:http-request-smuggling",
+          "class:incorrect-authorization",
+          "class:info-disclosure",
+          "class:insufficient-session-expiration",
+          "class:jwt-alg-confusion",
+          "class:missing-authorization",
+          "class:origin-validation",
+          "class:privilege-escalation",
+          "class:privilege-management",
+          "class:prototype-pollution",
+          "class:reflected-xss",
+          "class:replay",
+          "class:request-authenticity-bypass",
+          "class:request-smuggling",
+          "class:resource-bound-fail-open",
+          "class:resource-consumption",
+          "class:resource-exhaustion",
+          "class:sensitive-data-disclosure",
+          "class:sensitive-information-disclosure",
+          "class:session-expiration",
+          "class:uncontrolled-resource-consumption",
+          "class:unsafe-deserialization"
+        ],
+        "max_absolute_share_gap": {
+          "dev": 0.04549019607843137,
+          "final_test": 0.11166666666666666,
+          "train": 0.020000000000000004
+        },
+        "population_group_counts": {
+          "category:CWE-200": 1,
+          "category:access-control": 1,
+          "category:authentication-and-identity": 1,
+          "category:authentication-and-session": 1,
+          "category:authentication-boundary": 2,
+          "category:authentication-replay": 1,
+          "category:authorization": 1,
+          "category:authorization-boundary": 1,
+          "category:authorization-classification": 1,
+          "category:authorization-principal-self-assignment": 1,
+          "category:availability": 1,
+          "category:broken-access-control": 4,
+          "category:broken-authentication": 1,
+          "category:broken-file-access": 1,
+          "category:broken-object-level-authorization": 1,
+          "category:broken-tenant-isolation": 1,
+          "category:capture-replay": 1,
+          "category:comment-visibility-bypass": 1,
+          "category:cors-browser-origin-trust": 1,
+          "category:credential-disclosure": 6,
+          "category:credential-in-response-leak": 1,
+          "category:cryptographic-signature-verification": 1,
+          "category:csrf": 1,
+          "category:denial-of-service": 1,
+          "category:filesystem-path-traversal": 1,
+          "category:function-level-privilege": 1,
+          "category:http-desync": 1,
+          "category:hydration": 1,
+          "category:identity-and-session-management": 1,
+          "category:information-disclosure": 2,
+          "category:information-exposure": 1,
+          "category:injection": 2,
+          "category:input-validation-and-canonicalization": 1,
+          "category:missing-resource-limit": 1,
+          "category:object-authorization": 1,
+          "category:object-hydration-authz-bypass": 1,
+          "category:object-level-authz": 1,
+          "category:observable-discrepancy": 1,
+          "category:origin-validation": 1,
+          "category:path-traversal": 2,
+          "category:protocol-desync": 1,
+          "category:request-smuggling": 1,
+          "category:resource-consumption": 1,
+          "category:resource-exhaustion": 1,
+          "category:secret-disclosure": 1,
+          "category:sensitive-data-disclosure": 1,
+          "category:sensitive-data-exposure": 2,
+          "category:session": 1,
+          "category:session-lifecycle": 1,
+          "category:session-replay": 1,
+          "category:stored-xss": 1,
+          "category:template-second-pass-evaluation": 1,
+          "category:unauthenticated-pii-disclosure": 1,
+          "category:uncontrolled-resource-consumption": 1,
+          "category:url-validation-canonicalization": 2,
+          "category:webhook-integration-trust": 1,
+          "category:xss": 4,
+          "category:xss-javascript-url": 1,
+          "class:CSRF": 1,
+          "class:CWE-770": 1,
+          "class:HTTP-request-desync": 1,
+          "class:IDOR": 2,
+          "class:SQLi": 1,
+          "class:auth-bypass": 8,
+          "class:broken-object-authorization": 1,
+          "class:code-injection": 2,
+          "class:credential-disclosure": 1,
+          "class:csrf-unprotected-credential-echo": 1,
+          "class:http-request-smuggling": 1,
+          "class:incorrect-authorization": 2,
+          "class:info-disclosure": 2,
+          "class:information-disclosure": 3,
+          "class:insufficient-session-expiration": 1,
+          "class:jwt-alg-confusion": 1,
+          "class:missing-authorization": 1,
+          "class:open-redirect": 3,
+          "class:origin-validation": 2,
+          "class:path-traversal": 8,
+          "class:privilege-escalation": 1,
+          "class:privilege-management": 1,
+          "class:prototype-pollution": 1,
+          "class:reflected-xss": 2,
+          "class:replay": 1,
+          "class:request-authenticity-bypass": 1,
+          "class:request-smuggling": 1,
+          "class:resource-bound-fail-open": 1,
+          "class:resource-consumption": 1,
+          "class:resource-exhaustion": 2,
+          "class:sensitive-data-disclosure": 2,
+          "class:sensitive-data-exposure": 8,
+          "class:sensitive-information-disclosure": 1,
+          "class:session-expiration": 2,
+          "class:stored-xss": 4,
+          "class:uncontrolled-resource-consumption": 1,
+          "class:unsafe-deserialization": 1
+        },
+        "split_group_counts": {
+          "dev": {
+            "category:authentication-boundary": 1,
+            "category:broken-access-control": 1,
+            "category:broken-object-level-authorization": 1,
+            "category:comment-visibility-bypass": 1,
+            "category:cors-browser-origin-trust": 1,
+            "category:credential-disclosure": 2,
+            "category:information-disclosure": 1,
+            "category:injection": 1,
+            "category:object-authorization": 1,
+            "category:path-traversal": 1,
+            "category:protocol-desync": 1,
+            "category:sensitive-data-exposure": 1,
+            "category:template-second-pass-evaluation": 1,
+            "category:webhook-integration-trust": 1,
+            "category:xss": 1,
+            "category:xss-javascript-url": 1,
+            "class:IDOR": 1,
+            "class:SQLi": 1,
+            "class:auth-bypass": 2,
+            "class:code-injection": 1,
+            "class:http-request-smuggling": 1,
+            "class:incorrect-authorization": 1,
+            "class:info-disclosure": 1,
+            "class:information-disclosure": 1,
+            "class:open-redirect": 1,
+            "class:origin-validation": 1,
+            "class:path-traversal": 2,
+            "class:reflected-xss": 1,
+            "class:sensitive-data-exposure": 2,
+            "class:stored-xss": 1
+          },
+          "final_test": {
+            "category:authentication-and-session": 1,
+            "category:broken-access-control": 1,
+            "category:broken-file-access": 1,
+            "category:credential-disclosure": 1,
+            "category:object-hydration-authz-bypass": 1,
+            "category:unauthenticated-pii-disclosure": 1,
+            "category:url-validation-canonicalization": 1,
+            "category:xss": 1,
+            "class:auth-bypass": 1,
+            "class:missing-authorization": 1,
+            "class:open-redirect": 1,
+            "class:path-traversal": 1,
+            "class:prototype-pollution": 1,
+            "class:sensitive-data-disclosure": 1,
+            "class:sensitive-data-exposure": 1,
+            "class:stored-xss": 1
+          },
+          "train": {
+            "category:CWE-200": 1,
+            "category:access-control": 1,
+            "category:authentication-and-identity": 1,
+            "category:authentication-boundary": 1,
+            "category:authentication-replay": 1,
+            "category:authorization": 1,
+            "category:authorization-boundary": 1,
+            "category:authorization-classification": 1,
+            "category:authorization-principal-self-assignment": 1,
+            "category:availability": 1,
+            "category:broken-access-control": 2,
+            "category:broken-authentication": 1,
+            "category:broken-tenant-isolation": 1,
+            "category:capture-replay": 1,
+            "category:credential-disclosure": 3,
+            "category:credential-in-response-leak": 1,
+            "category:cryptographic-signature-verification": 1,
+            "category:csrf": 1,
+            "category:denial-of-service": 1,
+            "category:filesystem-path-traversal": 1,
+            "category:function-level-privilege": 1,
+            "category:http-desync": 1,
+            "category:hydration": 1,
+            "category:identity-and-session-management": 1,
+            "category:information-disclosure": 1,
+            "category:information-exposure": 1,
+            "category:injection": 1,
+            "category:input-validation-and-canonicalization": 1,
+            "category:missing-resource-limit": 1,
+            "category:object-level-authz": 1,
+            "category:observable-discrepancy": 1,
+            "category:origin-validation": 1,
+            "category:path-traversal": 1,
+            "category:request-smuggling": 1,
+            "category:resource-consumption": 1,
+            "category:resource-exhaustion": 1,
+            "category:secret-disclosure": 1,
+            "category:sensitive-data-disclosure": 1,
+            "category:sensitive-data-exposure": 1,
+            "category:session": 1,
+            "category:session-lifecycle": 1,
+            "category:session-replay": 1,
+            "category:stored-xss": 1,
+            "category:uncontrolled-resource-consumption": 1,
+            "category:url-validation-canonicalization": 1,
+            "category:xss": 2,
+            "class:CSRF": 1,
+            "class:CWE-770": 1,
+            "class:HTTP-request-desync": 1,
+            "class:IDOR": 1,
+            "class:auth-bypass": 5,
+            "class:broken-object-authorization": 1,
+            "class:code-injection": 1,
+            "class:credential-disclosure": 1,
+            "class:csrf-unprotected-credential-echo": 1,
+            "class:incorrect-authorization": 1,
+            "class:info-disclosure": 1,
+            "class:information-disclosure": 2,
+            "class:insufficient-session-expiration": 1,
+            "class:jwt-alg-confusion": 1,
+            "class:open-redirect": 1,
+            "class:origin-validation": 1,
+            "class:path-traversal": 5,
+            "class:privilege-escalation": 1,
+            "class:privilege-management": 1,
+            "class:reflected-xss": 1,
+            "class:replay": 1,
+            "class:request-authenticity-bypass": 1,
+            "class:request-smuggling": 1,
+            "class:resource-bound-fail-open": 1,
+            "class:resource-consumption": 1,
+            "class:resource-exhaustion": 2,
+            "class:sensitive-data-disclosure": 1,
+            "class:sensitive-data-exposure": 5,
+            "class:sensitive-information-disclosure": 1,
+            "class:session-expiration": 2,
+            "class:stored-xss": 2,
+            "class:uncontrolled-resource-consumption": 1,
+            "class:unsafe-deserialization": 1
+          }
+        }
+      }
+    },
+    "grouping_unit": "reviewed application and task family; all exact versions stay together",
+    "lineage_safety_scope": {
+      "current_population": "75 single-atom families grouped by reviewed application and task_family",
+      "extension_status": "blocked until composite and successor aliases are grouped by shared reviewed atom identity",
+      "shared_atom_transitive_closure_implemented": false
+    },
+    "role_drift": 0
+  },
+  "current_prospective_split": {
+    "counts": {
+      "dev": {
+        "groups": 17,
+        "task_versions": 17
+      },
+      "final_test": {
+        "groups": 8,
+        "task_versions": 8
+      },
+      "train": {
+        "groups": 50,
+        "task_versions": 50
+      }
+    },
+    "heldout_families": 25,
+    "newly_qualified_families_since_anchor": 0,
+    "role_anchor_path": "configs/data/fleet-blackbox-lineage-role-anchor-20260924-v1.json",
+    "role_anchor_sha256": "sha256:48350b8fc23143abe297db3b2364590c72d564553ebb4e9a349fa06ec246a26b",
+    "split_path": "configs/data/fleet-blackbox-lineage-safe-split-20260924-v1.json",
+    "split_sha256": "sha256:b613abaae0e5b52ef279a46a4ab0145dba4517442d1e4198fd52af7de0161d10",
+    "use": "Prospective only: future training may use train; dev/final_test remain excluded. Existing checkpoints require a separate lineage audit."
+  },
+  "expansion_gate": {
+    "minimum_additional_distinct_qualified_families": 225,
+    "minimum_total_distinct_qualified_families": 300,
+    "qa_candidate_upper_bound_if_all_distinct_and_qualified": {
+      "heldout_families": 36,
+      "shortfall_to_100": 64,
+      "total_families": 108
+    },
+    "required_before_extension": [
+      "exact good-environment, verifier, finite-outcome, and cleanup receipts",
+      "exact (task_key, task_version_id) binding",
+      "reviewed application and task-family binding for every exact version",
+      "transitive grouping by shared reviewed atom identity, including composites and successor atom versions",
+      "family-level exclusion against every training corpus that will be evaluated",
+      "anchored allocation that never moves an existing family role"
+    ],
+    "target": {
+      "dev": 68,
+      "final_test": 32,
+      "heldout": 100,
+      "train": 200
+    }
+  },
+  "known_training_lineage": {
+    "checkpoint_specific_results": {
+      "fresh75": {
+        "corpus_sha256": "sha256:453d40b6d7aa0de53aefd6291946fb889befa9ec07990269cbc3bbdbc145746b",
+        "final_lock_corpus_sha256": "sha256:5db5600ac9f403fd147b2ecbf6068b514d075d07ac683d97bc83319c6e89d149",
+        "frozen_role_heldout_families": 25,
+        "status": "manifest_bound_to_frozen_train_roles"
+      },
+      "sep7_original_teacher": {
+        "actual_trained_family_identities": "not_retained",
+        "candidate_key_overlap_with_current_heldout": 25,
+        "status": "not_certified_for_current_heldout"
+      },
+      "teacher3k": {
+        "clean_heldout_families": 20,
+        "exposed_heldout_families": 5,
+        "exposed_training_aliases": 6,
+        "protocol_path": "configs/evaluation/qwen38-teacher3k-fleet-heldout20-pass4-protocol-v2.json",
+        "protocol_sha256": "sha256:2ac58c3ded7ba5c9bacd27dc3a379c726912a3f0cafc3ee542672de730e1fe0e",
+        "status": "20_checkpoint_specific_lineage_clean"
+      }
+    },
+    "global_historical_boundary": {
+      "certified_globally_untouched_families": 0,
+      "reason": "At least one accepted historical corpus lacks a complete exact task-family identity list, so absence across every historical training lineage cannot be proven.",
+      "status": "not_certifiable_from_current_public_evidence",
+      "unresolved_exact_lineage_attempts": [
+        "q38-sep7-original-teacher",
+        "q38-dense-teacher-v4-v5",
+        "q38-self-sft-step44",
+        "q38-available-a-lr-screen",
+        "q38-retired-dataminer-v2-lora-grpo"
+      ]
+    },
+    "inventory": {
+      "attempt_boundaries": [
+        {
+          "attempt_id": "maintained-fti-miles-full-weight-reference",
+          "lineage_boundary": "external_reference_not_project_checkpoint"
+        },
+        {
+          "attempt_id": "q38-available-a-lr-screen",
+          "lineage_boundary": "exact_trained_families_not_retained"
+        },
+        {
+          "attempt_id": "q38-cleanup-miles-v1-v7",
+          "lineage_boundary": "no_accepted_project_checkpoint_boundary"
+        },
+        {
+          "attempt_id": "q38-cleanup-sft-recovery-lineage",
+          "lineage_boundary": "non_capability_fixture_out_of_scope"
+        },
+        {
+          "attempt_id": "q38-cleanup-skyrl-v3-and-engine-diagnostics",
+          "lineage_boundary": "no_accepted_project_checkpoint_boundary"
+        },
+        {
+          "attempt_id": "q38-dense-teacher-v4-v5",
+          "lineage_boundary": "exact_trained_families_not_retained"
+        },
+        {
+          "attempt_id": "q38-fresh75-v2-v4",
+          "lineage_boundary": "frozen_train_roles_manifest_bound"
+        },
+        {
+          "attempt_id": "q38-fti-v1-a1-a3",
+          "lineage_boundary": "no_accepted_project_checkpoint_boundary"
+        },
+        {
+          "attempt_id": "q38-miles-dev-and-prod-reward-canaries",
+          "lineage_boundary": "no_accepted_project_checkpoint_boundary"
+        },
+        {
+          "attempt_id": "q38-retired-dataminer-v2-lora-grpo",
+          "lineage_boundary": "external_exact_lineage_not_retained"
+        },
+        {
+          "attempt_id": "q38-self-sft-step44",
+          "lineage_boundary": "exact_trained_families_not_retained"
+        },
+        {
+          "attempt_id": "q38-sep7-original-teacher",
+          "lineage_boundary": "exact_trained_families_not_retained"
+        },
+        {
+          "attempt_id": "q38-teacher3k-262k-lineage",
+          "lineage_boundary": "teacher3k_protocol_clean20_exposed5"
+        },
+        {
+          "attempt_id": "q38-teacher3k-two-node-v1-v2",
+          "lineage_boundary": "teacher3k_protocol_clean20_exposed5"
+        }
+      ],
+      "file_sha256": "sha256:adb6b89328a3d8fb5249fea01f36c67da94ad0a4a2e295d08e5477ae2b9866c9",
+      "rl_attempt_ids": [
+        "maintained-fti-miles-full-weight-reference",
+        "q38-cleanup-miles-v1-v7",
+        "q38-cleanup-skyrl-v3-and-engine-diagnostics",
+        "q38-fti-v1-a1-a3",
+        "q38-miles-dev-and-prod-reward-canaries"
+      ],
+      "sft_attempt_ids": [
+        "q38-available-a-lr-screen",
+        "q38-cleanup-sft-recovery-lineage",
+        "q38-dense-teacher-v4-v5",
+        "q38-fresh75-v2-v4",
+        "q38-retired-dataminer-v2-lora-grpo",
+        "q38-self-sft-step44",
+        "q38-sep7-original-teacher",
+        "q38-teacher3k-262k-lineage",
+        "q38-teacher3k-two-node-v1-v2"
+      ],
+      "source": "configs/discovery/qwen38-lora-evidence-index-v1.json"
+    }
+  },
+  "population_decision": {
+    "current_inventory_task_versions": 1217,
+    "exact_receipt_proven_task_versions": 75,
+    "heldout_100_supported_now": false,
+    "known_broken_task_versions": 74,
+    "not_analyzed_without_exact_receipt": 1035,
+    "qa_cleared_but_unproven_task_versions": 33,
+    "reason": "Only 75 exact task versions are receipt-proven and all 75 already have immutable roles. QA status without runtime, verifier, outcome, cleanup, and lineage receipts does not admit a task."
+  },
+  "qualification_authority": {
+    "git_commit": "915b385196842674114a4e9891d4e2cd02613d57",
+    "sources": {
+      "configs/data/fleet-blackbox-current-production-20260924-v1.json": {
+        "file_sha256": "sha256:71564b9abfa4d3bd3c47a31e7cc5a4a7acf6406120772478f5e85bc83bde4d30",
+        "logical_sha256": "sha256:3de1271d11769989a4d80b0e329a53744642402a2754544eec1851db7322efe7"
+      },
+      "configs/data/fleet-blackbox-qa-candidates-20260924-v1.json": {
+        "file_sha256": "sha256:b3d551863655bc8ad92c76bb1b2b0f87c8bcec812b5c42987fc9c0c28c1a5b2a",
+        "logical_sha256": "sha256:4f61fd78b4d92c933030f026e0137abe199e0157fd72b2f959df0354df489be8"
+      },
+      "configs/data/fleet-blackbox-receipt-proven-20260924-v1.json": {
+        "file_sha256": "sha256:6c211259a29376de195411e5cc182bb6f26c5b8027ab86fec855b44f064b0fd0",
+        "logical_sha256": "sha256:23cfc25af183ff474e914443682e4707162110ddc2aa16103a13d984fe05b83c"
+      },
+      "configs/data/fleet-blackbox-training-coverage-20260924-v1.json": {
+        "file_sha256": "sha256:800cfcc808e754e060fc467a65675ba74d6f2cd47e953cb6e52e22e18ba5c832",
+        "logical_sha256": "sha256:acf38af53ef50d35347b7d7618a7fa0b24058a1948a584e3251fb7b4fd5f3139"
+      }
+    }
+  },
+  "safety": {
+    "external_mutations": 0,
+    "launch_authorized": false,
+    "private_content_persisted": false,
+    "task_prompts_or_trajectories_read": false
+  },
+  "schema": "fleet_blackbox_lineage_safe_split_design_v1",
+  "sha256": "sha256:5338adac4e0abed6e5416f05b538349feabf82e1717f4f3253be687750376ee1",
+  "status": "no_launch_insufficient_qualified_population_for_heldout_100"
+}
