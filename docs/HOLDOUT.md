@@ -32,7 +32,9 @@ proved **20 historical positive versions/18 families** (six DEV, 12 final;
 17 medium, three hard). Of 408 candidates, 340 had no positive lead; strict
 older-version contract/seed-byte proof transferred two other leads but added
 only **one final family**. Historical union: **19 families, six DEV/13 final**;
-current production runnability remains unproved. One-cell staging startup,
+current production runnability remains unproved. A later metadata-only scan of
+252 named session stores found 21 valid leads on six already-counted versions,
+adding zero families (not a global search). One-cell staging startup,
 tools, negative grading and teardown passed—not production proof. Old 75
 receipts and model outcomes are not automatic positives; preserve unknowns.
 
