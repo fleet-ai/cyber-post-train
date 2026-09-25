@@ -342,6 +342,24 @@ def compose_teacher_ce(dense_dir: Path, dev_dir: Path, dev_source_dir: Path,
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "compose":
+        parser = argparse.ArgumentParser(description="Bind frozen dense train and contiguous CE dev")
+        parser.add_argument("dense_dir", type=Path)
+        parser.add_argument("dev_dir", type=Path)
+        parser.add_argument("dev_source_dir", type=Path)
+        parser.add_argument("family_roster", type=Path)
+        parser.add_argument("corpus_root", type=Path)
+        parser.add_argument("output", type=Path)
+        args = parser.parse_args(argv[1:])
+        try:
+            receipt = compose_teacher_ce(args.dense_dir, args.dev_dir, args.dev_source_dir,
+                                         args.family_roster, args.corpus_root, args.output)
+        except Exception as error:
+            print(f"mixed corpus rejected: {type(error).__name__}", file=sys.stderr)
+            return 2
+        print(json.dumps(receipt, sort_keys=True))
+        return 0
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("request", type=Path)
     args = parser.parse_args(argv)
