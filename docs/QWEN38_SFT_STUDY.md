@@ -84,6 +84,10 @@ Grok-to-OpenCode rendering equivalence. The 943 strict TRAIN/27 DEV historical
 sessions and one-block salvage remain provisional. Admit none as scientific
 training data without immutable renderer and same-call wire evidence; otherwise
 collect fresh verifier-backed OpenCode teacher successes on TRAIN families.
+The Fleet transcript exporter at Theseus `e2b20f08` explicitly marks its
+stored available-tools snapshot `model_facing: false` and
+`requires_harness_reconstruction: true`. An exact old TRAIN session returned
+two stored names (`bash`, `submit_report`), not the provider-facing bytes.
 
 ## Parallel execution lanes
 
