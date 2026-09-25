@@ -77,6 +77,19 @@ no new families. Staging cell 08 passed startup/tools/negative grade/cleanup onl
 Old wave16 predates frozen rank order; no broader wave proved prod use.
 Old 75 receipts/model outcomes are not automatic positives; preserve unknowns.
 
+On September 25, read-only current-task checks found all 20 exact historical
+positive versions still match their frozen task version, environment version,
+blackbox projection, cyber contract, and attached verifier. This is binding
+evidence, not runnable proof. A separate bounded fresh-instance replay of one
+reserved **final-test** version used its exact historical 49-call intended path,
+again earned full credit with authoritative grader agreement, and independently
+read back `stopped` with its exact create claim. Its sealed terminal is
+`sha256:4360776f9bd24ab2396297576fd5966657ae3235bf0135d160b7af556ee902e9`
+(private file SHA-256 `df552493beb574b73b23a59912a42005e7c492559672b25b19e7677c25bad7e3`).
+This establishes **one** current-positive final version, not independent model
+success and not a sufficiently large final panel. Do not use its historical
+actions, report, or score for training or checkpoint selection.
+
 ## Teacher3K family roles
 
 2,886 whole-session successes span 496 keys/~57.4M estimated source tokens
