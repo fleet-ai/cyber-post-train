@@ -20,7 +20,7 @@ September 25 census: 1,034 blackbox versions lacked the old 75 execution
 receipts; 671 had new keys. Exact task/verifier/env/atom metadata GETs passed.
 Excluding Teacher3K overlaps and protected families left **408 candidate
 versions / 311 families / 14 apps**. Metadata is not runnability;
-`training/qualify_live.py` does not run environments.
+the frozen roster was a read-only census, not an environment check.
 
 Production now exposes durable create-request claims. One rank-ordered,
 model-free production check passed startup, tools, negative grading and exact

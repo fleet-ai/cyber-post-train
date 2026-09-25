@@ -20,8 +20,12 @@ from urllib.parse import quote
 
 import httpx
 
-from training.qualify_live import PRIVATE, PROJECT, PUBLIC, TEAM
 from training.qualification_order import checked
+
+TEAM = "a1025f0b-ad67-49fc-a023-51800ab43e84"
+PROJECT = "63d6fda8-48c4-4726-9ec3-d1028f2c47f5"
+PUBLIC = "https://orchestrator.fleetai.com"
+PRIVATE = "https://api.internal.fleet-platform.fleetai.com"
 
 CONTRACT = {"evidence_schema": "1.0.0", "submission_protocol": "2.0.0",
             "verifier_contract": "3.0.0"}
