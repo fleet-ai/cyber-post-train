@@ -1,23 +1,13 @@
-"""Convert reviewed message windows to the pinned SkyRL last-assistant format.
-
-Run this with the exact trainer image and local model tokenizer, off GPU. The
-source JSONL contains private task text; only the aggregate manifest is public.
-"""
+"""Verify the frozen Qwen tokenizer and SkyRL's native assistant loss mask."""
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
-import os
-import copy
-import sys
 from collections.abc import Mapping
 from functools import cache
 from pathlib import Path
-from typing import Callable
 
-FORMAT = "chat_messages_last_assistant_v2"
 MODEL = ("Qwen/Qwen3.8-27B", "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0")
 TOKENIZER_SHA = "sha256:3938a9a8172f2738fed1be44efc11e2562059269d50d3721213f44802b53b4e1"
 TOKENIZER_FILES = {
@@ -32,11 +22,6 @@ SKYRL_FILES = {
     "sft_trainer.py": "a5ef8a2e22de785b6760abffdd9353f1246a5898983b4d27b4aadd8089a3579a",
     "generators/utils.py": "55c15b660067749febda00d4fb1c2110ff436717bbd4b73bf66055a73d0b87d5",
 }
-
-
-def sha256(value: object) -> str:
-    body = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
-    return "sha256:" + hashlib.sha256(body).hexdigest()
 
 
 def _file_sha(path: Path) -> str:
@@ -122,151 +107,3 @@ def pinned_tokenize(row: dict, tokenizer) -> tuple[list[int], int]:
             or native["loss_mask"] != [1] * native["num_actions"]):
         raise ValueError("native assistant mask differs from full tool-aware render")
     return full, native["num_actions"]
-
-
-def _source_partition(source: Path, split: str, receipt: dict) -> list[dict]:
-    item = receipt["partitions"][split]
-    if item["path"] != f"{split}.jsonl":
-        raise ValueError("unexpected private partition path")
-    path = source / item["path"]
-    if path.is_symlink() or path.stat().st_size != item["bytes"] or _file_sha(path) != item["sha256"]:
-        raise ValueError("private partition bytes differ from receipt")
-    rows = [json.loads(line) for line in path.read_text().splitlines()]
-    proof = item["receipt"]
-    if (sha256({k: v for k, v in proof.items() if k != "sha256"}) != proof["sha256"]
-            or proof["split"] != split or proof["rows"] != len(rows)
-            or proof["rows_sha256"] != sha256(rows)):
-        raise ValueError("private partition selection proof differs")
-    return rows
-
-
-def materialize_parquet(source: Path, destination: Path, *, tokenizer_root: Path,
-                        _test_tokenize: Callable[[dict], tuple[list[int], int]] | None = None,
-                        _test_tokenizer_sha256: str | None = None) -> dict:
-    """Create train/dev Parquet and a digest-valid manifest, receipt last.
-
-    Production always loads the exact local tokenizer and image-pinned SkyRL.
-    The private test seam deliberately cannot produce a trainer-ready manifest.
-    """
-    import pyarrow as pa
-    import pyarrow.parquet as pq
-
-    production = _test_tokenize is None
-    tokenizer_sha256 = TOKENIZER_SHA if production else _test_tokenizer_sha256
-    if production:
-        tokenizer = load_pinned_tokenizer(tokenizer_root)
-        tokenize = lambda row: pinned_tokenize(row, tokenizer)
-    else:
-        tokenize = _test_tokenize
-    if not isinstance(tokenizer_sha256, str):
-        raise ValueError("tokenizer identity is missing")
-    source, destination = Path(source), Path(destination)
-    if destination.exists() or destination.is_symlink():
-        raise FileExistsError("trainer-ready destination already exists")
-    receipt_path = source / "RECEIPT.json"
-    if receipt_path.is_symlink():
-        raise ValueError("source receipt is a symlink")
-    receipt = json.loads(receipt_path.read_text())
-    if (receipt.get("format") != "structured_message_windows_v1"
-            or receipt.get("trainer_ready") is not False
-            or sha256({k: v for k, v in receipt.items() if k != "sha256"}) != receipt.get("sha256")):
-        raise ValueError("source receipt is not the reviewed structured corpus")
-    inputs = [receipt["partitions"][s]["receipt"]["inputs_sha256"] for s in ("train", "dev")]
-    if inputs[0] != inputs[1] or any(
-        receipt["partitions"][s]["receipt"]["tokenizer_sha256"] != tokenizer_sha256
-        for s in ("train", "dev")
-    ):
-        raise ValueError("source splits or tokenizer differ")
-    prepared: dict[str, list[dict]] = {}
-    families: dict[str, set[str]] = {}
-    all_targets: set[str] = set()
-    for split in ("train", "dev"):
-        values = []
-        families[split] = set()
-        for row in _source_partition(source, split, receipt):
-            if (row.get("target_message_index") != len(row["messages"]) - 1
-                    or row["messages"][-1].get("role") != "assistant"
-                    or sha256(row["tools"]) != inputs[0]["tools"]
-                    or row["target_id"] in all_targets):
-                raise ValueError("window target or tool contract differs")
-            all_targets.add(row["target_id"])
-            families[split].add(row["family_id"])
-            value = {**copy.deepcopy(row), "task_key": row["task_version_id"],
-                     "window_id": row["target_id"], "token_count": row["total_tokens"],
-                     "tools": json.dumps(row["tools"], sort_keys=True, separators=(",", ":"))}
-            for message in value["messages"]:
-                if "tool_calls" in message:
-                    message["tool_calls"] = json.dumps(
-                        message["tool_calls"], sort_keys=True, separators=(",", ":"))
-            try:
-                before, actions = tokenize(row)
-                after, after_actions = tokenize(value)
-            except Exception:
-                raise ValueError("qualified tokenizer rejected a private window") from None
-            if (before != after or actions != after_actions or len(after) != row["total_tokens"]
-                    or actions != row["supervised_tokens"]
-                    or not 0 < actions < len(after)):
-                raise ValueError("private window tokenization changed")
-            values.append(value)
-        if not values:
-            raise ValueError("empty trainer split")
-        prepared[split] = values
-    if families["train"] & families["dev"]:
-        raise ValueError("train/dev family overlap")
-    destination.mkdir(mode=0o700)
-    files = {}
-    for split, values in prepared.items():
-        path = destination / f"{split}.parquet"
-        pq.write_table(pa.Table.from_pylist(values), path, compression="zstd")
-        os.chmod(path, 0o600)
-        reopened = pq.read_table(path).to_pylist()
-        if len(reopened) != len(values):
-            raise ValueError("Parquet row count changed on readback")
-        for original, decoded in zip(values, reopened, strict=True):
-            try:
-                a, n = tokenize(original)
-                b, m = tokenize(decoded)
-            except Exception:
-                raise ValueError("qualified tokenizer rejected a Parquet row") from None
-            if a != b or n != m or decoded["task_key"] != original["task_key"]:
-                raise ValueError("Parquet readback changes model-visible bytes")
-        files[split] = {"path": path.name, "sha256": _file_sha(path), "rows": len(values),
-                        "task_keys": sorted({r["task_key"] for r in values}), "format": FORMAT}
-    manifest = {"schema": "qwen38_tool_aware_parquet_v1", "trainer_ready": production,
-                "validation_mode": "teacher_cross_entropy", "source_receipt_sha256": receipt["sha256"],
-                "split_sha256": inputs[0]["roster"],
-                "tokenizer": {"repo": MODEL[0], "revision": MODEL[1], "sha256": tokenizer_sha256},
-                "files": files}
-    manifest["sha256"] = sha256(manifest)
-    path = destination / "manifest.json"
-    with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as output:
-        json.dump(manifest, output, sort_keys=True, separators=(",", ":"))
-        output.write("\n")
-        output.flush()
-        os.fsync(output.fileno())
-    return manifest
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("source", type=Path)
-    parser.add_argument("destination", type=Path)
-    parser.add_argument("--tokenizer-root", required=True, type=Path)
-    args = parser.parse_args(argv)
-    try:
-        manifest = materialize_parquet(
-            args.source, args.destination, tokenizer_root=args.tokenizer_root,
-        )
-    except Exception as error:
-        # Parser, tokenizer and Arrow errors may quote private messages or
-        # schema values. Only the error class may leave the preparation host.
-        print(f"corpus conversion rejected: {type(error).__name__}", file=sys.stderr)
-        return 2
-    print(json.dumps({"manifest_sha256": manifest["sha256"],
-                      "rows": {k: v["rows"] for k, v in manifest["files"].items()},
-                      "status": "trainer_ready"}, sort_keys=True))
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

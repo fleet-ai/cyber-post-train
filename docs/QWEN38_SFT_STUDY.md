@@ -18,6 +18,9 @@ duplicate targets or submit bias, freeze roles, and verify native masks.
 Teacher cross-entropy on unseen successes diagnoses optimization, **not** exploit
 ability. Matched base/checkpoint Fleet pass@4 on runnable versions measures
 ability: select on DEV, confirm once on final, exclude infrastructure failures.
+The old paired structured-window DEV converter was unused and incompatible with
+the corrected dense TRAIN path; a new target-compatible DEV builder is still
+required before teacher cross-entropy can be trusted.
 
 ## Source-to-OpenCode compatibility
 
