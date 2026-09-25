@@ -23,20 +23,24 @@ atom overlaps and protected families leaves **408 candidate versions / 311
 families / 14 apps**. Metadata does not prove current runnability, and
 `training/qualify_live.py` never runs environments.
 
-One API canary created/deleted an environment but could not reconcile its
-create-request ID. Theseus #35155 repaired source; staging advertised it,
-production returned 404. `training/runtime_qualify.py` remains create-disabled
-pending deployment. No production qualification wave ran. The first 16 lack
-Pipeline Lanes/solvability receipts, and the 311-family pool lacks complete
-intended-path positive grading, negative-control and cleanup proof. Never
-select or reject tasks by baseline model outcomes.
+One API canary could not reconcile its create-request ID. Theseus #35155
+repaired that contract; staging advertised it, but production still returned
+404. `training/runtime_qualify.py` remains create-disabled; no production
+qualification wave ran. Registry and Pipeline Lanes had no positive record
+for these exact candidate versions.
 
-One staging rehearsal proved startup, tools, zero-credit negative grading and
-cleanup, **not** intended-path positive grading. Its source contained only a
-static request sketch, not a live positive witness. The old 75 receipts are
-also not automatically positive-qualified. Seek exact-version successful
-executions or sealed author witnesses; keep unknown `unproven`, not `broken`.
-Never select holdout tasks by baseline/candidate outcomes.
+A pre-freeze session census found 257 full-credit leads on 68 candidate task
+keys. Private checks of pinned task/environment versions, real bash output
+before flag submission, runtime-pinned full-credit grading and teardown proved
+**20 historical positive versions in 18 families**: six DEV and 12 final
+families, spanning 17 medium and three hard versions. The other 48 lead keys
+were for different task versions; 340 keys had no positive lead. This does
+not prove those tasks broken or runnable now. A second one-cell staging-only
+rehearsal on a historically proven DEV version passed startup, both tools,
+zero-credit negative grading and independently confirmed teardown. Staging
+is not production qualification. The old 75 receipts are also not
+automatically positive-qualified. Never select tasks by baseline or candidate
+model outcomes; preserve unknowns as `unproven`.
 
 ## Teacher3K family roles
 
