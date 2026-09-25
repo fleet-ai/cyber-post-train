@@ -20,8 +20,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 from urllib.parse import quote
-
-import httpx
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from evals.fleet import validate_protocol
 from evals.launch import TEAM_ID, FleetClient, LaunchError, _check_task, _families, _sha, digest
@@ -33,6 +32,18 @@ MODEL_ID = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
 HEADER = re.compile(r"[A-Za-z0-9-]+\Z")
 CONTEXT, OUTPUT = 98_304, 16_384
 PASS = "cyber_ctf_full_solve_v1"
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, msg, headers, url):
+        return None
+
+
+def _http(method: str, url: str, headers: dict, body: dict | None = None):
+    payload = None if body is None else json.dumps(body).encode()
+    request = Request(url, data=payload, method=method, headers=headers)
+    with build_opener(_NoRedirect).open(request, timeout=60) as response:
+        return response.read(2 << 20).decode(), response.headers
 
 
 def _url(task: dict, suffix: str) -> str:
@@ -146,12 +157,8 @@ def live_model_profile(served_id: str) -> dict:
     if not key:
         raise LaunchError("Fleet Qwen inference credential unavailable")
     headers = {"Authorization": "Bearer " + key, "X-Fleet-Model": served_id}
-    with httpx.Client(base_url="https://inference.flt.build", timeout=10, follow_redirects=False) as client:
-        model = client.get("/model_info", headers=headers)
-        server = client.get("/server_info", headers=headers)
-        model.raise_for_status()
-        server.raise_for_status()
-        info, runtime = model.json(), server.json()
+    info = json.loads(_http("GET", "https://inference.flt.build/model_info", headers)[0])
+    runtime = json.loads(_http("GET", "https://inference.flt.build/server_info", headers)[0])
     length = runtime.get("context_length")
     if (runtime.get("served_model_name") != served_id or type(length) is not int
             or (length not in (CONTEXT, 262_144) if served_id == "chris-q38-base-pass4-v1" else length != CONTEXT)):
@@ -169,19 +176,18 @@ def harness_version(image: str) -> str:
 
 
 def _mcp_tools(url: str, header: str, token: str) -> list[dict]:
-    headers = {header: token, "Accept": "application/json, text/event-stream"}
-    with httpx.Client(timeout=60) as client:
-        init = client.post(url, headers=headers, json={"jsonrpc": "2.0", "id": 1, "method": "initialize",
-            "params": {"protocolVersion": "2025-03-26", "capabilities": {},
-                       "clientInfo": {"name": "q38-direct-eval", "version": "1"}}})
-        init.raise_for_status()
-        if init.headers.get("mcp-session-id"):
-            headers["Mcp-Session-Id"] = init.headers["mcp-session-id"]
-        client.post(url, headers=headers, json={"jsonrpc": "2.0", "method": "notifications/initialized"}).raise_for_status()
-        result = client.post(url, headers=headers, json={"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
-        result.raise_for_status()
-    messages = ([result.text] if result.text.lstrip().startswith("{") else
-                [line[5:].strip() for line in result.text.splitlines() if line.startswith("data:")])
+    headers = {header: token, "Accept": "application/json, text/event-stream",
+               "Content-Type": "application/json"}
+    _, init_headers = _http("POST", url, headers, {"jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": {"protocolVersion": "2025-03-26", "capabilities": {},
+                   "clientInfo": {"name": "q38-direct-eval", "version": "1"}}})
+    if init_headers.get("Mcp-Session-Id"):
+        headers["Mcp-Session-Id"] = init_headers["Mcp-Session-Id"]
+    _http("POST", url, headers, {"jsonrpc": "2.0", "method": "notifications/initialized"})
+    body, _ = _http("POST", url, headers, {"jsonrpc": "2.0", "id": 2,
+                                         "method": "tools/list", "params": {}})
+    messages = ([body] if body.lstrip().startswith("{") else
+                [line[5:].strip() for line in body.splitlines() if line.startswith("data:")])
     tools = None
     for raw in messages:
         try:
