@@ -7,9 +7,9 @@ improves performance on genuinely held-out tasks. Current research focus is
 Qwen; do not start GLM work without a new request. Training loss, a running
 job, and an ungraded rollout are not evidence of capability lift.
 
-This repository was reset in September 2026 and currently has no live job
-launcher or evaluation service. These instructions constrain future tooling
-and separately authorized operations; they do not authorize a new launch,
+This repository was reset in September 2026 and now contains bounded training
+and evaluation launchers, but no always-on service. These instructions constrain
+separately authorized operations; they do not authorize a new launch,
 deployment, cancellation, preemption, or paid evaluation. For status,
 diagnosis, or review requests, inspect only.
 
