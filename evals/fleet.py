@@ -26,8 +26,9 @@ COMMON_FIELDS = {
 EVENT_FIELDS = {
     "protocol_sha256", "arm", "task_version_id", "attempt", "seed",
     "model_revision", "weights_sha256", "checkpoint_sha256", "process_exit_code", "termination",
-    "verifier_sha256", "verifier_status", "success",
+    "budget_evidence_sha256", "verifier_sha256", "verifier_status", "success",
 }
+PLANNED_BUDGET_TERMINATIONS = {"planned_max_steps", "planned_wall_deadline"}
 
 
 def _digest(value: dict) -> str:
@@ -140,10 +141,21 @@ def validate_protocol(value: dict) -> dict:
 
 
 def _outcome(event: dict, task: dict) -> str:
-    """An unsuccessful *completed* attempt is valid; runtime failures are not zeros."""
-    if type(event["process_exit_code"]) is not int or event["process_exit_code"] != 0:
+    """Only a proven planned budget or normal completion can be a model outcome.
+
+    The adapter must derive planned-budget status from the authoritative Fleet
+    session, never from elapsed time or a nonzero process exit, and bind that
+    sanitized receipt by digest. This offline function cannot inspect it.
+    """
+    planned = event["termination"] in PLANNED_BUDGET_TERMINATIONS
+    evidence = event["budget_evidence_sha256"]
+    if planned and not _sha(evidence):
+        reason = "unproven_budget_exhaustion"
+    elif not planned and evidence is not None:
+        raise ValueError("budget evidence without planned budget termination")
+    elif type(event["process_exit_code"]) is not int or event["process_exit_code"] != 0:
         reason = "process_error"
-    elif event["termination"] != "completed":
+    elif event["termination"] not in {"completed", *PLANNED_BUDGET_TERMINATIONS}:
         reason = "output_limit" if event["termination"] == "output_limit" else "abnormal_termination"
     elif event["verifier_status"] != "completed":
         reason = "verifier_incomplete"
@@ -174,7 +186,7 @@ def _tail_inverse(n: int, k: int, target: float) -> float:
 
 
 def summarize(protocol: dict, events: list[dict]) -> dict:
-    """Return a paired family result only when every planned attempt is valid."""
+    """Preserve incomplete cells; publish a decision only for the full roster."""
     validate_protocol(protocol)
     tasks = {task["task_version_id"]: task for task in protocol["tasks"]}
     seed_policy = protocol["common"]["seed_policy"]
@@ -205,6 +217,17 @@ def summarize(protocol: dict, events: list[dict]) -> dict:
     expected = {(arm, version, attempt) for arm in ("base", "candidate")
                 for version in tasks for attempt in range(1, 5)}
     missing = expected - cells.keys()
+    complete_versions = [version for version in tasks if all(
+        (arm, version, attempt) in cells and (arm, version, attempt) not in invalid
+        for arm in ("base", "candidate") for attempt in range(1, 5)
+    )]
+    provisional = [{
+        "application": tasks[version]["application"],
+        "family_id": tasks[version]["family_id"],
+        "task_version_id": version,
+        "base_pass4": any(cells["base", version, i]["success"] for i in range(1, 5)),
+        "candidate_pass4": any(cells["candidate", version, i]["success"] for i in range(1, 5)),
+    } for version in complete_versions]
     result = {
         "protocol_sha256": protocol["sha256"], "role": protocol["role"],
         "seed_policy": seed_policy["mode"],
@@ -222,6 +245,12 @@ def summarize(protocol: dict, events: list[dict]) -> dict:
         "missing_cells": [list(key) for key in sorted(missing)],
         "invalid_cells": [{"cell": list(key), "reason": invalid[key]} for key in sorted(invalid)],
         "invalid_reasons": {reason: sum(x == reason for x in invalid.values()) for reason in sorted(set(invalid.values()))},
+        "complete_families": len(complete_versions),
+        "provisional_family_results": provisional,
+        "provisional_candidate_minus_base_pass4": (
+            sum(row["candidate_pass4"] - row["base_pass4"] for row in provisional) / len(provisional)
+            if provisional else None
+        ),
     }
     if missing or invalid:
         return {**result, "status": "incomplete", "candidate_minus_base_pass4": None,

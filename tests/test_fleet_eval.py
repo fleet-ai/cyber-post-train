@@ -63,6 +63,7 @@ def events(plan, *, candidate_wins=()):
                     "weights_sha256": artifact["weights_sha256"],
                     "checkpoint_sha256": artifact.get("checkpoint_sha256"),
                     "process_exit_code": 0, "termination": "completed",
+                    "budget_evidence_sha256": None,
                     "verifier_sha256": task["verifier_sha256"],
                     "verifier_status": "completed",
                     "success": arm == "candidate" and version in candidate_wins and attempt == 1,
@@ -154,6 +155,49 @@ class FleetEvalTests(unittest.TestCase):
             self.assertIsNone(result["candidate_minus_base_pass4"])
             self.assertEqual(result["infrastructure_invalid_attempts"], 1)
             self.assertEqual(result["invalid_cells"][0]["cell"], ["base", "version-0", 1])
+
+    def test_planned_budget_is_valid_only_with_authoritative_receipt_and_verifier(self):
+        plan = protocol()
+        for termination in ("planned_max_steps", "planned_wall_deadline"):
+            rows = events(plan)
+            rows[0]["termination"] = termination
+            rows[0]["budget_evidence_sha256"] = sha("9")
+            result = summarize(plan, rows)
+            self.assertEqual(result["status"], "complete")
+            self.assertEqual(result["infrastructure_invalid_attempts"], 0)
+
+            rows[0]["budget_evidence_sha256"] = None
+            with self.assertRaisesRegex(ValueError, "cannot carry a capability result"):
+                summarize(plan, rows)
+            rows[0]["success"] = None
+            self.assertEqual(summarize(plan, rows)["invalid_reasons"],
+                             {"unproven_budget_exhaustion": 1})
+
+            rows[0]["budget_evidence_sha256"] = sha("9")
+            rows[0]["verifier_status"] = "missing"
+            self.assertEqual(summarize(plan, rows)["invalid_reasons"],
+                             {"verifier_incomplete": 1})
+
+            rows[0]["verifier_status"] = "completed"
+            rows[0]["process_exit_code"] = 1
+            self.assertEqual(summarize(plan, rows)["invalid_reasons"],
+                             {"process_error": 1})
+
+    def test_provisional_complete_family_subset_is_not_a_final_claim(self):
+        plan = protocol(count=3)
+        rows = events(plan, candidate_wins={"version-0", "version-2"})
+        rows = [row for row in rows if row["task_version_id"] != "version-1"]
+        rows[-1]["termination"] = "output_limit"
+        rows[-1]["success"] = None
+        result = summarize(plan, rows)
+        self.assertEqual(result["status"], "incomplete")
+        self.assertEqual(result["complete_families"], 1)
+        self.assertEqual(result["provisional_family_results"][0]["task_version_id"], "version-0")
+        self.assertEqual(result["provisional_candidate_minus_base_pass4"], 1.0)
+        self.assertIsNone(result["candidate_minus_base_pass4"])
+        self.assertIsNone(result["conditional_95pct_interval"])
+        with self.assertRaisesRegex(ValueError, "complete development"):
+            dev_decision(result)
 
     def test_missing_duplicate_seed_and_checkpoint_mismatch(self):
         plan = protocol()
