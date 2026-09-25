@@ -32,6 +32,9 @@ DEV-family-first 16-cell roster is frozen. Its manifest authorizes no bulk
 launch; after the first two cells' exact cleanup audits, the runtime checker
 permits the 16 frozen DEV representatives one at a time as bounded, model-free
 diagnostics after fresh live preflight.
+An exact-atom Registry query for those first 16 families found records for
+only three; all five records were author/build stages, not solvability or
+current-version grading proof. Registry presence cannot promote this wave.
 The September 25 DEV screen attempted all 16 frozen representatives, one at a
 time: 12 passed startup, both task tools, zero-score negative grading, and
 cleanup; two were rejected before creation because the exact task metadata
