@@ -6,14 +6,13 @@ import json
 import tempfile
 import time
 import unittest
-from functools import lru_cache
 from pathlib import Path
 from unittest import mock
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from training import launch
+from training import dense_bridge, launch
 from training.runtime import MODEL, TOKENIZER_FILES
 
 
@@ -21,33 +20,44 @@ CONFIG = Path(__file__).resolve().parents[1] / "configs/runs/qwen38-96k-mechanic
 FULL_CONFIG = Path(__file__).resolve().parents[1] / "configs/runs/qwen38-96k-full-v1.json"
 
 
-@lru_cache
 def mechanics_parquet() -> bytes:
-    rows = [{"source_session_id": f"session-{i}", "window_id": f"window-{i}",
-             "input_ids": [1] * 90_000, "loss_mask": [0] * 89_999 + [1],
-             "token_count": 90_000, "target_token_count": 1, "task_key": "train-family"} for i in range(8)]
+    rows = [{"source_session_id": f"session-{i}", "token_count": 90_000,
+             "split": "train"} for i in range(16)]
     sink = pa.BufferOutputStream()
     pq.write_table(pa.Table.from_pylist(rows), sink)
     return sink.getvalue().to_pybytes()
 
 
 def fake_mechanics_manifest() -> dict:
-    digest = lambda char: "sha256:" + char * 64
-    value = {"schema": "cyber_dense_sft_corpus_v1", "algorithm": launch.MECHANICS_METHOD,
-             "trainer_ready": False, "validation_mode": "task_outcomes_only",
-             "split_sha256": digest("a"), "materialization": {"request_sha256": digest("b")},
-             "builder_sha256": {"message_aligned_teacher_corpus.py": launch.MECHANICS_BUILDER},
+    value = {"schema": "cyber_dense_sft_corpus_v1", "algorithm": dense_bridge.ALGORITHM,
+             "validation_mode": "task_outcomes_only", "source_sha256": "sha256:" + "a" * 64,
+             "split_sha256": dense_bridge.TARGET_ANCHOR_SHA,
+             "max_length": 98304, "context_tokens": 98304,
+             "materialization": {"normalized_sha256": launch.PROVISIONAL_NORMALIZED,
+                                 "success_evidence_sha256": launch.PROVISIONAL_EVIDENCE,
+                                 "family_role_anchor_sha256": dense_bridge.TARGET_ANCHOR_SHA},
+             "builder_sha256": {"message_aligned_teacher_corpus.py": launch.MECHANICS_BUILDER,
+                                "dense.py": "sha256:" + dense_bridge.SOURCES["training/dense.py"],
+                                "corpus.py": "sha256:" + dense_bridge.SOURCES["training/corpus.py"],
+                                "native_helper": dense_bridge.NATIVE_HELPER_SHA},
              "tokenizer": {"repo": MODEL[0], "revision": MODEL[1],
                            "files": [{"path": p, "sha256": d} for p, d in TOKENIZER_FILES.items()],
                            "chat_template_sha256": TOKENIZER_FILES["chat_template.jinja"]},
-             "diagnostic": {"schema": "qwen38_provisional96_mechanics_v1", "purpose": "one_step_mechanics_only",
-                            "source_receipt_file_sha256": launch.PROVISIONAL_SOURCE,
-                            "parent_method_sha256": digest("c"), "parent_train_sha256": digest("d")},
              "files": {"train": {"path": "train.parquet", "sha256": "sha256:" + launch.sha(mechanics_parquet()),
-                                 "rows": 8, "task_keys": ["train-family"], "format": "pretokenized_assistant_segments_v1",
-                                 "supervised_tokens": 8, "source_sessions": 8, "assistant_responses": 8,
-                                 "source_total_assistant_responses": 8, "excluded_assistant_responses": 0}}}
+                                 "rows": 16, "task_keys": ["train-family"], "format": "pretokenized_assistant_segments_v1",
+                                 "supervised_tokens": 16, "source_sessions": 16, "assistant_responses": 16,
+                                 "source_total_assistant_responses": 16, "excluded_assistant_responses": 0}}}
     value["sha256"] = "sha256:" + launch.sha(launch.canonical(value))
+    return value
+
+
+def fake_mechanics_receipt(manifest: dict, payload: bytes) -> dict:
+    train = manifest["files"]["train"]
+    value = {"schema": dense_bridge.RECEIPT_SCHEMA, "manifest_file_sha256": "sha256:" + launch.sha(payload),
+             "manifest_sha256": manifest["sha256"], "train_parquet_sha256": train["sha256"],
+             "source_selection_sha256": manifest["source_sha256"], "rows": train["rows"],
+             "source_sessions": train["source_sessions"], "supervised_tokens": train["supervised_tokens"]}
+    value["sha256"] = dense_bridge._legacy_digest(value)
     return value
 
 
@@ -99,7 +109,7 @@ def native_preflight(receipt: dict) -> dict:
             "checked": ["native_sources", "model_files", "dataset_files", "native_config",
                         "native_forward_backward_signature", "native_train_only_loader",
                         "tokenization", "target_accounting"],
-            "counts": {"train": {"rows": 8, "supervised_tokens": 8}}}
+            "counts": {"train": {"rows": 16, "supervised_tokens": 16}}}
 
 
 class LaunchTests(unittest.TestCase):
@@ -108,12 +118,15 @@ class LaunchTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.config = json.loads(CONFIG.read_text())
-        self.config["data"]["manifest"] = "qwen38-96k-mechanics-v1.manifest.json"
+        self.config["data"]["manifest"] = "manifest.json"
         (self.root / "train.parquet").write_bytes(mechanics_parquet())
-        (self.root / "qwen38-96k-mechanics-v1.manifest.json").write_text(json.dumps(fake_mechanics_manifest()))
+        manifest = fake_mechanics_manifest()
+        payload = (json.dumps(manifest) + "\n").encode()
+        (self.root / "manifest.json").write_bytes(payload)
+        (self.root / "RECEIPT.json").write_text(json.dumps(fake_mechanics_receipt(manifest, payload)))
         self.config_path = self.root / "run.json"
-        self.witness = mock.patch.object(launch, "_require_subset_witness")
-        self.witness.start(); self.addCleanup(self.witness.stop)
+        self.projection = mock.patch.object(launch, "_require_projection_receipt")
+        self.projection.start(); self.addCleanup(self.projection.stop)
 
     def prepare(self) -> tuple[Path, dict]:
         self.config_path.write_text(json.dumps(self.config))
@@ -125,7 +138,7 @@ class LaunchTests(unittest.TestCase):
         dest, request = self.prepare()
         plan, rebuilt, receipt = launch.prepared(dest)
         self.assertEqual(request, rebuilt)
-        self.assertEqual(plan["recipe"]["max_steps"], 1)
+        self.assertEqual((plan["recipe"]["max_steps"], plan["pause_after_step"]), (2, 1))
         self.assertEqual(plan["recipe"]["max_length"], 98304)
         self.assertEqual(plan["validation_mode"], "task_outcomes_only")
         self.assertEqual(set(plan["datasets"]), {"train"})
@@ -138,10 +151,16 @@ class LaunchTests(unittest.TestCase):
             "validate_preview", {"request": request, "preview": fake_preview(request)}
         )["gpus"], 8)
 
-    def test_real_prepare_rejects_unproven_parent_membership(self) -> None:
-        self.witness.stop()
+    def test_parent_receipt_binding_is_required(self) -> None:
+        (self.root / "RECEIPT.json").write_text("{}")
         self.config_path.write_text(json.dumps(self.config))
-        with self.assertRaisesRegex(ValueError, "TRAIN subset membership"):
+        with self.assertRaisesRegex(ValueError, "complete-session v2 parent"):
+            launch.prepare(self.config_path, self.root / "unproven")
+
+    def test_real_prepare_rejects_unsealed_projection(self) -> None:
+        self.projection.stop()
+        self.config_path.write_text(json.dumps(self.config))
+        with self.assertRaisesRegex(ValueError, "TRAIN-only projection receipt"):
             launch.prepare(self.config_path, self.root / "unproven")
 
     def test_rendered_root_alert_and_priority_drift_fail_closed(self) -> None:
@@ -181,22 +200,22 @@ class LaunchTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "prepared binding changed"):
             launch.prepared(dest)
 
-    def test_mechanics_rejects_extra_rows_and_accepted_science_claim(self) -> None:
-        manifest = fake_mechanics_manifest()
-        manifest["files"]["train"]["rows"] = 9
-        manifest.pop("sha256")
-        manifest["sha256"] = "sha256:" + launch.sha(launch.canonical(manifest))
-        (self.root / "qwen38-96k-mechanics-v1.manifest.json").write_text(json.dumps(manifest))
-        self.config_path.write_text(json.dumps(self.config))
-        with self.assertRaisesRegex(ValueError, "eight-row provisional"):
-            launch.prepare(self.config_path, self.root / "too-many")
-        manifest = fake_mechanics_manifest()
-        manifest["trainer_ready"] = True
-        manifest.pop("sha256")
-        manifest["sha256"] = "sha256:" + launch.sha(launch.canonical(manifest))
-        (self.root / "qwen38-96k-mechanics-v1.manifest.json").write_text(json.dumps(manifest))
-        with self.assertRaisesRegex(ValueError, "eight-row provisional"):
-            launch.prepare(self.config_path, self.root / "false-science")
+    def test_mechanics_rejects_source_drift_and_science_claim(self) -> None:
+        for field in ("source", "claim"):
+            with self.subTest(field=field):
+                manifest = fake_mechanics_manifest()
+                if field == "source":
+                    manifest["materialization"]["normalized_sha256"] = "sha256:" + "0" * 64
+                else:
+                    manifest["trainer_ready"] = True
+                manifest.pop("sha256")
+                manifest["sha256"] = "sha256:" + launch.sha(launch.canonical(manifest))
+                payload = json.dumps(manifest).encode()
+                (self.root / "manifest.json").write_bytes(payload)
+                (self.root / "RECEIPT.json").write_text(json.dumps(fake_mechanics_receipt(manifest, payload)))
+                self.config_path.write_text(json.dumps(self.config))
+                with self.assertRaisesRegex(ValueError, "complete-session v2 parent"):
+                    launch.prepare(self.config_path, self.root / "bad")
 
     def test_cpu_job_is_exact_zero_gpu_c1_q1_and_root_alerts_off(self) -> None:
         dest, request = self.prepare()

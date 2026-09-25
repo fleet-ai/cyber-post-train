@@ -72,8 +72,8 @@ consuming the last available slot.
 - Split by reviewed task family, keeping every version and session of one
   family together. Keep development and test tasks out of SFT, preferences,
   and RL. Aim for representative train/test coverage; do not call a
-  family-held-out split application-held-out. The split helper cannot certify
-  task quality or family lineage on its own.
+  family-held-out split application-held-out. Use the reviewed family-role
+  roster; a seed hash cannot certify task quality or lineage.
 - Compare baseline and trained checkpoints with the same task set, harness,
   budgets, scoring, and retry policy. Record exact model/checkpoint, tokenizer,
   prompt, tool schema, environment, verifier, image, and protocol identities.
@@ -106,7 +106,7 @@ The retained JSON files are historical observations. Do not turn a dated
 checkpoint path, task count, or candidate qualification into a claim about
 current availability or scientific validity without checking the source system.
 Group task versions by reviewed application and task family before splitting;
-the split helper alone does not establish that lineage.
+the reviewed family-role roster is the split authority.
 
 Keep scripts focused, standard-library-only when practical, and tested at
 their actual input/output boundary. Remove obsolete versions instead of

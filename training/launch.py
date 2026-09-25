@@ -33,10 +33,10 @@ FULL_DATA_ROOT = "/mnt/sfs/jobs/chris-q38-corrected-corpus-v1/full96-data"
 MECHANICS_NAME = "chris-q38-prov96-step1-v1"
 MECHANICS_OUTPUT = f"/mnt/sfs/jobs/{MECHANICS_NAME}"
 MECHANICS_DATA_ROOT = "/mnt/sfs/jobs/chris-q38-provisional96-corpus-v1/step1-data"
-MECHANICS_METHOD = "opencode_1_18_27_target_anchor_visible_only_multi_target_v2"
 MECHANICS_BUILDER = "sha256:178d2c4f2ed3d6ad98bd1915b434b61cc714fb157cc30314e9aaf076ab4ae02c"
 PROVISIONAL_SOURCE = "sha256:ffb3a687c4f1a325d2000dec30855f90cf6166acf7e03c7c6e13acbc5cf9a54a"
-MIN_MECHANICS_TOKENS = 90_000
+PROVISIONAL_NORMALIZED = "sha256:cb72d652909c43f2c18514c1c9c9f78872e23306156000991697e025388922d4"
+PROVISIONAL_EVIDENCE = "sha256:4d28f14230b4ae66e34152afaba2fa69b7c3d6627f968d527dc1335645beb6b8"
 SOURCES = {
     "training/__init__.py": "ecf358039bbb9b6cbab6546c9b1e61b9bc06c5b2d5b19907ff303a9277d77e27",
     "training/io.py": "7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
@@ -153,11 +153,11 @@ def _require_profile_config(config: dict, full: bool) -> None:
     name, output, data_root, group, manifest = (
         (FULL_NAME, FULL_OUTPUT, FULL_DATA_ROOT, "qwen38-corrected-teacher96-full-v1", "qwen38-96k-full-v1.manifest.json")
         if full else (MECHANICS_NAME, MECHANICS_OUTPUT, MECHANICS_DATA_ROOT,
-                      "qwen38-provisional96-mechanics-v1", "qwen38-96k-mechanics-v1.manifest.json"))
+                      "qwen38-provisional96-mechanics-v1", "manifest.json"))
     recipe, data, wandb = (config.get(key, {}) for key in ("recipe", "data", "wandb"))
     expected = {**COMMON_RECIPE, "epochs": 1, "lr": 3e-6, "seed": 20260925,
                 "eval_interval": 50 if full else 0, "checkpoint_interval": 50 if full else 1,
-                "keep_checkpoints": "all" if full else 1}
+                "keep_checkpoints": "all" if full else 2}
     if (config.get("name") != name or config.get("output_root") != output
         or config.get("backend") != "skyrl" or config.get("cluster", {}).get("priority") != "c1"
         or config.get("model", {}).get("root") != "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2"
@@ -165,62 +165,54 @@ def _require_profile_config(config: dict, full: bool) -> None:
         or any(recipe.get(key) != value for key, value in expected.items())
         or wandb.get("entity") != "thefleet" or wandb.get("project") != "cyber-post-train"
         or wandb.get("group") != group or wandb.get("run_id") != name
-        or wandb.get("name") != name):
+        or wandb.get("name") != name or (not full and config.get("pause_after_step") != 1)):
         raise ValueError("96k profile identity, science, or c1 recipe differs")
 
 
-def _require_mechanics_manifest(manifest: dict, local_path: Path | None = None) -> None:
+def _require_mechanics_manifest(manifest: dict, manifest_bytes: bytes, receipt_bytes: bytes,
+                                parquet: Path | None = None) -> None:
+    from . import dense_bridge as dense
     from .runtime import MODEL, TOKENIZER_FILES
-    train, diagnostic = manifest.get("files", {}).get("train", {}), manifest.get("diagnostic", {})
-    bound_sha = lambda value: isinstance(value, str) and re.fullmatch(r"sha256:[a-f0-9]{64}", value)
+    train, material = manifest.get("files", {}).get("train", {}), manifest.get("materialization", {})
+    receipt = json.loads(receipt_bytes)
     if (manifest.get("schema") != "cyber_dense_sft_corpus_v1"
-        or manifest.get("sha256") != "sha256:" + sha(canonical(
-            {key: value for key, value in manifest.items() if key != "sha256"}))
-        or manifest.get("algorithm") != MECHANICS_METHOD
-        or manifest.get("trainer_ready") is not False
+        or manifest.get("sha256") != dense._legacy_digest({k: v for k, v in manifest.items() if k != "sha256"})
+        or manifest.get("algorithm") != dense.ALGORITHM or "trainer_ready" in manifest
         or manifest.get("validation_mode") != "task_outcomes_only"
         or set(manifest.get("files", {})) != {"train"}
-        or manifest.get("builder_sha256", {}).get("message_aligned_teacher_corpus.py") != MECHANICS_BUILDER
+        or manifest.get("builder_sha256") != {
+            "message_aligned_teacher_corpus.py": MECHANICS_BUILDER,
+            "dense.py": "sha256:" + dense.SOURCES["training/dense.py"],
+            "corpus.py": "sha256:" + dense.SOURCES["training/corpus.py"],
+            "native_helper": dense.NATIVE_HELPER_SHA}
         or any(manifest.get("tokenizer", {}).get(key) != value for key, value in {
             "repo": MODEL[0], "revision": MODEL[1],
             "files": [{"path": p, "sha256": d} for p, d in TOKENIZER_FILES.items()]}.items())
-        or not bound_sha(manifest.get("split_sha256"))
-        or not bound_sha(manifest.get("materialization", {}).get("request_sha256"))
-        or diagnostic.get("schema") != "qwen38_provisional96_mechanics_v1"
-        or diagnostic.get("purpose") != "one_step_mechanics_only"
-        or diagnostic.get("source_receipt_file_sha256") != PROVISIONAL_SOURCE
-        or not bound_sha(diagnostic.get("parent_method_sha256"))
-        or not bound_sha(diagnostic.get("parent_train_sha256"))
+        or manifest.get("split_sha256") != dense.TARGET_ANCHOR_SHA
+        or material.get("normalized_sha256") != PROVISIONAL_NORMALIZED
+        or material.get("success_evidence_sha256") != PROVISIONAL_EVIDENCE
+        or material.get("family_role_anchor_sha256") != dense.TARGET_ANCHOR_SHA
+        or manifest.get("max_length") != 98304 or manifest.get("context_tokens") != 98304
         or train.get("format") != "pretokenized_assistant_segments_v1" or train.get("path") != "train.parquet"
-        or not bound_sha(train.get("sha256"))
-        or train.get("rows") != 8 or train.get("source_sessions") != 8
-        or type(train.get("supervised_tokens")) is not int or train["supervised_tokens"] <= 0
-        or type(train.get("assistant_responses")) is not int or train["assistant_responses"] < 8
-        or type(train.get("excluded_assistant_responses")) is not int or train["excluded_assistant_responses"] < 0
-        or train["assistant_responses"] + train["excluded_assistant_responses"]
-           != train.get("source_total_assistant_responses")):
-        raise ValueError("eight-row provisional dense mechanics receipt is missing")
-    if local_path is not None:
-        import pyarrow.parquet as pq
-        parquet = local_path.parent / "train.parquet"
-        if parquet.is_symlink() or not parquet.is_file() or "sha256:" + sha(parquet.read_bytes()) != train["sha256"]:
-            raise ValueError("local provisional Parquet differs from manifest")
-        rows = pq.read_table(parquet, columns=["source_session_id", "window_id", "input_ids",
-                                               "loss_mask", "token_count", "target_token_count", "task_key"]).to_pylist()
-        if (len(rows) != 8 or len({r["source_session_id"] for r in rows}) != 8
-            or len({r["window_id"] for r in rows}) != 8 or {r["task_key"] for r in rows} != set(train.get("task_keys", []))
-            or any(not MIN_MECHANICS_TOKENS <= len(r["input_ids"]) <= 98304
-                   or len(r["input_ids"]) != r["token_count"] or len(r["loss_mask"]) != r["token_count"]
-                   or r["target_token_count"] != sum(r["loss_mask"])
-                   for r in rows)
-            or sum(r["target_token_count"] for r in rows) != train["supervised_tokens"]):
-            raise ValueError("eight distinct near-96k native rows are not proven")
-    _require_subset_witness(manifest)
+        or type(train.get("rows")) is not int or train["rows"] <= 8
+        or type(train.get("source_sessions")) is not int or train["source_sessions"] < 8
+        or receipt.get("schema") != dense.RECEIPT_SCHEMA
+        or receipt.get("sha256") != dense._legacy_digest({k: v for k, v in receipt.items() if k != "sha256"})
+        or receipt.get("manifest_file_sha256") != "sha256:" + sha(manifest_bytes)
+        or receipt.get("manifest_sha256") != manifest["sha256"]
+        or receipt.get("train_parquet_sha256") != train.get("sha256")
+        or receipt.get("source_selection_sha256") != manifest.get("source_sha256")
+        or (receipt.get("rows"), receipt.get("source_sessions"), receipt.get("supervised_tokens"))
+           != (train["rows"], train["source_sessions"], train.get("supervised_tokens"))):
+        raise ValueError("sealed complete-session v2 parent corpus is not qualified")
+    if parquet is not None and (parquet.is_symlink() or not parquet.is_file()
+                                or dense._file_sha(parquet) != train["sha256"]):
+        raise ValueError("parent v2 TRAIN Parquet differs from sealed receipt")
+    _require_projection_receipt(manifest)
 
 
-def _require_subset_witness(_manifest: dict) -> None:
-    # No parent-v2 row-membership/role proof exists yet; a self-declared hash is insufficient.
-    raise ValueError("sealed v2 TRAIN subset membership witness is not qualified")
+def _require_projection_receipt(_manifest: dict) -> None:
+    raise ValueError("independent v2 TRAIN-only projection receipt is not qualified")
 
 
 def _require_goal_anchor(_manifest: dict) -> None:
@@ -276,10 +268,12 @@ def prepare(config_path: Path, destination: Path) -> dict:
     manifest_path = source if source.is_absolute() else config_path.parent / source
     manifest_bytes = manifest_path.read_bytes()
     manifest = json.loads(manifest_bytes)
+    mechanics_receipt = b"" if full else (manifest_path.parent / "RECEIPT.json").read_bytes()
     if full:
         _require_full_manifest(manifest, config["data"]["root"])
     else:
-        _require_mechanics_manifest(manifest, manifest_path)
+        _require_mechanics_manifest(manifest, manifest_bytes, mechanics_receipt,
+                                    manifest_path.parent / "train.parquet")
     staged = json.loads(json.dumps(config))
     if full:
         rows, batch = manifest["files"]["train"]["rows"], config["recipe"]["batch_size"]
@@ -296,7 +290,7 @@ def prepare(config_path: Path, destination: Path) -> dict:
         or set(plan["datasets"]) != ({"train", "dev"} if full else {"train"})
         or (full and plan["datasets"]["dev"].get("format") != "chat_messages_last_assistant_v2")
         or plan["schema"] != "cyber_sft_runtime_dense_v1"
-        or (not full and (plan["recipe"]["max_steps"] != 1
+        or (not full and (plan.get("pause_after_step") != 1 or plan["recipe"]["max_steps"] <= 1
                           or plan["recipe"]["checkpoint_interval"] != 1
                           or plan["recipe"]["eval_interval"] != 0))
         or plan["recipe"]["keep_checkpoints"] <
@@ -322,6 +316,10 @@ def prepare(config_path: Path, destination: Path) -> dict:
         "plan_sha256": sha(canonical(plan)), "request_sha256": sha(canonical(request)),
         "status": "prepared_not_submitted", "purpose": "full_sft" if full else "one_step_mechanics_only",
     }
+    if not full:
+        receipt["corpus_receipt_file_sha256"] = sha(mechanics_receipt)
+        receipt["provisional_source_receipt_file_sha256"] = PROVISIONAL_SOURCE
+        receipt["train_parquet_sha256"] = manifest["files"]["train"]["sha256"]
     if full:
         receipt["supervised_tokens"] = plan["datasets"]["train"]["supervised_tokens"]
         interval = plan["recipe"]["checkpoint_interval"]
@@ -329,6 +327,8 @@ def prepare(config_path: Path, destination: Path) -> dict:
         receipt["checkpoint_retention_capacity"] = plan["recipe"]["keep_checkpoints"]
     destination.mkdir(parents=True)
     (destination / "corpus.manifest.json").write_bytes(manifest_bytes)
+    if not full:
+        (destination / "corpus.RECEIPT.json").write_bytes(mechanics_receipt)
     for name, value in (("plan.json", plan), ("request.json", request), ("PREPARED.json", receipt)):
         (destination / name).write_bytes(canonical(value) + b"\n")
     return receipt
@@ -364,13 +364,18 @@ def prepared(directory: Path) -> tuple[dict, dict, dict]:
             or receipt.get("supervised_tokens") != plan["datasets"]["train"]["supervised_tokens"]):
             raise ValueError("full run evidence/retention binding changed")
     elif receipt.get("schema") == "qwen38_96k_mechanics_prepared_v1":
-        _require_mechanics_manifest(manifest)
+        mechanics_receipt = (directory / "corpus.RECEIPT.json").read_bytes()
+        _require_mechanics_manifest(manifest, manifest_bytes, mechanics_receipt)
         if (receipt.get("purpose") != "one_step_mechanics_only"
+            or receipt.get("corpus_receipt_file_sha256") != sha(mechanics_receipt)
+            or receipt.get("provisional_source_receipt_file_sha256") != PROVISIONAL_SOURCE
+            or receipt.get("train_parquet_sha256") != manifest["files"]["train"]["sha256"]
             or plan.get("schema") != "cyber_sft_runtime_dense_v1"
             or plan.get("validation_mode") != "task_outcomes_only"
             or set(plan.get("datasets", {})) != {"train"}
             or plan.get("corpus_manifest_sha256") != manifest["sha256"]
-            or plan["recipe"]["max_steps"] != 1 or plan["recipe"]["eval_interval"] != 0
+            or plan.get("pause_after_step") != 1 or plan["recipe"]["max_steps"] <= 1
+            or plan["recipe"]["eval_interval"] != 0
             or plan["recipe"]["checkpoint_interval"] != 1
             or request["name"] != MECHANICS_NAME or request["run_dir"] != MECHANICS_OUTPUT):
             raise ValueError("one-step mechanics binding changed")
@@ -396,8 +401,7 @@ def _preflight_matches(result: dict, receipt: dict) -> bool:
         and all(counts[split].get("rows", 0) > 0 and
                 counts[split].get("supervised_tokens", 0) > 0
                 for split in counts)
-        and (receipt["schema"] == "qwen38_96k_full_prepared_v1"
-             or counts["train"]["rows"] == 8)
+        and (receipt["schema"] == "qwen38_96k_full_prepared_v1" or counts["train"]["rows"] > 8)
     )
 
 
