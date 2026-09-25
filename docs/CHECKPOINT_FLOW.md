@@ -25,13 +25,12 @@ space and any project cap before admission; do not delete another run's data.
 For each saved step `S`, bind the exact run ID/UID, image, plan and corpus
 digests, then require all of these distinct gates:
 
-1. Digest-valid `checkpoint_receipts/step-<S:06>.json` and, at scheduled teacher
-   CE steps, `validation/step-<S:06>.json`, both matching the plan and step.
+1. Digest-valid `checkpoint_receipts/step-<S:06>.json` and teacher-CE
+   `validation/step-<S:06>.json` at every saved step, both matching the plan and step.
    The CPU sealer must inventory and hash all native rank files, verify the
    trainer/sampler cursor, and reject files changing during its read.
-   A final tail step is forcibly saved, but the current runtime does not
-   explicitly force teacher CE there; require its receipt or qualify a separate
-   CE job before claiming every checkpoint has teacher-loss evidence.
+   Pinned SkyRL evaluates an off-interval final step after saving; its receipt
+   uses the true optimizer step `N` even though W&B logs that last loss at `N+1`.
 2. CPU-only seal and BF16 export to *new* step-specific paths; export must
    reopen every tensor, match exact key/shape/dtype and base sidecars, preserve
    source hashes, and publish atomically with `EXPORT.json`.

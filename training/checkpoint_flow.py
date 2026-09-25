@@ -212,6 +212,15 @@ def _payload(paths: dict, exported: dict) -> None:
             raise ValueError("BF16 payload changed after reload check")
 
 
+def _teacher_ce(plan: dict, prepared: dict, step: int) -> dict:
+    path = Path(plan["output_root"]) / "validation" / f"step-{step:06d}.json"
+    dev = _receipt(path)
+    if dev.get("optimizer_step") != step or dev.get("plan_sha256") != prepared["plan_sha256"]:
+        raise ValueError("teacher-loss development receipt differs from checkpoint")
+    return {"teacher_loss_receipt_sha256": dev["receipt_sha256"],
+            "teacher_loss_file_sha256": _file_sha(path)}
+
+
 def run(directory: Path, step: int, stage: str) -> dict:
     if stage not in STAGES:
         raise ValueError("unknown checkpoint stage")
@@ -262,15 +271,8 @@ def run(directory: Path, step: int, stage: str) -> dict:
                          "cpu_check_receipt_sha256": cpu["receipt_sha256"],
                          "gpu_check_receipt_sha256": gpu["receipt_sha256"],
                          "serving_qualified": False, "task_evaluated": False}
-                if (plan.get("validation_mode") == "teacher_cross_entropy"
-                    and step % plan["recipe"]["eval_interval"] == 0):
-                    dev_path = Path(plan["output_root"]) / "validation" / f"step-{step:06d}.json"
-                    dev = _receipt(dev_path)
-                    if (dev.get("optimizer_step") != step
-                        or dev.get("plan_sha256") != prepared["plan_sha256"]):
-                        raise ValueError("teacher-loss development receipt differs from checkpoint")
-                    proof["teacher_loss_receipt_sha256"] = dev["receipt_sha256"]
-                    proof["teacher_loss_file_sha256"] = _file_sha(dev_path)
+                if plan.get("validation_mode") == "teacher_cross_entropy":
+                    proof.update(_teacher_ce(plan, prepared, step))
                 proof["receipt_sha256"] = _sha(_canonical(proof))
                 with output.open("x") as stream:
                     stream.write(json.dumps(proof, sort_keys=True, indent=2) + "\n")
@@ -308,6 +310,8 @@ def stage_spec(directory: Path, step: int, stage: str) -> dict:
             if stage == "ready":
                 _check(paths["cpu"], exported, export_sha, False)
                 _check(paths["gpu"], exported, export_sha, True)
+                if plan.get("validation_mode") == "teacher_cross_entropy":
+                    _teacher_ce(plan, receipt, step)
     files = {**{name: raw.decode() for name, raw in _sources().items()},
              "training/checkpoint_flow.py": Path(__file__).read_text(),
              "prepared/plan.json": (directory / "plan.json").read_text(),

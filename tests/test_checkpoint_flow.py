@@ -17,12 +17,14 @@ def write(path, value):
     path.write_text(json.dumps(signed(value), sort_keys=True) + "\n")
 
 
-def test_step_flow_is_create_once_and_digest_bound(tmp_path, monkeypatch):
+@pytest.mark.parametrize("step,max_steps", [(16, 32), (17, 17)])
+def test_step_flow_is_create_once_and_digest_bound(tmp_path, monkeypatch, step, max_steps):
     root, prepared_dir = tmp_path / "run", tmp_path / "prepared"
     prepared_dir.mkdir()
     (prepared_dir / "PREPARED.json").write_text("{}\n")
     plan = {"run_name": "q38-corrected", "output_root": str(root),
-            "recipe": {"max_steps": 32, "checkpoint_interval": 16}}
+            "validation_mode": "teacher_cross_entropy",
+            "recipe": {"max_steps": max_steps, "checkpoint_interval": 16, "eval_interval": 16}}
     request = {"name": plan["run_name"], "run_dir": str(root),
                "priority_class": "c1", "failureAlerts": False}
     prepared = {"plan_sha256": flow._sha(flow._canonical(plan)),
@@ -34,8 +36,8 @@ def test_step_flow_is_create_once_and_digest_bound(tmp_path, monkeypatch):
         if stage == "seal":
             write(output, {"schema": "cyber_skyrl_checkpoint_manifest_v1",
                            "source_plan_sha256": prepared["plan_sha256"],
-                           "source_plan": plan, "optimizer_step": 16,
-                           "checkpoint_path": str(root / "checkpoints/global_step_16"),
+                           "source_plan": plan, "optimizer_step": step,
+                           "checkpoint_path": str(root / "checkpoints" / f"global_step_{step}"),
                            "gpu_reload_verified": False})
         elif stage == "export":
             seal = flow._receipt(Path(value["seal"]))
@@ -46,7 +48,7 @@ def test_step_flow_is_create_once_and_digest_bound(tmp_path, monkeypatch):
                 "source_checkpoint_receipt_sha256": seal["receipt_sha256"],
                 "source_manifest_file_sha256": value["seal_sha256"],
                 "source_plan_sha256": prepared["plan_sha256"],
-                "optimizer_step": 16, "output_root": str(output), "dtype": "BF16",
+                "optimizer_step": step, "output_root": str(output), "dtype": "BF16",
                 "optimizer_steps_executed": 0,
                 "source_inventory_sizes_mtimes_unchanged": True,
                 "all_output_tensors_reopened_equal": True,
@@ -67,15 +69,28 @@ def test_step_flow_is_create_once_and_digest_bound(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="step is not a planned checkpoint"):
         flow.run(prepared_dir, 15, "seal")
     with pytest.raises(ValueError, match="immutable receipt file missing"):
-        flow.run(prepared_dir, 16, "export")
-    for stage in flow.STAGES:
-        flow.run(prepared_dir, 16, stage)
-    proof = flow._receipt(flow._paths(plan, 16)["ready"])
-    assert proof["checkpoint_sha256"] == flow._file_sha(flow._paths(plan, 16)["seal"])
-    assert proof["export_sha256"] == flow._file_sha(flow._paths(plan, 16)["export"])
+        flow.run(prepared_dir, step, "export")
+    for stage in flow.STAGES[:-1]:
+        flow.run(prepared_dir, step, stage)
+    with pytest.raises(ValueError, match="immutable receipt file missing"):
+        flow.run(prepared_dir, step, "ready")
+    with pytest.raises(ValueError, match="immutable receipt file missing"):
+        flow.stage_spec(prepared_dir, step, "ready")
+    dev = root / "validation" / f"step-{step:06d}.json"
+    write(dev, {"optimizer_step": step - 1, "plan_sha256": prepared["plan_sha256"]})
+    with pytest.raises(ValueError, match="development receipt differs"):
+        flow.run(prepared_dir, step, "ready")
+    with pytest.raises(ValueError, match="development receipt differs"):
+        flow.stage_spec(prepared_dir, step, "ready")
+    write(dev, {"optimizer_step": step, "plan_sha256": prepared["plan_sha256"]})
+    flow.run(prepared_dir, step, "ready")
+    proof = flow._receipt(flow._paths(plan, step)["ready"])
+    assert proof["checkpoint_sha256"] == flow._file_sha(flow._paths(plan, step)["seal"])
+    assert proof["export_sha256"] == flow._file_sha(flow._paths(plan, step)["export"])
+    assert proof["teacher_loss_file_sha256"] == flow._file_sha(dev)
     assert proof["serving_qualified"] is False
     with pytest.raises(ValueError, match="create-once"):
-        flow.run(prepared_dir, 16, "ready")
+        flow.run(prepared_dir, step, "ready")
 
 
 def test_tampered_cpu_gate_rejects_ready(tmp_path):
