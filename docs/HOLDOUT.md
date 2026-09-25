@@ -33,10 +33,10 @@ proved **20 historical positive versions/18 families** (six DEV, 12 final;
 older-version contract/seed-byte proof transferred two other leads but added
 only **one final family**. Historical union: **19 families, six DEV/13 final**;
 current production runnability remains unproved. A later metadata-only scan of
-252 named session stores found 21 valid leads on six already-counted versions,
-adding zero families (not a global search). One-cell staging startup,
-tools, negative grading and teardown passed—not production proof. Old 75
-receipts and model outcomes are not automatic positives; preserve unknowns.
+252 named session stores found 21 leads on six counted versions (not global);
+no new families. Staging cell 08 passed startup/tools/negative grade/cleanup only.
+Old wave16 predates frozen rank order; no broader wave ran or proved prod use.
+Old 75 receipts/model outcomes are not automatic positives; preserve unknowns.
 
 ## Teacher3K family roles
 

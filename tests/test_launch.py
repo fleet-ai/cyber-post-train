@@ -254,6 +254,10 @@ class LaunchTests(unittest.TestCase):
         self.assertTrue(spec["containers"][0]["volumeMounts"][0]["readOnly"])
         self.assertLess(max(len(e["value"]) for e in spec["containers"][0]["env"]), 131072)
         launch._check_cpu_render(job, job)
+        admitted = json.loads(json.dumps(job)); admitted["spec"]["suspend"] = False
+        with self.assertRaisesRegex(ValueError, "server-rendered CPU Job"):
+            launch._check_cpu_render(job, admitted)
+        launch._check_cpu_render(job, admitted, allow_unsuspended=True)
         for field, error in (("alert", "root alert"), ("priority", "c1/q1")):
             bad = json.loads(json.dumps(job))
             if field == "alert":

@@ -519,7 +519,7 @@ def cpu_job(directory: Path, attempt: int = 1) -> dict:
     }
 
 
-def _check_cpu_render(expected: dict, actual: dict) -> None:
+def _check_cpu_render(expected: dict, actual: dict, *, allow_unsuspended: bool = False) -> None:
     meta, spec = actual.get("metadata", {}), actual.get("spec", {})
     template = spec.get("template", {}).get("spec", {})
     original = expected["spec"]["template"]["spec"]
@@ -537,7 +537,9 @@ def _check_cpu_render(expected: dict, actual: dict) -> None:
                for k, v in expected["metadata"]["annotations"].items())
         or meta.get("labels", {}).get("kueue.x-k8s.io/queue-name") != "training-lq"
         or meta.get("labels", {}).get("kueue.x-k8s.io/priority-class") != "q1"
-        or spec.get("suspend") is not True or spec.get("backoffLimit") != 0
+        or (spec.get("suspend") is not True
+            and not (allow_unsuspended and spec.get("suspend") is False))
+        or spec.get("backoffLimit") != 0
         or template.get("priorityClassName") != "c1" or template.get("priority") != 10000
         or template.get("nodeSelector") != original["nodeSelector"]
         or len(containers) != 1 or containers[0].get("image") != original["containers"][0]["image"]
@@ -604,7 +606,7 @@ def _cpu_observation(directory: Path, context: str, attempt: int = 1) -> dict:
         raise ValueError("CPU created binding drifted")
     name, uid = created["name"], created["uid"]
     actual = _kubectl(context, ["-n", "fleet-train-jobs", "get", "job", name])
-    _check_cpu_render(job, actual)
+    _check_cpu_render(job, actual, allow_unsuspended=True)
     if (actual["metadata"].get("uid") != uid or actual.get("status", {}).get("succeeded") != 1
         or not any(c.get("type") == "Complete" and c.get("status") == "True"
                    for c in actual.get("status", {}).get("conditions", []))):
