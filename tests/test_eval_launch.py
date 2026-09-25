@@ -54,7 +54,9 @@ def fixture():
         "data_version": task["data_version"],
         "verifier": {"sha256": "e" * 64, "verifier_version_id": "verifier-v1"},
         "metadata": {"projection_id": "blackbox_ctf_v1",
-                     "runtime_seed_manifest": {"content_sha256": "f" * 64}},
+                     "runtime_seed_manifest": {"version": 1, "data_root": "synthetic-data",
+                         "files": [{"sha256": "f" * 64, "target_path": "synthetic-seed",
+                                    "size_bytes": 1}], "content_sha256": "f" * 64}},
         "seed_config": {"non_private_test_seed": True},
         "task_lifecycle_status": "production",
     }
@@ -166,6 +168,17 @@ class LaunchTests(unittest.TestCase):
         checks["qualification_get"] = lambda: {}
         with self.assertRaisesRegex(LaunchError, "qualification proof"):
             preview(plan, "base", **checks)
+
+    def test_legacy_exact_task_manifest_without_aggregate_hash_or_seed_config_value(self):
+        plan, live, group = fixture()
+        del live["metadata"]["runtime_seed_manifest"]["content_sha256"]
+        live["seed_config"] = None
+        plan["task_response_sha256"]["version-1"] = digest(live)
+        self.assertEqual(preview(plan, "base", **gates(plan, live, group))["planned_sessions"], 4)
+        live["metadata"]["runtime_seed_manifest"]["files"][0]["sha256"] = "bad"
+        plan["task_response_sha256"]["version-1"] = digest(live)
+        with self.assertRaisesRegex(LaunchError, "binding changed"):
+            preview(plan, "base", **gates(plan, live, group))
 
     def test_unproven_checkpoint_route_or_tools_cannot_pass(self):
         plan, live, group = fixture()

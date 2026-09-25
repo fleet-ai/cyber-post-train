@@ -154,6 +154,17 @@ def _readiness_expected(plan: dict) -> dict:
 def _check_task(task: dict, live: dict, expected_digest: str) -> None:
     verifier = live.get("verifier") or {}
     metadata = live.get("metadata") or {}
+    manifest = metadata.get("runtime_seed_manifest") or {}
+    files = manifest.get("files") if isinstance(manifest, dict) else None
+    seed_bound = (isinstance(files, list) and bool(files)
+                  and type(manifest.get("version")) is int and manifest["version"] > 0
+                  and isinstance(manifest.get("data_root"), str) and bool(manifest["data_root"])
+                  and all(isinstance(row, dict) and _sha("sha256:" + str(row.get("sha256")))
+                          and isinstance(row.get("target_path"), str) and bool(row["target_path"])
+                          and type(row.get("size_bytes")) is int and row["size_bytes"] > 0
+                          for row in files)
+                  and ("content_sha256" not in manifest
+                       or _sha("sha256:" + str(manifest["content_sha256"]))))
     if (live.get("team_id") != TEAM_ID
             or live.get("key") != task["task_key"]
             or live.get("eval_task_version_id") != task["task_version_id"]
@@ -161,10 +172,11 @@ def _check_task(task: dict, live: dict, expected_digest: str) -> None:
             or live.get("data_version") != task["data_version"]
             or "sha256:" + str(verifier.get("sha256")) != task["verifier_sha256"]
             or not verifier.get("verifier_version_id")
-            or not (metadata.get("runtime_seed_manifest") or {}).get("content_sha256")
+            or not seed_bound
             or metadata.get("projection_id") != "blackbox_ctf_v1"
             or live.get("task_lifecycle_status") != "production"
-            or not live.get("seed_config")
+            or "seed_config" not in live
+            or (live["seed_config"] is not None and not isinstance(live["seed_config"], dict))
             or digest(live) != expected_digest):
         raise LaunchError("live exact-version task/runtime/verifier binding changed")
 
