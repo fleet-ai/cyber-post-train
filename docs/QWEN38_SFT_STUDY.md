@@ -76,13 +76,45 @@ collect fresh successes with exact target tools.
   zero-step reload and tool match. At **each** checkpoint, queue teacher loss
   and matched Fleet dev pass@4; retain native state until export/reload/eval
   acceptance (`keep_checkpoints: 2` previously evicted some too early).
-- **262k lane:** an eight-node step proved mechanics, not four-node feasibility.
-  Qualify four nodes with a real near-262k sample, finite update, peak memory,
-  checkpoint and zero-step reload; then use the same corrected corpus/eval rule.
+- **262k capacity lane:** the reviewed four-node canary
+  `chris-q38-t3k262-4n-can-v2-1502ba9f` uses a 112-row corpus for capacity
+  only. It must demonstrate a real
+  near-262k finite update, peak memory, sealed native checkpoint, prompt GPU
+  release and a *separate* zero-optimizer native reload. Neither the earlier
+  eight-node step nor a zero-GPU preflight qualifies four-node training.
+- **262k corrected scientific lane (nonlaunchable draft):** keep run name,
+  create-once output, train/dev file digests and step count **unset** until the
+  source and capacity gates pass. Use the reviewed task-key/shared-atom
+  transitive family roles, verified Fleet teacher successes, OpenCode 1.18.27
+  target anchors/tools, visible-only complete assistant rounds and unique
+  multi-target masks throughout trajectories. Never learn from the protected
+  final-test families. Require ≥20 million *actual masked target tokens* in
+  the sealed native train Parquet, not estimated source tokens. The current
+  new-source audit says `trainer_ready: false` until live tool/model-request
+  attestation is proven; the mixed train/dev manifest must fail closed on it.
+  Use separate family-disjoint contiguous dev windows for diagnostic teacher
+  cross-entropy. The historical 262k runtime binds the capacity-only corpus
+  and no-CE mode exactly: qualify a distinct scientific plan/runtime binding,
+  never weaken that canary guard in place.
 
-Both need new run/output identities. The September 25 CPU-only 262k preflight
-passed with zero GPUs and released its Job/Pod; its capacity-only example is
-not the final corpus or a substitute for the four-node GPU gate. Apply
-[AGENTS.md](../AGENTS.md) before paid work. The completion threshold (10
+The initial full262 hypothesis is full-weight Qwen3.8-27B, four 8-B300 nodes,
+262,144-token maximum, global batch 32 (one row/GPU), one epoch and LR 3e-6;
+reuse the group-1/GDN-512/chunk-1024 mechanics **only after** capacity and
+reload pass. Freeze `max_steps = ceil(train_rows / 32)` from the sealed train
+file. Set teacher-CE interval equal to checkpoint interval, aiming for about
+10–20 spaced checkpoints within a reviewed lost-work bound. Keep **all** native
+checkpoints until their seal/export/reload and selected evaluations complete;
+budget shared SFS first. Because scientific dev CE is present, the pinned
+`recovery.mode=validate` can restore all native ranks and sampler with zero
+optimizer steps in a new output/W&B identity. Each selected checkpoint then
+needs BF16 export/readback and matched baseline-versus-checkpoint Fleet dev
+and OpenCode WebExploitBench pass@4; final-test families stay sealed until
+checkpoint/protocol selection. Teacher CE and W&B loss do not measure lift.
+
+Before a full262 POST, freeze an independent request and server-preview its
+root `fleet.ai/failure-alerts: "off"`, c1/q1, four-node allocation and release
+settings; recheck duplicates, absent output and live project capacity. No
+corrected full262 job is authorized by this draft. Apply [AGENTS.md](../AGENTS.md)
+before paid work. The completion threshold (10
 percentage points absolute versus 10% relative) still needs confirmation;
 training loss and a repeatedly reused small final panel cannot satisfy it.
