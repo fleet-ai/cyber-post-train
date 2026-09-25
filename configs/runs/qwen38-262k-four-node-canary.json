@@ -1,0 +1,80 @@
+{
+  "schema": "qwen38_262k_four_node_capacity_canary_v1",
+  "status": "unqualified_hypothesis",
+  "accepted": false,
+  "submission_authorized": false,
+  "name": "chris-q38-t3k262-4n-can-v1",
+  "output_root": "/mnt/sfs/jobs/chris-q38-t3k262-4n-can-v1",
+  "parent": {
+    "run": "chris-q38-t3k262-can-v12",
+    "api_run_id": "a421f0a3-5ed2-48cb-99ee-f830fa395cb7",
+    "rayjob_uid": "36f915ca-d882-46b3-9d8b-5e4e2bfddae7",
+    "plan_commit": "c908d3a828d070c6b27611fc388b1e7e3b4049dd",
+    "plan_path": "configs/qualification/qwen38-teacher3k-262k-v12-parent-plan.json",
+    "plan_sha256": "3b9e81acb301327c40007a40ab13c3bf5c164152655fb49f96a8db52eb117690",
+    "runtime_commit": "45c04d709f855e20d931456233b85f427558525f",
+    "runtime_path": "training/sft_runtime.py",
+    "runtime_sha256": "b6b81c9876ddf8379a0837a0aaf5f0426acf8ccc4388d79bd93bad94c59e38d3",
+    "hook_ast_sha256": {
+      "chunked_sft_forward": "554cae31621e5f98eda3c0ad1fae3d64cac8af73f35086b494189784cb47792d",
+      "checkpointed_qwen35_gdn_rule": "b27d5d2b2b76ff00b58dbe2442ed5d1af032e64b65ca7a47c42ee8301f72781a",
+      "chunked_qwen35_mlp_forward": "2fcc9e9e4206ae8a141ba248b9af8f2ff39f92ddb7f2f561f877be7dc2b70f2b",
+      "chunked_qwen35_rmsnorm_forward": "97d07b8ea509208727fb26c33840098bd9b1412efaadc87de3961a2be888e53d",
+      "chunked_qwen35_rmsnorm_gated_forward": "af9f01ad825870a06486942a1a221ddfd2e484f921b0d752c4ea1ad1b27e3a57",
+      "grouped_qwen35_text_forward": "e75bda3427314c0bd1dbe5d54fe438c470817212b39dc115d9bcf95a22acf9ec",
+      "install_chunked_sft_worker": "f11637a5fbbf39bf689afd246ee2eb617b67675b2fd41af53dc20ba9d32a624a"
+    }
+  },
+  "model": {
+    "repo": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "weight_manifest_sha256": "06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
+  },
+  "data": {
+    "path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher3k-262k-v1/capacity-v5/train.parquet",
+    "sha256": "2359c54e5c5cd756761a0f6e8c250ec8b32b87c8f84f0888252ddac932cfc5ec",
+    "rows": 112,
+    "purpose": "capacity_only_not_scientific_training"
+  },
+  "recipe": {
+    "full_weight": true,
+    "nodes": 4,
+    "gpus_per_node": 8,
+    "world_size": 32,
+    "batch_size": 32,
+    "microbatch_per_gpu": 1,
+    "gradient_accumulation": 1,
+    "max_length": 262144,
+    "sequence_parallel_size": 1,
+    "layer_checkpoint_group_size": 1,
+    "outer_checkpoint_reentrant": true,
+    "gdn_chunk_tokens": 512,
+    "lm_head_chunk_tokens": 1024,
+    "mlp_chunk_tokens": 1024,
+    "rmsnorm_chunk_tokens": 1024,
+    "cpu_parameter_offload": false,
+    "cpu_optimizer_offload": false,
+    "learning_rate": 0.000003,
+    "epochs": 1,
+    "max_steps": 4,
+    "pause_after_optimizer_step": 1,
+    "eval_interval": 0,
+    "seed": 20260916,
+    "checkpoint_interval": 1,
+    "keep_checkpoints": 2,
+    "reload_optimizer_steps": 0
+  },
+  "cluster": {
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "priority_class": "c1",
+    "queue_priority": "q1",
+    "root_annotation": {"fleet.ai/failure-alerts": "off"},
+    "shutdown_after_finish": true,
+    "ttl_seconds_after_finish": 0
+  },
+  "example_gate": {
+    "sequence_tokens": 262144,
+    "minimum_nonpadding_tokens": 250000,
+    "source_kind": "real_training_row"
+  }
+}
