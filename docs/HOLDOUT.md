@@ -133,3 +133,9 @@ independent intended-path/grading evidence plus current start, tool, verifier,
 negative-control and cleanup receipts. Preserve failures and ambiguity. If
 fewer than 100 independent final families pass, report an underpowered final
 set and seek new families; never promote development tasks or relax proof.
+
+September 25 DEV positive replay index 1 stopped at provision/cleanup without a
+terminal receipt. The exact create claim later returned 404; exhaustive recent
+queued, pending and running instance listings found no matching environment.
+Do not retry that create ID or count this version current-positive. Resolve the
+create/claim mismatch before another replay; no active allocation was observed.
