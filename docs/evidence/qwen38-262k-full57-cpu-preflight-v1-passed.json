@@ -1,0 +1,22 @@
+{
+  "schema": "qwen38_262k_full57_cpu_preflight_v1",
+  "job": "fleet-train-jobs/chris-q38-full57-cpu-pre-v1",
+  "job_uid": "336e18a7-f17c-4bb1-9972-cfd6c2415c9a",
+  "pod_uid": "95536a70-00f7-4687-b8fb-227feeea4d19",
+  "image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "root_failure_alert_annotation": "off",
+  "priority": "c1/q1",
+  "gpu_request": 0,
+  "pod_restarts": 0,
+  "status": "Succeeded",
+  "completed_at": "2026-09-25T23:06:28Z",
+  "exit_code": 0,
+  "job_and_pod_released": true,
+  "full_plan_sha256": "775c3c827f40a0f9425540b34c6557d89660518a61ec2dfeddbb9718ebb2435d",
+  "full_request_sha256": "164a6ca9b2d09a5c41059ead3b51bf04f71a124ae7e12e109c60a90fce0350af",
+  "preflight_log_sha256": "0bfa33548ffd84e837ff1252781fa05ebe9be0dfc35e2e68a47005d076e6061d",
+  "validation_status": "validated",
+  "max_steps": 115,
+  "dev_tasks": 0,
+  "limits": "Zero-GPU exact-image and full-dataset validation only; no optimizer step, four-node fit, or checkpoint is proven."
+}
