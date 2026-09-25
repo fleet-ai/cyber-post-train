@@ -18,7 +18,7 @@ diagnosis, or review requests, inspect only.
 - Use supported **c1** priority for new project-owned cluster jobs; never use
   c0 unless Chris explicitly changes this rule. Verify the effective priority
   in the rendered Job/Workload, not just a request field or label.
-- Use at most **8 active GPU nodes (64 GPUs)** across project-owned cluster
+- Use at most **10 active GPU nodes (80 GPUs)** across project-owned cluster
   work, and no more than **10 queued jobs**. Count all concurrent agents and
   automations from live cluster state, including dedicated evaluation and
   serving allocations; exclude an existing endpoint only when a current,
@@ -26,8 +26,7 @@ diagnosis, or review requests, inspect only.
   occupies a queue slot. Never use a stale chat count as the capacity ledger.
 - Use at most **100 concurrent TensorLake executions** across the project.
   Count running work and outstanding launch reservations across all agents
-  before starting more. Limit Fleet task-evaluation launches to **500
-  rollouts per day** unless Chris changes that allowance.
+  before starting more.
 - Keep available capacity productive with valuable, nonduplicate work, but
   never launch filler work just to hit a quota. Check existing experiments,
   jobs, and evaluations before creating equivalents.
