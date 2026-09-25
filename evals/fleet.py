@@ -5,32 +5,21 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import os
 import re
-from pathlib import Path
 
 SCHEMA = "fleet_paired_pass4_v2"
 SHA = re.compile(r"sha256:[0-9a-f]{64}\Z")
 IMAGE = re.compile(r"[^\s@]+@sha256:[0-9a-f]{64}\Z")
-TASK_FIELDS = {
-    "task_key", "task_version_id", "application", "family_id",
-    "environment_version_id", "data_version", "verifier_sha256",
-}
-COMMON_FIELDS = {
-    "model_repository", "tokenizer_sha256", "chat_template_sha256",
-    "serving_image", "serving_config_sha256", "harness_image", "harness_version",
-    "system_prompt_sha256", "tools", "tool_schema_sha256", "context_policy",
-    "context_window_tokens", "max_output_tokens", "max_steps",
-    "max_duration_minutes", "temperature", "top_p", "seed_policy", "retry_limit",
-    "scoring_mode", "pass_criterion",
-}
-EVENT_FIELDS = {
-    "protocol_sha256", "arm", "task_version_id", "attempt", "seed",
-    "model_revision", "weights_sha256", "checkpoint_sha256", "process_exit_code", "termination",
-    "budget_evidence_sha256", "verifier_sha256", "verifier_status",
-    "verifier_execution_id", "verifier_result_schema", "verifier_result_sha256",
-    "verifier_result_task_version_id", "ctf_score", "success",
-}
+TASK_FIELDS = set("""task_key task_version_id application family_id environment_version_id
+    data_version verifier_sha256""".split())
+COMMON_FIELDS = set("""model_repository tokenizer_sha256 chat_template_sha256 serving_image
+    serving_config_sha256 harness_image harness_version system_prompt_sha256 tools tool_schema_sha256
+    context_policy context_window_tokens max_output_tokens max_steps max_duration_minutes temperature
+    top_p seed_policy retry_limit scoring_mode pass_criterion""".split())
+EVENT_FIELDS = set("""protocol_sha256 arm task_version_id attempt seed model_revision weights_sha256
+    checkpoint_sha256 process_exit_code termination budget_evidence_sha256 verifier_sha256
+    verifier_status verifier_execution_id verifier_result_schema verifier_result_sha256
+    verifier_result_task_version_id ctf_score success""".split())
 PLANNED_BUDGET_TERMINATIONS = {"planned_max_steps", "planned_wall_deadline"}
 
 
@@ -78,25 +67,21 @@ def _structure(protocol: dict) -> None:
         versions.add(task["task_version_id"])
         families.add(family)
     common = _fields(protocol["common"], COMMON_FIELDS, "common treatment")
-    for key in ("model_repository", "harness_version", "context_policy"):
-        if not _text(common[key]):
-            raise ValueError(f"{key} is missing")
-    if (common["scoring_mode"], common["pass_criterion"]) != (
-        "partial", "cyber_ctf_full_solve_v1"
-    ):
+    if not all(_text(common[key]) for key in ("model_repository", "harness_version", "context_policy")):
+        raise ValueError("model repository, harness version, and context policy are required")
+    if (common["scoring_mode"], common["pass_criterion"]) != ("partial", "cyber_ctf_full_solve_v1"):
         raise ValueError("Fleet pass@4 requires the pinned full-CTF scoring contract")
     if any(not isinstance(common[key], str) or IMAGE.fullmatch(common[key]) is None
            for key in ("serving_image", "harness_image")):
         raise ValueError("serving and harness images must be pinned by digest")
-    for key in ("tokenizer_sha256", "chat_template_sha256", "serving_config_sha256",
-                "system_prompt_sha256", "tool_schema_sha256"):
-        if not _sha(common[key]):
-            raise ValueError(f"{key} must be an immutable digest")
+    if not all(_sha(common[key]) for key in ("tokenizer_sha256", "chat_template_sha256",
+                                           "serving_config_sha256", "system_prompt_sha256", "tool_schema_sha256")):
+        raise ValueError("shared treatment identities must be immutable digests")
     if not isinstance(common["tools"], list) or not common["tools"] or not all(map(_text, common["tools"])) or len(set(common["tools"])) != len(common["tools"]):
         raise ValueError("ordered tool names must be unique and nonempty")
-    for key in ("context_window_tokens", "max_output_tokens", "max_steps", "max_duration_minutes"):
-        if type(common[key]) is not int or common[key] <= 0:
-            raise ValueError(f"{key} must be positive")
+    if any(type(common[key]) is not int or common[key] <= 0 for key in
+           ("context_window_tokens", "max_output_tokens", "max_steps", "max_duration_minutes")):
+        raise ValueError("context, output, step, and duration budgets must be positive integers")
     if common["max_output_tokens"] > common["context_window_tokens"]:
         raise ValueError("output budget exceeds context window")
     if (common["temperature"] is None) != (common["top_p"] is None):
@@ -231,14 +216,14 @@ def summarize(protocol: dict, events: list[dict]) -> dict:
         cells[key] = event
         if outcome != "valid":
             invalid[key] = outcome
-    expected = {(arm, version, attempt) for arm in ("base", "candidate")
-                for version in tasks for attempt in range(1, 5)}
+    arms = ("base", "candidate")
+    expected = {(arm, version, i) for arm in arms for version in tasks for i in range(1, 5)}
     missing = expected - cells.keys()
+    valid = cells.keys() - invalid.keys()
     complete_versions = [version for version in tasks if all(
-        (arm, version, attempt) in cells and (arm, version, attempt) not in invalid
-        for arm in ("base", "candidate") for attempt in range(1, 5)
+        (arm, version, i) in valid for arm in arms for i in range(1, 5)
     )]
-    provisional = [{
+    family_results = [{
         "application": tasks[version]["application"],
         "family_id": tasks[version]["family_id"],
         "task_version_id": version,
@@ -263,31 +248,24 @@ def summarize(protocol: dict, events: list[dict]) -> dict:
         "invalid_cells": [{"cell": list(key), "reason": invalid[key]} for key in sorted(invalid)],
         "invalid_reasons": {reason: sum(x == reason for x in invalid.values()) for reason in sorted(set(invalid.values()))},
         "complete_families": len(complete_versions),
-        "provisional_family_results": provisional,
+        "provisional_family_results": family_results,
         "provisional_candidate_minus_base_pass4": (
-            sum(row["candidate_pass4"] - row["base_pass4"] for row in provisional) / len(provisional)
-            if provisional else None
+            sum(row["candidate_pass4"] - row["base_pass4"] for row in family_results) / len(family_results)
+            if family_results else None
         ),
     }
     if missing or invalid:
         return {**result, "status": "incomplete", "candidate_minus_base_pass4": None,
                 "conditional_95pct_interval": None}
-    solved = {arm: {version: any(cells[arm, version, i]["success"] for i in range(1, 5))
-                    for version in tasks} for arm in ("base", "candidate")}
-    wins = sum(solved["candidate"][v] and not solved["base"][v] for v in tasks)
-    losses = sum(solved["base"][v] and not solved["candidate"][v] for v in tasks)
+    wins = sum(row["candidate_pass4"] and not row["base_pass4"] for row in family_results)
+    losses = sum(row["base_pass4"] and not row["candidate_pass4"] for row in family_results)
     discordant = wins + losses
     theta_lo = 0.0 if wins == 0 else _tail_inverse(discordant, wins, 0.025)
     theta_hi = 1.0 if wins == discordant else _tail_inverse(discordant, wins + 1, 0.975)
     scale = discordant / len(tasks)
-    family_results = [{
-        "application": task["application"], "family_id": task["family_id"],
-        "task_version_id": version, "base_pass4": solved["base"][version],
-        "candidate_pass4": solved["candidate"][version],
-    } for version, task in tasks.items()]
     return {
-        **result, "status": "complete", "base_pass4": sum(solved["base"].values()),
-        "candidate_pass4": sum(solved["candidate"].values()), "candidate_wins": wins,
+        **result, "status": "complete", "base_pass4": sum(row["base_pass4"] for row in family_results),
+        "candidate_pass4": sum(row["candidate_pass4"] for row in family_results), "candidate_wins": wins,
         "base_wins": losses, "ties": len(tasks) - discordant, "family_results": family_results,
         "candidate_minus_base_pass4": (wins - losses) / len(tasks),
         "one_sided_exact_discordance_p": _binomial_tail(discordant, wins, 0.5),
@@ -301,30 +279,3 @@ def dev_decision(summary: dict) -> tuple[float, float]:
     if summary.get("role") != "dev" or summary.get("status") != "complete":
         raise ValueError("checkpoint selection requires a complete development comparison")
     return summary["candidate_minus_base_pass4"], summary["one_sided_exact_discordance_p"]
-
-
-def claim_checkpoint_eval(protocol: dict, queue_dir: Path, kind: str) -> Path | None:
-    """Atomically claim a local dispatch intent; this does not launch an eval."""
-    validate_protocol(protocol)
-    if kind != "fleet_pass4":
-        raise ValueError("only protocol-bound Fleet pass@4 can be claimed")
-    identity = {
-        "kind": kind, "role": protocol["role"],
-        "checkpoint_sha256": protocol["arms"]["candidate"]["checkpoint_sha256"],
-        "base_weights_sha256": protocol["arms"]["base"]["weights_sha256"],
-        "candidate_weights_sha256": protocol["arms"]["candidate"]["weights_sha256"],
-        "tasks_sha256": _digest({"tasks": protocol["tasks"]}),
-        "treatment_sha256": _digest(protocol["common"]),
-    }
-    path = Path(queue_dir) / (_digest(identity).split(":", 1)[1] + ".json")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    except FileExistsError:
-        return None
-    with os.fdopen(fd, "w") as stream:
-        json.dump({**identity, "protocol_sha256": protocol["sha256"]}, stream, sort_keys=True)
-        stream.write("\n")
-        stream.flush()
-        os.fsync(stream.fileno())
-    return path

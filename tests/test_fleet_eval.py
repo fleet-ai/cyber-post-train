@@ -1,11 +1,9 @@
 """Synthetic protocol and outcome tests; no Fleet access or private task content."""
 
 import json
-import tempfile
 import unittest
-from pathlib import Path
 
-from evals.fleet import claim_checkpoint_eval, dev_decision, seal_protocol, summarize, validate_protocol
+from evals.fleet import dev_decision, seal_protocol, summarize, validate_protocol
 
 
 def sha(char):
@@ -14,15 +12,12 @@ def sha(char):
 
 def protocol(count=2, role="dev", seed_mode="fixed"):
     return seal_protocol({
-        "schema": "fleet_paired_pass4_v2",
-        "study_id": "qwen-synthetic-comparison",
-        "role": role,
+        "schema": "fleet_paired_pass4_v2", "study_id": "qwen-synthetic-comparison", "role": role,
         "final_selection_sha256": sha("f") if role == "final" else None,
         "tasks": [{
             "task_key": f"task-{i}", "task_version_id": f"version-{i}",
-            "application": "app", "family_id": f"family-{i}",
+            "application": "app", "family_id": f"family-{i}", "verifier_sha256": sha("e"),
             "environment_version_id": f"environment-{i}", "data_version": f"data-{i}",
-            "verifier_sha256": sha("e"),
         } for i in range(count)],
         "common": {
             "model_repository": "Qwen/example", "tokenizer_sha256": sha("a"),
@@ -31,54 +26,49 @@ def protocol(count=2, role="dev", seed_mode="fixed"):
             "harness_version": "pinned", "system_prompt_sha256": sha("b"),
             "tools": ["fleet_bash", "fleet_submit_report"], "tool_schema_sha256": sha("c"),
             "context_policy": "native_compaction", "context_window_tokens": 262144,
-            "max_output_tokens": 32768, "max_steps": 600,
-            "max_duration_minutes": 480,
+            "max_output_tokens": 32768, "max_steps": 600, "max_duration_minutes": 480,
             "temperature": 0.6 if seed_mode == "fixed" else None,
             "top_p": 0.95 if seed_mode == "fixed" else None,
             "seed_policy": ({"mode": "fixed", "seeds": [11, 12, 13, 14]}
                             if seed_mode == "fixed" else {"mode": seed_mode}),
-            "retry_limit": 0,
-            "scoring_mode": "partial", "pass_criterion": "cyber_ctf_full_solve_v1",
+            "retry_limit": 0, "scoring_mode": "partial", "pass_criterion": "cyber_ctf_full_solve_v1",
         },
         "arms": {
             "base": {"model_revision": "base-revision", "weights_sha256": sha("1")},
-            "candidate": {"model_revision": "trained-revision", "weights_sha256": sha("2"),
-                          "checkpoint_sha256": sha("3")},
+            "candidate": {"model_revision": "trained-revision", "weights_sha256": sha("2"), "checkpoint_sha256": sha("3")},
         },
     })
 
 
 def events(plan, *, candidate_wins=()):
-    rows = []
-    for task in plan["tasks"]:
-        version = task["task_version_id"]
-        for arm in ("base", "candidate"):
-            artifact = plan["arms"][arm]
-            for attempt in range(1, 5):
-                policy = plan["common"]["seed_policy"]
-                seed = policy["seeds"][attempt - 1] if policy["mode"] == "fixed" else None
-                rows.append({
-                    "protocol_sha256": plan["sha256"], "arm": arm,
-                    "task_version_id": version, "attempt": attempt, "seed": seed,
-                    "model_revision": artifact["model_revision"],
-                    "weights_sha256": artifact["weights_sha256"],
-                    "checkpoint_sha256": artifact.get("checkpoint_sha256"),
-                    "process_exit_code": 0, "termination": "completed",
-                    "budget_evidence_sha256": None,
-                    "verifier_sha256": task["verifier_sha256"],
-                    "verifier_status": "completed",
-                    "verifier_execution_id": f"execution-{version}-{arm}-{attempt}",
-                    "verifier_result_schema": "cyber_verification_result_v3",
-                    "verifier_result_sha256": sha("8"),
-                    "verifier_result_task_version_id": version,
-                    "ctf_score": (1.0 if arm == "candidate" and version in candidate_wins
-                                  and attempt == 1 else 0.0),
-                    "success": arm == "candidate" and version in candidate_wins and attempt == 1,
-                })
-    return rows
+    policy = plan["common"]["seed_policy"]
+    return [{
+        "protocol_sha256": plan["sha256"], "arm": arm, "task_version_id": task["task_version_id"],
+        "attempt": attempt, "seed": policy["seeds"][attempt - 1] if policy["mode"] == "fixed" else None,
+        "model_revision": plan["arms"][arm]["model_revision"],
+        "weights_sha256": plan["arms"][arm]["weights_sha256"],
+        "checkpoint_sha256": plan["arms"][arm].get("checkpoint_sha256"),
+        "process_exit_code": 0, "termination": "completed", "budget_evidence_sha256": None,
+        "verifier_sha256": task["verifier_sha256"], "verifier_status": "completed",
+        "verifier_execution_id": f"execution-{task['task_version_id']}-{arm}-{attempt}",
+        "verifier_result_schema": "cyber_verification_result_v3", "verifier_result_sha256": sha("8"),
+        "verifier_result_task_version_id": task["task_version_id"],
+        "ctf_score": float(arm == "candidate" and task["task_version_id"] in candidate_wins and attempt == 1),
+        "success": arm == "candidate" and task["task_version_id"] in candidate_wins and attempt == 1,
+    } for task in plan["tasks"] for arm in ("base", "candidate") for attempt in range(1, 5)]
 
 
 class FleetEvalTests(unittest.TestCase):
+    def assert_protocol_rejects(self, path, value, message, **options):
+        raw = protocol(**options)
+        del raw["sha256"]
+        target = raw
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = value
+        with self.assertRaisesRegex(ValueError, message):
+            seal_protocol(raw)
+
     def test_frozen_parity_and_checkpoint_identity(self):
         plan = protocol()
         validate_protocol(plan)
@@ -86,30 +76,24 @@ class FleetEvalTests(unittest.TestCase):
         changed["common"]["tools"].reverse()
         with self.assertRaisesRegex(ValueError, "digest mismatch"):
             validate_protocol(changed)
-        changed = {k: v for k, v in plan.items() if k != "sha256"}
-        changed["arms"]["base"]["tools"] = ["different"]
-        with self.assertRaisesRegex(ValueError, "unknown fields"):
-            seal_protocol(changed)
 
-    def test_one_exact_version_per_family_and_final_receipt(self):
-        raw = {k: v for k, v in protocol().items() if k != "sha256"}
-        raw["tasks"][1]["family_id"] = raw["tasks"][0]["family_id"]
-        with self.assertRaisesRegex(ValueError, "one exact task version"):
-            seal_protocol(raw)
-        raw = {k: v for k, v in protocol(role="final").items() if k != "sha256"}
-        raw["final_selection_sha256"] = None
-        with self.assertRaisesRegex(ValueError, "selection receipt"):
-            seal_protocol(raw)
-        raw = {k: v for k, v in protocol().items() if k != "sha256"}
-        raw["final_selection_sha256"] = sha("f")
-        with self.assertRaisesRegex(ValueError, "selection receipt"):
-            seal_protocol(raw)
-
-    def test_images_must_be_digest_pinned(self):
-        raw = {k: v for k, v in protocol().items() if k != "sha256"}
-        raw["common"]["serving_image"] = "serve:latest"
-        with self.assertRaisesRegex(ValueError, "pinned by digest"):
-            seal_protocol(raw)
+    def test_protocol_rejects_leakage_and_unmatched_treatments(self):
+        cases = (
+            (("arms", "base", "tools"), ["different"], "unknown fields", {}),
+            (("tasks", 1, "family_id"), "family-0", "one exact task version", {}),
+            (("final_selection_sha256",), None, "selection receipt", {"role": "final"}),
+            (("final_selection_sha256",), sha("f"), "selection receipt", {}),
+            (("final_selection_sha256",), "unsealed", "selection receipt", {}),
+            (("common", "serving_image"), "serve:latest", "pinned by digest", {}),
+            (("common", "seed_policy", "seeds"), [11, 11, 12, 13], "distinct fixed seeds", {}),
+            (("common", "seed_policy", "seeds"), [11, 12, 13, 14], "unknown fields", {"seed_mode": "server_assigned_unobserved"}),
+            (("common", "temperature"), 0.6, "both be explicit or both be unavailable", {"seed_mode": "server_assigned_unobserved"}),
+            (("common", "pass_criterion"), "reward_positive", "full-CTF scoring contract", {}),
+            (("common", "scoring_mode"), "binary", "full-CTF scoring contract", {}),
+        )
+        for path, value, message, options in cases:
+            with self.subTest(path=path):
+                self.assert_protocol_rejects(path, value, message, **options)
 
     def test_valid_zero_and_paired_pass4(self):
         plan = protocol()
@@ -135,26 +119,7 @@ class FleetEvalTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "seed mismatch"):
             summarize(plan, rows)
 
-    def test_seed_and_sampling_policies_reject_false_claims(self):
-        raw = {k: v for k, v in protocol().items() if k != "sha256"}
-        raw["common"]["seed_policy"]["seeds"] = [11, 11, 12, 13]
-        with self.assertRaisesRegex(ValueError, "distinct fixed seeds"):
-            seal_protocol(raw)
-        raw = {k: v for k, v in protocol(seed_mode="server_assigned_unobserved").items() if k != "sha256"}
-        raw["common"]["seed_policy"]["seeds"] = [11, 12, 13, 14]
-        with self.assertRaisesRegex(ValueError, "unknown fields"):
-            seal_protocol(raw)
-        raw = {k: v for k, v in protocol(seed_mode="server_assigned_unobserved").items() if k != "sha256"}
-        raw["common"]["temperature"] = 0.6
-        with self.assertRaisesRegex(ValueError, "both be explicit or both be unavailable"):
-            seal_protocol(raw)
-
     def test_partial_reward_is_not_a_full_ctf_win(self):
-        raw = {k: v for k, v in protocol().items() if k != "sha256"}
-        raw["common"]["pass_criterion"] = "reward_positive"
-        with self.assertRaisesRegex(ValueError, "full-CTF scoring contract"):
-            seal_protocol(raw)
-
         plan = protocol()
         rows = events(plan)
         rows[0]["ctf_score"] = 0.5
@@ -163,10 +128,6 @@ class FleetEvalTests(unittest.TestCase):
             summarize(plan, rows)
         rows[0]["success"] = False
         self.assertEqual(summarize(plan, rows)["status"], "complete")
-        raw["common"]["pass_criterion"] = "cyber_ctf_full_solve_v1"
-        raw["common"]["scoring_mode"] = "binary"
-        with self.assertRaisesRegex(ValueError, "full-CTF scoring contract"):
-            seal_protocol(raw)
 
     def test_invalid_output_or_process_error_never_becomes_zero(self):
         plan = protocol()
@@ -233,18 +194,15 @@ class FleetEvalTests(unittest.TestCase):
         self.assertEqual(missing["missing_cells"], [["candidate", "version-1", 4]])
         with self.assertRaisesRegex(ValueError, "duplicate"):
             summarize(plan, rows + [rows[0]])
-        changed = json.loads(json.dumps(rows))
-        changed[0]["seed"] = 999
-        with self.assertRaisesRegex(ValueError, "seed mismatch"):
-            summarize(plan, changed)
-        changed = json.loads(json.dumps(rows))
-        changed[-1]["checkpoint_sha256"] = sha("9")
-        with self.assertRaisesRegex(ValueError, "checkpoint binding mismatch"):
-            summarize(plan, changed)
-        changed = json.loads(json.dumps(rows))
-        changed[-1]["model_revision"] = "unverified-route"
-        with self.assertRaisesRegex(ValueError, "checkpoint binding mismatch"):
-            summarize(plan, changed)
+        for index, field, value, error in (
+            (0, "seed", 999, "seed mismatch"),
+            (-1, "checkpoint_sha256", sha("9"), "checkpoint binding mismatch"),
+            (-1, "model_revision", "unverified-route", "checkpoint binding mismatch"),
+        ):
+            changed = events(plan)
+            changed[index][field] = value
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, error):
+                summarize(plan, changed)
 
     def test_final_results_cannot_select_checkpoint(self):
         plan = protocol(role="final")
@@ -260,18 +218,6 @@ class FleetEvalTests(unittest.TestCase):
         low, high = result["conditional_95pct_interval"]
         self.assertLess(low, result["candidate_minus_base_pass4"])
         self.assertAlmostEqual(high, 1.0)
-
-    def test_atomic_checkpoint_claim_only_not_execution(self):
-        plan = protocol()
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            claim = claim_checkpoint_eval(plan, root, "fleet_pass4")
-            self.assertIsNotNone(claim)
-            self.assertEqual(claim_checkpoint_eval(plan, root, "fleet_pass4"), None)
-            self.assertEqual(json.loads(claim.read_text())["checkpoint_sha256"], sha("3"))
-            self.assertEqual(list(root.iterdir()), [claim])
-            with self.assertRaisesRegex(ValueError, "only protocol-bound"):
-                claim_checkpoint_eval(plan, root, "teacher_ce")
 
 
 if __name__ == "__main__":
