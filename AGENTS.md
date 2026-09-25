@@ -90,6 +90,9 @@ consuming the last available slot.
   Set a checkpoint cadence that bounds lost work, and verify reloadability
   before treating a checkpoint as an evaluation candidate. Do not infer a
   successful optimizer update from a Ready Pod or a training-loss chart alone.
+- A CPU preflight must test the actual entrypoint plan, including fields added
+  after file loading (such as `plan_sha256`); compile-time validation alone
+  missed this and failed the four-node 262k canary before training.
 - For long-horizon RL, validate context handling and compaction before scale;
   do not treat context overflow, truncated trajectories, broken tools, or
   unreachable graders as genuine zero reward. Prove reward acquisition and a

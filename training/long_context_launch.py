@@ -1,13 +1,12 @@
-"""Prepare, preview, and create once the historical 4×8 Qwen3.8 262K canary.
+"""Reconstruct the exact historical 4×8 Qwen3.8 262K canary source.
 
 The compiler and runtime are exact Git blobs from the held 65fcf038 candidate.
 This bridge stages them in a temporary directory, then discards that directory.
-The create-once path repeats the server preview and writes a durable intent.
+The one-time preflight and submission are recorded in Git history and receipts.
 """
 
 from __future__ import annotations
 
-import argparse
 import base64
 import gzip
 import hashlib
@@ -18,9 +17,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-import yaml
-
-from training.long_context import ROOT, SPEC, validate_length_audit, validate_real_row_witness, validate_rendered_job, validate_spec
+from training.long_context import ROOT, SPEC, validate_length_audit, validate_real_row_witness, validate_spec
 
 
 REVISION = "65fcf03812e48cf6f0845c607152b2069f3275b4"
@@ -208,191 +205,3 @@ def verify_bundle(plan: dict, request: dict) -> None:
         compile(source, name, "exec")
     if digest(bundle["extra_files"]["training/sft_262k_runtime.py"].encode()) != plan["runtime_sha256"]:
         raise ValueError("runtime bundle source digest changed")
-
-
-def _write_new(path: Path, content: str) -> None:
-    with path.open("x") as f:
-        f.write(content)
-    path.chmod(0o600)
-
-
-def prepare(dest: Path, *, successor: bool = False) -> dict:
-    plan, request = historical_request(successor=successor)
-    dest.mkdir(parents=True, exist_ok=False)
-    _write_new(dest / "plan.json", json.dumps(plan, indent=2, sort_keys=True) + "\n")
-    _write_new(dest / "request.json", json.dumps(request, indent=2, sort_keys=True) + "\n")
-    result = {
-        "state": "GATE_TRUE_REVIEW_ONLY_NO_GPU_POST" if successor else "PREVIEW_ONLY_SUBMISSION_BLOCKED",
-        "historical_revision": REVISION,
-        "name": request["name"],
-        "output_root": request["run_dir"],
-        "nodes": 4,
-        "gpus": 32,
-        "plan_sha256": digest(json.dumps(plan, sort_keys=True, separators=(",", ":")).encode()),
-        "request_sha256": digest(json.dumps(request, sort_keys=True, separators=(",", ":")).encode()),
-        "real_row_witness": str(ROOT / json.loads(SPEC.read_text())["real_row_witness"]["path"]),
-        "limits": "No POST /v1/runs, GPU fit, optimizer update, checkpoint reload, or scientific acceptance.",
-    }
-    _write_new(dest / "prepare-summary.json", json.dumps(result, indent=2, sort_keys=True) + "\n")
-    return result
-
-
-def preview(dest: Path, *, successor: bool = False) -> dict:
-    request = json.loads((dest / "request.json").read_text())
-    _, exact_request = historical_request(successor=successor)
-    if request != exact_request:
-        raise ValueError("saved request changed after preparation")
-    spec = json.loads(SPEC.read_text())
-    with tempfile.TemporaryDirectory(prefix="q38-262k-4n-") as tmp:
-        root = Path(tmp)
-        stage_old_code(root, successor=successor)
-        result = _old_python(root, """
-import json, os, sys
-from cyber_post_train.jobs import Jobs
-request = json.loads(sys.stdin.read())
-with Jobs(os.environ.get('FLEET_API_KEY', '')) as jobs:
-    rows = jobs.all_runs()
-    duplicates = [r['name'] for r in rows if r.get('name') == request['name'] or r.get('name', '').startswith(request['name']+'-') or r.get('run_dir') == request['run_dir'] or r.get('title') == request['title']]
-    if duplicates: raise ValueError('exact name/title/output already recorded; no preview as launch candidate')
-    p = jobs.preview(request)
-print(json.dumps({'manifest_yaml': p['manifest_yaml'], 'warnings': p.get('warnings'), 'errors': p.get('errors'), 'run_count': len(rows)}))
-""", stdin=json.dumps(request))
-    rendered = yaml.safe_load(result["manifest_yaml"])
-    validate_rendered_job(spec, rendered)
-    _write_new(dest / "rendered-rayjob.yaml", result["manifest_yaml"])
-    summary = {
-        "state": "RENDERED_PREVIEW_REVIEW_REQUIRED_NO_SUBMISSION",
-        "name": request["name"],
-        "run_count_seen": result["run_count"],
-        "duplicates": 0,
-        "rendered_rayjob_sha256": digest(result["manifest_yaml"].encode()),
-        "root_failed_job_alerts": rendered["metadata"]["annotations"]["fleet.ai/failure-alerts"],
-        "priority": rendered["metadata"]["labels"]["kueue.x-k8s.io/priority-class"],
-        "nodes": 4,
-        "gpus": 32,
-        "submission_authorized": successor,
-    }
-    _write_new(dest / "preview-summary.json", json.dumps(summary, indent=2, sort_keys=True) + "\n")
-    return summary
-
-
-def submit_v3(dest: Path) -> dict:
-    request = json.loads((dest / "request.json").read_text())
-    _, exact = historical_request(successor=True)
-    proof = json.loads((dest / "preview-summary.json").read_text())
-    if request != exact or proof["root_failed_job_alerts"] != "off" or proof["priority"] != "q1":
-        raise ValueError("saved v3 request or preview changed")
-    with tempfile.TemporaryDirectory(prefix="q38-262k-4n-") as tmp:
-        root = Path(tmp)
-        stage_old_code(root, successor=True)
-        return _old_python(root, """
-import json,os,sys
-from pathlib import Path
-from cyber_post_train.jobs import Jobs
-v=json.loads(sys.stdin.read())
-with Jobs(os.environ['FLEET_API_KEY']) as jobs:
-    result=jobs.submit_once(v['request'],Path(v['journal']))
-print(json.dumps({k:result.get(k) for k in ('name','status','run_dir')},sort_keys=True))
-""", stdin=json.dumps({"request": request, "journal": str(dest / "SUBMISSION.jsonl")}))
-
-
-def cpu_preflight_job(*, successor: bool = False) -> dict:
-    """A one-shot 0-GPU Job on the exact image; never creates it here."""
-    plan, request = historical_request(successor=successor)
-    with tempfile.TemporaryDirectory(prefix="q38-262k-4n-") as tmp:
-        root = Path(tmp)
-        stage_old_code(root, successor=successor)
-        sources = {name: (root / name).read_text() for name in SOURCES}
-    compressed = gzip.compress(json.dumps(sources, sort_keys=True).encode(), mtime=0)
-    encoded = base64.b64encode(compressed).decode()
-    if len(encoded) > 120000:
-        raise ValueError("CPU preflight source bundle exceeds one environment value")
-    code = f"""
-import base64,gzip,hashlib,json,os,sys,tempfile
-from pathlib import Path
-stage='bundle_decode'
-try:
-    blob=base64.b64decode(os.environ.pop('CYBER_PREFLIGHT_BUNDLE'),validate=True)
-    assert hashlib.sha256(blob).hexdigest()=={digest(compressed)!r}
-    sources=json.loads(gzip.decompress(blob))
-    with tempfile.TemporaryDirectory(prefix='q38-262k-cpu-') as tmp:
-        stage='source_stage'
-        root=Path(tmp)
-        for name,text in sources.items():
-            path=root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(text)
-        sys.path.insert(0,tmp)
-        stage='compiler_import'
-        from training.sft_262k_4node_v1 import compile_sft,job_request,preflight
-        from cyber_post_train.jobs import digest
-        stage='plan_compile'
-        config=json.loads((root/'configs/runs/qwen38-teacher3k-262k-4node-canary-v1.json').read_text())
-        plan=compile_sft(config,relative_to=root/'configs/runs')
-        stage='plan_request_binding'
-        assert digest(plan)=={digest(json.dumps(plan, sort_keys=True, separators=(',', ':')).encode())!r}
-        assert digest(job_request(plan))=={digest(json.dumps(request, sort_keys=True, separators=(',', ':')).encode())!r}
-        if {successor!r}:
-            stage='entrypoint_plan_validation'
-            from training.sft_262k_runtime import validate_plan
-            validate_plan({{**plan,'plan_sha256':digest(plan)}},check_files=False)
-        # The historical generic preflight's final receipt calls the generic
-        # request builder, which rejects this candidate's different runtime
-        # digest. Point only that receipt call at the exact candidate builder.
-        from training import sft
-        sft.job_request=job_request
-        stage='native_preflight'
-        result=preflight(plan)
-        assert result['request_sha256']=={digest(json.dumps(request, sort_keys=True, separators=(',', ':')).encode())!r}
-        assert result['plan_sha256']=={digest(json.dumps(plan, sort_keys=True, separators=(',', ':')).encode())!r}
-        print(json.dumps({{'status':'passed','candidate_plan_sha256':digest(plan),'candidate_request_sha256':digest(job_request(plan)),'native_checked':result.get('checked'),'counts':result.get('counts'),'gpus':0}},sort_keys=True))
-except BaseException as exc:
-    frames=[];trace=exc.__traceback__
-    while trace:
-        frames.append([Path(trace.tb_frame.f_code.co_filename).name,trace.tb_frame.f_code.co_name,trace.tb_lineno])
-        trace=trace.tb_next
-    print(json.dumps({{'status':'failed','stage':stage,'error_class':type(exc).__name__,'site_chain':frames[-5:]}},sort_keys=True))
-    raise SystemExit(1)
-"""
-    return {
-        "apiVersion": "batch/v1", "kind": "Job",
-        "metadata": {
-            "name": "chris-q38-262k4n-cpu-pre-v6" if successor else "chris-q38-262k4n-cpu-pre-v4", "namespace": "fleet-train-jobs",
-            "annotations": {"fleet.ai/failure-alerts": "off"},
-            "labels": {"kueue.x-k8s.io/queue-name": "training-lq", "kueue.x-k8s.io/priority-class": "q1"},
-        },
-        "spec": {
-            "backoffLimit": 0, "activeDeadlineSeconds": 1800,
-            "ttlSecondsAfterFinished": 600,
-            "template": {"spec": {
-                "restartPolicy": "Never", "priorityClassName": "c1",
-                "containers": [{
-                    "name": "preflight", "image": request["image"],
-                    "command": ["python", "-c", code],
-                    "env": [
-                        {"name": "CYBER_PREFLIGHT_BUNDLE", "value": encoded},
-                        {"name": "CUDA_VISIBLE_DEVICES", "value": ""},
-                        {"name": "HF_HUB_OFFLINE", "value": "1"},
-                        {"name": "TRANSFORMERS_OFFLINE", "value": "1"},
-                    ],
-                    "resources": {"requests": {"cpu": "4", "memory": "16Gi", "ephemeral-storage": "2Gi"}, "limits": {"cpu": "8", "memory": "24Gi", "ephemeral-storage": "4Gi"}},
-                    "volumeMounts": [{"name": "sfs", "mountPath": "/mnt/sfs", "readOnly": True}],
-                }],
-                "volumes": [{"name": "sfs", "persistentVolumeClaim": {"claimName": "sfs-shared", "readOnly": True}}],
-            }},
-        },
-    }
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("prepare", "preview", "prepare-v3", "preview-v3", "submit-v3"))
-    parser.add_argument("directory", type=Path)
-    args = parser.parse_args()
-    successor = args.action.endswith("-v3")
-    result = (submit_v3(args.directory) if args.action == "submit-v3" else
-              prepare(args.directory, successor=successor) if args.action.startswith("prepare") else
-              preview(args.directory, successor=successor))
-    print(json.dumps(result, sort_keys=True))
-
-
-if __name__ == "__main__":
-    main()

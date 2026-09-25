@@ -1,0 +1,18 @@
+{
+  "schema": "qwen38_262k_full57_v1",
+  "name": "chris-q38-t3k262-4n-full57-v1",
+  "output_root": "/mnt/sfs/jobs/chris-q38-t3k262-4n-full57-v1",
+  "train_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher3k-262k-v1/data-v5/train.parquet",
+  "train_sha256": "sha256:86452a28af5c77b48c1e53e13a6d8fd9d483eec350d22214cd7717127502a7b1",
+  "train_rows": 3679,
+  "supervised_tokens": 57384881,
+  "corpus_manifest_sha256": "sha256:d0641cc7baf082c0b1d9bd494112ad8562b9c332cb5be5a7696249d9101a96a8",
+  "datasets_sha256": "7c247e936ed61c7c16c186d4aabcfb9d0c3865f7042ad74ee1954aba50ebf7bf",
+  "batch_size": 32,
+  "epochs": 1,
+  "max_steps": 115,
+  "checkpoint_interval": 10,
+  "capacity_canary_plan_sha256": "85cbab43a21e195e231176b3e6246dc017204c9955a27e018c8ff0a3a86977f4",
+  "capacity_acceptance_sha256": null,
+  "submission_authorized": false
+}

@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from training.long_context_launch import cpu_preflight_job, historical_request, prepare, stage_old_code, successor_spec, verify_bundle
+from training.long_context_launch import historical_request, stage_old_code, successor_spec, verify_bundle
 
 
 class LongContextLaunchTests(unittest.TestCase):
@@ -22,17 +22,6 @@ class LongContextLaunchTests(unittest.TestCase):
         tampered = {**plan, "run_name": "wrong"}
         with self.assertRaisesRegex(ValueError, "bundle plan changed"):
             verify_bundle(tampered, request)
-
-    def test_preparation_is_create_once_and_preview_only(self):
-        with tempfile.TemporaryDirectory() as parent:
-            output = Path(parent) / "candidate"
-            summary = prepare(output)
-            self.assertEqual(summary["state"], "PREVIEW_ONLY_SUBMISSION_BLOCKED")
-            self.assertEqual(summary["gpus"], 32)
-            self.assertEqual(json.loads((output / "request.json").read_text())["run_dir"], summary["output_root"])
-            self.assertFalse((output / "rendered-rayjob.yaml").exists())
-            with self.assertRaises(FileExistsError):
-                prepare(output)
 
     def test_v3_repairs_only_runtime_plan_field_and_identity(self):
         old_plan, old_request = historical_request()
@@ -72,27 +61,6 @@ class LongContextLaunchTests(unittest.TestCase):
             for root, candidate, success in ((a, old_plan, False), (b, plan, True)):
                 result = subprocess.run([sys.executable, "-c", program], input=json.dumps(candidate), text=True, capture_output=True, cwd=root, env={**os.environ, "PYTHONPATH": root})
                 self.assertEqual(result.returncode == 0, success)
-
-    def test_cpu_preflight_job_is_bounded_and_zero_gpu(self):
-        job = cpu_preflight_job()
-        pod = job["spec"]["template"]["spec"]
-        container = pod["containers"][0]
-        self.assertEqual(job["metadata"]["annotations"], {"fleet.ai/failure-alerts": "off"})
-        self.assertEqual(job["metadata"]["labels"]["kueue.x-k8s.io/priority-class"], "q1")
-        self.assertEqual(pod["priorityClassName"], "c1")
-        self.assertEqual((job["spec"]["backoffLimit"], job["spec"]["activeDeadlineSeconds"]), (0, 1800))
-        self.assertEqual(pod["restartPolicy"], "Never")
-        self.assertNotIn("nvidia.com/gpu", container["resources"]["requests"])
-        self.assertTrue(pod["volumes"][0]["persistentVolumeClaim"]["readOnly"])
-        self.assertTrue(container["volumeMounts"][0]["readOnly"])
-        self.assertLess(len(container["env"][0]["value"]), 120000)
-        compile(container["command"][2], "preflight", "exec")
-        successor = cpu_preflight_job(successor=True)
-        self.assertEqual(successor["metadata"]["name"], "chris-q38-262k4n-cpu-pre-v6")
-        self.assertEqual(successor["metadata"]["annotations"], {"fleet.ai/failure-alerts": "off"})
-        self.assertNotIn("nvidia.com/gpu", successor["spec"]["template"]["spec"]["containers"][0]["resources"]["requests"])
-        compile(successor["spec"]["template"]["spec"]["containers"][0]["command"][2], "successor-preflight", "exec")
-
 
 if __name__ == "__main__":
     unittest.main()
