@@ -9,8 +9,10 @@ it is **not** the corrected-data experiment below.
 
 The recorded Teacher3K source contains 2,886 verifier-backed successful
 sessions from 496 task keys and 1,176 task versions, about 57.4 million
-supervised tokens. These are not 2,886 independent tasks: the source audit
-found 370 related-task components. Current task breakage does not by itself
+supervised tokens. These are not 2,886 independent tasks: the historical
+source audit found 370 components when matching exact atom-version locators;
+a stricter, leakage-safe union across versions of the same atom has 356.
+Current task breakage does not by itself
 invalidate an older success at its exact historical version.
 
 The earlier derived windows were not suitable for a clean capability study:
