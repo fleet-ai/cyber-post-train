@@ -34,12 +34,10 @@ The September 25 DEV screen attempted all 16 frozen representatives, one at a
 time: 12 passed startup, both task tools, zero-score negative grading, and
 cleanup; two were rejected before creation because the exact task metadata
 lacked `cyber_contract`; two reached `submit_report` but its harmless no-flag
-probe failed. The later failure explicitly returned a tool rejection; the
-earlier response type is unknown. All 14 created instances were independently
-read back as `stopped` with matching durable create claims. Neither a probe
-rejection nor missing metadata alone proves a task is broken. None of these
-model-free checks proves an intended-path positive solve, so that screen alone
-promoted **zero tasks**.
+probe failed (one explicit rejection, one unknown). All 14 created instances
+were read back `stopped` with matching claims. Neither probe rejection nor
+missing metadata proves breakage; without intended-path proof, **zero tasks**
+were promoted.
 
 | DEV cell | Result | Sealed terminal SHA-256 |
 |---|---|---|
@@ -139,6 +137,8 @@ terminal receipt. The exact create claim later returned 404; exhaustive recent
 queued, pending and running instance listings found no matching environment.
 Do not retry that create ID or count this version current-positive. Resolve the
 create/claim mismatch before another replay; no active allocation was observed.
-Distinct DEV index 11 then failed at Fleet environment creation with an HTTP
-error before any tool call. Its create claim is absent and exhaustive recent
-queued/pending/running listings found no bound instance; no positive credit.
+DEV index 11 failed at environment creation before tools; claim absent, no live
+instance in exhaustive listings. Index 12 failed likewise (terminal
+`sha256:b8afcc0a424fd9a7607306d929fe8da342f40c5a748b9ec359c2db8cfef1f091`):
+claim 404, no exact binding across all queued/pending/2,375 running instances.
+These are create defects, not task-quality verdicts or positive proof.
