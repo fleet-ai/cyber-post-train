@@ -38,6 +38,7 @@ def protocol(count=2, role="dev", seed_mode="fixed"):
             "seed_policy": ({"mode": "fixed", "seeds": [11, 12, 13, 14]}
                             if seed_mode == "fixed" else {"mode": seed_mode}),
             "retry_limit": 0,
+            "scoring_mode": "partial", "pass_criterion": "cyber_ctf_full_solve_v1",
         },
         "arms": {
             "base": {"model_revision": "base-revision", "weights_sha256": sha("1")},
@@ -66,6 +67,12 @@ def events(plan, *, candidate_wins=()):
                     "budget_evidence_sha256": None,
                     "verifier_sha256": task["verifier_sha256"],
                     "verifier_status": "completed",
+                    "verifier_execution_id": f"execution-{version}-{arm}-{attempt}",
+                    "verifier_result_schema": "cyber_verification_result_v3",
+                    "verifier_result_sha256": sha("8"),
+                    "verifier_result_task_version_id": version,
+                    "ctf_score": (1.0 if arm == "candidate" and version in candidate_wins
+                                  and attempt == 1 else 0.0),
                     "success": arm == "candidate" and version in candidate_wins and attempt == 1,
                 })
     return rows
@@ -140,6 +147,25 @@ class FleetEvalTests(unittest.TestCase):
         raw = {k: v for k, v in protocol(seed_mode="server_assigned_unobserved").items() if k != "sha256"}
         raw["common"]["temperature"] = 0.6
         with self.assertRaisesRegex(ValueError, "both be explicit or both be unavailable"):
+            seal_protocol(raw)
+
+    def test_partial_reward_is_not_a_full_ctf_win(self):
+        raw = {k: v for k, v in protocol().items() if k != "sha256"}
+        raw["common"]["pass_criterion"] = "reward_positive"
+        with self.assertRaisesRegex(ValueError, "full-CTF scoring contract"):
+            seal_protocol(raw)
+
+        plan = protocol()
+        rows = events(plan)
+        rows[0]["ctf_score"] = 0.5
+        rows[0]["success"] = True  # weighted reward > 0 is not a full CTF solve
+        with self.assertRaisesRegex(ValueError, "full-CTF score"):
+            summarize(plan, rows)
+        rows[0]["success"] = False
+        self.assertEqual(summarize(plan, rows)["status"], "complete")
+        raw["common"]["pass_criterion"] = "cyber_ctf_full_solve_v1"
+        raw["common"]["scoring_mode"] = "binary"
+        with self.assertRaisesRegex(ValueError, "full-CTF scoring contract"):
             seal_protocol(raw)
 
     def test_invalid_output_or_process_error_never_becomes_zero(self):
