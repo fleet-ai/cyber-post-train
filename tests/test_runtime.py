@@ -3,12 +3,33 @@
 import copy
 import hashlib
 import json
+import shutil
+from collections import UserDict
 from pathlib import Path
 
 import pytest
 
 from training.corpus import sha256
-from training.runtime import FORMAT, materialize_parquet
+from training.runtime import FORMAT, TOKENIZER_FILES, _ids, load_pinned_tokenizer, materialize_parquet
+
+
+def test_tokenizer_mapping_result_is_one_sequence():
+    # Transformers 5 returns BatchEncoding, a Mapping that is not a dict.
+    assert _ids(UserDict(input_ids=[1, 2, 3])) == [1, 2, 3]
+
+
+def test_exact_qwen_tokenizer_batch_encoding(tmp_path):
+    pytest.importorskip("transformers")
+    source = (Path.home() / ".cache/huggingface/hub/models--Qwen--Qwen3.8-27B/snapshots/"
+              "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0")
+    if not all((source / name).is_file() for name in TOKENIZER_FILES):
+        pytest.skip("pinned tokenizer is not available locally")
+    for name in (*TOKENIZER_FILES, "config.json"):
+        shutil.copyfile(source / name, tmp_path / name)
+    tokenizer = load_pinned_tokenizer(tmp_path)
+    value = tokenizer.apply_chat_template([{"role": "user", "content": "Synthetic task."}],
+                                          tokenize=True, add_generation_prompt=False)
+    assert len(_ids(value)) > 0
 
 
 def _render(row):

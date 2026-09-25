@@ -12,6 +12,7 @@ import json
 import os
 import copy
 import sys
+from collections.abc import Mapping
 from functools import cache
 from pathlib import Path
 from typing import Callable
@@ -44,7 +45,7 @@ def _file_sha(path: Path) -> str:
 
 
 def _ids(value: object) -> list[int]:
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         value = value["input_ids"]
     if isinstance(value, list) and len(value) == 1 and isinstance(value[0], list):
         value = value[0]

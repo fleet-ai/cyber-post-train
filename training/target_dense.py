@@ -52,7 +52,7 @@ def audit(source_dir: Path) -> dict:
             or len(target) != receipt.get("retained_sessions")
             or source.digest(exact_tools, ascii=True) != source.TOOL_DIGEST):
         raise ValueError("source, target, and proof identities differ")
-    observed, hidden_total, discovery_total = [], 0, 0
+    observed, hidden_total = [], 0
     for row in target:
         sid = row["record_id"]
         if sid not in raw or "discovery_transform" not in row:
@@ -71,21 +71,9 @@ def audit(source_dir: Path) -> dict:
                     if msg.get("role") == "tool" and msg.get("tool_call_id") == report), None)
         if end is None:
             raise ValueError("successful report is not a complete tool round")
-        direct = source._tool_operations(visible, end)
-        discovery = row["discovery_transform"]
-        if discovery is None:
-            effective = visible
-            if direct is None:
-                raise ValueError("unsupported source tool remains")
-        else:
-            candidate = source._elide_exact_discovery(visible, end, exact_tools)
-            if direct is not None or candidate is None or candidate[1] != discovery:
-                raise ValueError("exact metadata-only discovery elision differs")
-            effective = candidate[0]
-            discovery_total += 1
-        accepted_end = next((i for i, msg in enumerate(effective)
-                             if msg.get("role") == "tool" and msg.get("tool_call_id") == report), None)
-        checked = source._tool_operations(effective, accepted_end) if accepted_end is not None else None
+        if row["discovery_transform"] is not None:
+            raise ValueError("unreviewed tool discovery remains")
+        checked = source._tool_operations(visible, end)
         if checked is None:
             raise ValueError("source calls cannot map to exact target calls")
         operations, expected = checked
@@ -115,8 +103,8 @@ def audit(source_dir: Path) -> dict:
                       "hidden_reasoning_fields_removed": hidden}
         visibility["sha256"] = source.digest(visibility)
         tools = {"schema": "fleet_source_tool_contract_check_v1",
-                 "source_messages_sha256": source.digest(effective),
-                 "accepted_prefix_result_index": accepted_end,
+                 "source_messages_sha256": source.digest(visible),
+                 "accepted_prefix_result_index": end,
                  "operations": operations, "target_tool_schema_sha256": source.TOOL_DIGEST,
                  "target_messages_sha256": source.digest(actual)}
         tools["sha256"] = source.digest(tools)
@@ -134,16 +122,15 @@ def audit(source_dir: Path) -> dict:
                 or proof.get("outcome") != {"status": "completed", "verifier_process_success": True,
                                              "score_at_least_one": True}):
             raise ValueError("target transformation or verifier evidence changed")
-        observed.append((sid, anchor["sha256"], visibility["sha256"],
-                         discovery["sha256"] if discovery else None, tools["sha256"]))
+        observed.append((sid, anchor["sha256"], visibility["sha256"], tools["sha256"]))
         hidden_total += hidden
-    if receipt.get("exact_discovery_elided_sessions") != discovery_total:
+    if receipt.get("exact_discovery_elided_sessions") != 0:
         raise ValueError("source discovery-elision total differs")
     result = {"schema": SCHEMA, "method": METHOD, "source_receipt_sha256": receipt["sha256"],
               "source_files_sha256": {key: receipt["files"][key] for key in FILES},
               "session_transform_set_sha256": _digest(sorted(observed)), "sessions": len(target),
               "hidden_reasoning_fields_removed": hidden_total,
-              "exact_discovery_elided_sessions": discovery_total,
+              "exact_discovery_elided_sessions": 0,
               "trainer_ready": False, "training_blocker": receipt.get("training_blocker")}
     result["sha256"] = _digest(result)
     return result
