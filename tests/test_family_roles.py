@@ -2,7 +2,7 @@ import hashlib
 import json
 import unittest
 
-from training.family_roles import roles
+from training.family_roles import ROOT_ID, legacy_projection, roles, seal
 
 
 def source():
@@ -61,6 +61,24 @@ class FamilyRolesTest(unittest.TestCase):
                        protected_receipts=receipts, validation_families=1)
         self.assertEqual({row["split"] for row in result["identities"]
                           if row["task_key"] in {"a", "b"}}, {"test"})
+
+    def test_legacy_projection_has_new_bound_root(self):
+        source_map = seal(source())
+        split, receipts = (seal(value) for value in protected("cyber/atoms/app/x"))
+        reviewed = roles(source_map, protected_split=split,
+                         protected_receipts=receipts, validation_families=1)
+        anchor, roster = legacy_projection(source_map, split, receipts,
+                                            reviewed, validation_families=1)
+        self.assertEqual(roster["root_role_anchor_id"], ROOT_ID)
+        self.assertEqual(roster["family_role_anchor_sha256"], anchor["sha256"])
+        self.assertEqual(len(roster["identities"]), 5)
+        self.assertEqual({row["split"] for row in roster["identities"]},
+                         {"train", "dev", "final_test"})
+        self.assertEqual(len(roster["heldout_group_ids"]), 2)
+        corrupted = {**reviewed, "identities": reviewed["identities"][:-1]}
+        with self.assertRaisesRegex(ValueError, "digest mismatch"):
+            legacy_projection(source_map, split, receipts, corrupted,
+                              validation_families=1)
 
 
 if __name__ == "__main__":

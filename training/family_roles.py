@@ -14,6 +14,20 @@ from pathlib import Path
 
 from training.qualify import components, load, metadata_only
 
+ROOT_ID = "fleet-q38-teacher3k-transitive-roles-20260925-v1"
+
+
+def seal(body: dict) -> dict:
+    raw = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    return {**body, "sha256": "sha256:" + hashlib.sha256(raw).hexdigest()}
+
+
+def checked_sha(value: dict) -> str:
+    expected = value.get("sha256")
+    if expected != seal({key: item for key, item in value.items() if key != "sha256"})["sha256"]:
+        raise ValueError("reviewed input digest mismatch")
+    return expected
+
 
 def protected_atoms(split: dict, receipts: dict) -> set[str]:
     proven = {(row["task_key"], row["task_version_id"]): row
@@ -84,9 +98,41 @@ def roles(source: dict, *, protected_split: dict, protected_receipts: dict,
             for ((key, version), family) in sorted(identities)
         ],
     }
-    body = json.dumps(result, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
-    result["sha256"] = "sha256:" + hashlib.sha256(body).hexdigest()
-    return result
+    return seal(result)
+
+
+def legacy_projection(source: dict, split: dict, receipts: dict, reviewed: dict,
+                      validation_families: int = 37) -> tuple[dict, dict]:
+    """Bind the historical packer to the corrected, reviewed transitive roles."""
+    inputs = {"teacher_lineage_map": checked_sha(source),
+              "protected_split": checked_sha(split),
+              "protected_receipts": checked_sha(receipts),
+              "family_roles": checked_sha(reviewed)}
+    if reviewed != roles(source, protected_split=split, protected_receipts=receipts,
+                        validation_families=validation_families):
+        raise ValueError("reviewed family roles differ from exact source inputs")
+    mapped = [{"task_key": row["task_key"], "task_version_id": row["task_version_id"],
+               "group_id": row["family_id"],
+               "split": "final_test" if row["split"] == "test" else row["split"]}
+              for row in reviewed["identities"]]
+    if len({row["task_version_id"] for row in mapped}) != len(mapped):
+        raise ValueError("task version ID is shared by multiple task keys")
+    groups = {row["group_id"] for row in mapped}
+    heldout = sorted({row["group_id"] for row in mapped if row["split"] != "train"})
+    anchor = seal({"schema": "fleet_teacher_transitive_role_anchor_v1",
+                   "root_role_anchor_id": ROOT_ID,
+                   "method": {"family": "task-key+shared-base-atom-transitive",
+                              "protected": "heldout-quarantine",
+                              "validation_seed": "teacher-validation-20260925-v1",
+                              "validation_families": validation_families},
+                   "inputs_sha256": inputs,
+                   "counts": {"versions": len(mapped), "families": len(groups),
+                              "nontraining_families": len(heldout)}})
+    roster = seal({"schema": "cyber_exact_task_family_role_roster_v1",
+                   "root_role_anchor_id": ROOT_ID,
+                   "family_role_anchor_sha256": anchor["sha256"],
+                   "heldout_group_ids": heldout, "identities": mapped})
+    return anchor, roster
 
 
 def main() -> None:
@@ -96,10 +142,23 @@ def main() -> None:
     parser.add_argument("--protected-receipts", required=True)
     parser.add_argument("--validation-families", type=int, default=37)
     parser.add_argument("--output", type=Path, help="create one immutable metadata-only roster")
+    parser.add_argument("--reviewed-roles", type=Path)
+    parser.add_argument("--anchor-output", type=Path)
+    parser.add_argument("--legacy-output", type=Path)
     args = parser.parse_args()
-    text = json.dumps(roles(load(args.teacher_map),
-                            protected_split=load(args.protected_split),
-                            protected_receipts=load(args.protected_receipts),
+    source, split, receipts = (load(args.teacher_map), load(args.protected_split),
+                               load(args.protected_receipts))
+    if args.reviewed_roles:
+        if not args.anchor_output or not args.legacy_output or args.output:
+            parser.error("projection requires --anchor-output and --legacy-output only")
+        anchor, roster = legacy_projection(source, split, receipts,
+                                           load(args.reviewed_roles), args.validation_families)
+        for path, value in ((args.anchor_output, anchor), (args.legacy_output, roster)):
+            with path.open("x", encoding="utf-8") as stream:
+                stream.write(json.dumps(value, sort_keys=True, separators=(",", ":"),
+                                        ensure_ascii=False) + "\n")
+        return
+    text = json.dumps(roles(source, protected_split=split, protected_receipts=receipts,
                             validation_families=args.validation_families),
                       sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     if args.output:
