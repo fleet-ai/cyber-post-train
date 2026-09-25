@@ -62,7 +62,8 @@ negative-control, and cleanup checks must still be completed before assigning
 any to the outcome holdout. After also excluding the separately protected
 pending task roster, 408 versions in 311 independent components remained;
 the first frozen model-free qualification wave contains 16 components across
-13 applications. Its metadata status is not runtime acceptance.
+14 applications (14 medium, 2 hard). Its metadata status is not runtime
+acceptance.
 
 An additional source-compatibility gate is open. In a stratified sample of
 198 selected teacher sessions, 193 task/user messages explicitly referenced
