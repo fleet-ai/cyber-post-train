@@ -32,10 +32,10 @@ DEV-family-first 16-cell roster is frozen. Its manifest authorizes no bulk
 launch; after the first two cells' exact cleanup audits, the runtime checker
 permits the 16 frozen DEV representatives one at a time as bounded, model-free
 diagnostics after fresh live preflight.
-A read-only Registry search over all 313 candidate atom subjects found 28
-solvability-stage runs (none positive) and 29 QA runs (12 green for later
-solvability); none bound an exact current candidate task-version ID. Registry
-presence cannot promote this wave.
+A read-only Registry search found no exact positive binding: 28 matching
+atom-solvability runs (none positive), 29 atom-QA runs (12 green but not
+solvability), and 54 positive-labelled mATG runs (zero candidate IDs).
+Registry presence cannot promote this wave.
 The September 25 DEV screen attempted all 16 frozen representatives, one at a
 time: 12 passed startup, both task tools, zero-score negative grading, and
 cleanup; two were rejected before creation because the exact task metadata
@@ -96,9 +96,14 @@ A second exact final-test version was independently replayed (73 bash calls),
 with full credit, authoritative grader agreement, and stopped/claim readback:
 terminal `sha256:1531e8c3b13e0f59d65b2d79fa13ec1ab97127e7130e745fae8c9802816f8876`
 (private file SHA-256 `038217ee2b25617f14050a9e538825f48b2a4fc736197a0daa70dfd44f77ee1b`).
-This establishes **two** current-positive final versions, not independent model
-success and not a sufficiently large final panel. Do not use historical final
-actions, reports, or scores for training or checkpoint selection.
+Four further final versions replayed 37/70/54/38 calls for full authoritative
+credit, with exact stopped-instance and create-claim readbacks. Terminals:
+`sha256:b4b8e5b970862c18fcfb0715e6d45a2b3d78853ea3f90eb4b6d729c205dbe8a4`,
+`sha256:93ebfc30039c468d58f044777db312f82983b0917303a03be010c4de689dd2c0`,
+`sha256:f3224ac43d09d2eef508b9461c7d0a5f1da19f2a6ade7f8586fbf1ae20f73b17`,
+`sha256:4a2554a82a8a6319a82013cac56b3492efa937f82b0a4555f174a088768aca8e`.
+These **six** current-positive families are not independent model solves or a sufficient panel.
+Never use final actions, reports, or scores for training or checkpoint selection.
 An additional final-version replay timed out after 76/84 historical bash calls,
 before grading; its sealed terminal is
 `sha256:9dcd36965083f24a80bdcd499a56dd5e4e66e68ad36fb0389607bcd891081985`.
