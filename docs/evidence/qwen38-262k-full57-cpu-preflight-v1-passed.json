@@ -14,6 +14,7 @@
   "job_and_pod_released": true,
   "full_plan_sha256": "775c3c827f40a0f9425540b34c6557d89660518a61ec2dfeddbb9718ebb2435d",
   "full_request_sha256": "164a6ca9b2d09a5c41059ead3b51bf04f71a124ae7e12e109c60a90fce0350af",
+  "full_request_preview": {"nodes": 4, "gpus": 32, "manifest_sha256": "26a6a7b5bc5998456abcc43b679f864a3b057cd204fb459b45ea1b6b096cf89d"},
   "preflight_log_sha256": "0bfa33548ffd84e837ff1252781fa05ebe9be0dfc35e2e68a47005d076e6061d",
   "validation_status": "validated",
   "max_steps": 115,
