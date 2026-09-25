@@ -9,8 +9,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from training.dense_bridge import (COMMIT, _digest, _legacy_digest, stage_historical,
-                                   validate_request, INPUTS, REQUEST_SCHEMA)
+from training.dense_bridge import (COMMIT, SOURCES, NATIVE_HELPER_SHA, _digest, _legacy_digest, stage_historical,
+                                   validate_request, compose_teacher_ce, _file_sha,
+                                   INPUTS, REQUEST_SCHEMA, ALGORITHM, MANIFEST_SCHEMA,
+                                   RECEIPT_SCHEMA)
 
 
 class DenseBridgeTest(unittest.TestCase):
@@ -98,6 +100,122 @@ class DenseBridgeTest(unittest.TestCase):
 
     def test_request_and_legacy_receipt_json_seals_are_distinct(self):
         self.assertNotEqual(_digest({"name": "é"}), _legacy_digest({"name": "é"}))
+
+    def test_mixed_manifest_compiles_with_pinned_teacher_ce_runtime(self):
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+        from training import launch
+        from training.runtime import BACKEND_SHA, MODEL, TOKENIZER_FILES, TOKENIZER_SHA
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            dense_dir, dev_dir, source_dir = (root / name for name in ("dense", "dev", "source"))
+            for directory in (dense_dir, dev_dir, source_dir):
+                directory.mkdir()
+            train_group, dev_group, test_group = ("sha256:" + c * 64 for c in "cde")
+            pq.write_table(pa.Table.from_pylist([{"task_key": "train-task",
+                                                   "source_task_version_id": "train-version",
+                                                   "source_group_id": train_group}]),
+                           dense_dir / "train.parquet")
+            pq.write_table(pa.Table.from_pylist([{"task_version_id": "dev-version",
+                                                   "family_id": dev_group}]),
+                           dev_dir / "dev.parquet")
+            roster = {"schema": "cyber_exact_task_family_role_roster_v1",
+                      "root_role_anchor_id": "fleet-blackbox-current-study-20260914-v2",
+                      "family_role_anchor_sha256": "sha256:" + "f" * 64,
+                      "heldout_group_ids": sorted([dev_group, test_group]),
+                      "identities": [
+                          {"task_key": "train-task", "task_version_id": "train-version",
+                           "group_id": train_group, "split": "train"},
+                          {"task_key": "dev-task", "task_version_id": "dev-version",
+                           "group_id": dev_group, "split": "dev"},
+                          {"task_key": "test-task", "task_version_id": "test-version",
+                           "group_id": test_group, "split": "final_test"}]}
+            roster["sha256"] = _digest(roster)
+            roster_path = root / "roster.json"
+            roster_path.write_text(json.dumps(roster))
+            projected = {item["task_version_id"]: {"family_id": item["group_id"],
+                         "split": "test" if item["split"] == "final_test" else item["split"]}
+                         for item in roster["identities"]}
+            tools_sha = "sha256:" + "a" * 64
+            (source_dir / "dev.jsonl").write_text("{}\n")
+            dev_proof = {"rows": 1, "inputs_sha256": {"roster": _legacy_digest(projected),
+                                                       "tools": tools_sha}}
+            dev_proof["sha256"] = _legacy_digest(dev_proof)
+            source = {"format": "structured_message_windows_v1", "trainer_ready": False,
+                      "partitions": {"train": {}, "dev": {
+                          "path": "dev.jsonl", "bytes": (source_dir / "dev.jsonl").stat().st_size,
+                          "sha256": _file_sha(source_dir / "dev.jsonl"), "receipt": dev_proof}}}
+            source["sha256"] = _legacy_digest(source)
+            (source_dir / "RECEIPT.json").write_text(json.dumps(source))
+            train = {"path": "train.parquet", "sha256": _file_sha(dense_dir / "train.parquet"),
+                     "rows": 1, "task_keys": ["train-task"],
+                     "format": "pretokenized_assistant_segments_v1", "supervised_tokens": 10,
+                     "assistant_responses": 1, "source_sessions": 1,
+                     "source_total_assistant_responses": 1, "excluded_assistant_responses": 0}
+            dense = {"schema": MANIFEST_SCHEMA, "algorithm": ALGORITHM,
+                     "validation_mode": "task_outcomes_only", "split_sha256": roster["family_role_anchor_sha256"],
+                     "materialization": {"family_roster_sha256": roster["sha256"],
+                                         "target_tools_sha256": tools_sha},
+                     "builder_sha256": {
+                         "message_aligned_teacher_corpus.py": "sha256:" + SOURCES["training/message_aligned_teacher_corpus.py"],
+                         "dense.py": "sha256:" + SOURCES["training/dense.py"],
+                         "corpus.py": "sha256:" + SOURCES["training/corpus.py"],
+                         "native_helper": NATIVE_HELPER_SHA},
+                     "tokenizer": {"repo": MODEL[0], "revision": MODEL[1],
+                                   "files": [{"path": p, "sha256": h} for p, h in TOKENIZER_FILES.items()],
+                                   "chat_template_sha256": TOKENIZER_FILES["chat_template.jinja"],
+                                   "backend_sha256": BACKEND_SHA},
+                     "files": {"train": train}, "dev_windows": 0}
+            dense["sha256"] = _legacy_digest(dense)
+            dense_path = dense_dir / "manifest.json"
+            dense_path.write_text(json.dumps(dense))
+            receipt = {"schema": RECEIPT_SCHEMA, "manifest_file_sha256": _file_sha(dense_path),
+                       "manifest_sha256": dense["sha256"], "train_parquet_sha256": train["sha256"],
+                       "rows": 1, "supervised_tokens": 10}
+            receipt["sha256"] = _legacy_digest(receipt)
+            (dense_dir / "RECEIPT.json").write_text(json.dumps(receipt))
+            dev = {"path": "dev.parquet", "sha256": _file_sha(dev_dir / "dev.parquet"),
+                   "rows": 1, "task_keys": ["dev-version"],
+                   "format": "chat_messages_last_assistant_v2"}
+            native = {"schema": "qwen38_tool_aware_parquet_v1", "trainer_ready": True,
+                      "validation_mode": "teacher_cross_entropy",
+                      "source_receipt_sha256": source["sha256"],
+                      "tokenizer": {"repo": MODEL[0], "revision": MODEL[1],
+                                    "sha256": TOKENIZER_SHA},
+                      "files": {"train": {"format": "chat_messages_last_assistant_v2"}, "dev": dev}}
+            native["sha256"] = _legacy_digest(native)
+            (dev_dir / "manifest.json").write_text(json.dumps(native))
+            output = root / "mixed.json"
+            composed = compose_teacher_ce(dense_dir, dev_dir, source_dir, roster_path, root, output)
+            manifest = json.loads(output.read_text())
+            self.assertEqual(composed["manifest_sha256"], manifest["sha256"])
+            self.assertEqual(manifest["files"]["train"]["path"], "dense/train.parquet")
+            self.assertEqual(manifest["files"]["dev"]["path"], "dev/dev.parquet")
+            config = json.loads((Path(__file__).parents[1] / "configs/runs/qwen38-96k-debug-v1.json").read_text())
+            config["name"] = "synthetic-dense-ce"
+            config["data"] = {"manifest": "../data/corpus.json", "root": "/mnt/sfs/jobs/synthetic-dense-ce"}
+            config["recipe"].update(eval_interval=1, checkpoint_interval=1)
+            compiled = launch._legacy("compile", {"config": {**config,
+                "model": {"root": config["model"]["root"],
+                          "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
+                          "weights": "../models/qwen38-27b-1d4bf0f2.weights.json"}}},
+                manifest=output.read_bytes())
+            plan = compiled["plan"]
+            self.assertEqual(plan["validation_mode"], "teacher_cross_entropy")
+            self.assertEqual(plan["datasets"]["train"]["format"], "pretokenized_assistant_segments_v1")
+            self.assertEqual(plan["datasets"]["dev"]["format"], "chat_messages_last_assistant_v2")
+            self.assertEqual(plan["recipe"]["max_steps"], 1)
+            with self.assertRaises(ValueError):
+                compose_teacher_ce(dense_dir, dev_dir, source_dir, roster_path, root, output)
+            pq.write_table(pa.Table.from_pylist([{"task_version_id": "dev-version",
+                                                   "family_id": train_group}]),
+                           dev_dir / "dev.parquet")
+            dev["sha256"] = _file_sha(dev_dir / "dev.parquet")
+            native["sha256"] = _legacy_digest({k: v for k, v in native.items() if k != "sha256"})
+            (dev_dir / "manifest.json").write_text(json.dumps(native))
+            with self.assertRaisesRegex(ValueError, "family roles"):
+                compose_teacher_ce(dense_dir, dev_dir, source_dir, roster_path, root, root / "bad.json")
 
 
 if __name__ == "__main__":
