@@ -42,7 +42,7 @@ and lineage; it cannot certify a forged JSON assertion. It always emits
 holdout; do not pass an unsplit pool as if every candidate had been trained on.
 Frozen roles are `train`, `teacher_validation`, `dev`, and `final_test`.
 
-For the last frozen census, the report finds 1,217 blackbox versions. Seventy-
+For the September 24 frozen census, the report finds 1,217 blackbox versions. Seventy-
 five have prior exact-version execution receipts; another 33 have reviewed
 lineage but no complete runtime receipt. The **1,035** `not_analyzed` versions
 without prior exact receipts are the discovery pool. First fetch each exact
@@ -53,13 +53,33 @@ lineage review. All 1,035 still need current-status and runtime checks before
 they can enlarge the runnable heldout. Do not confuse this report with a fresh
 runtime test: no new jobs or evaluations were launched to make it.
 
+On September 25, a read-only live QA refresh found 1,109 `not_analyzed`
+blackbox versions, one fewer than the frozen census; 26 were `agent_failure`,
+one more. Excluding the same 75 prior exact receipts leaves 1,034 unreviewed.
+Of those, 363 share a Teacher3K task key; 671 have new keys. Exact-version
+metadata GETs succeeded for all 671, including production status, verifier,
+environment version, and atom-source locators. After excluding Teacher3K atom
+keys, 433 versions in 327 independent atom-key families remain as **possible**
+new heldout candidates. That is a discovery count, not a runtime-qualified
+count. The 20 existing live-heldout and 16 conditional candidate families must
+also be excluded before fixing a new wave. `training/qualify_live.py` performs
+this current metadata-only selection; it never creates environments.
+
 Teacher3K had 2,886 accepted whole-session successes, but its old packing
 clipped most windows inside messages, used tool names that differed from the
 OpenCode evaluation, and salvaged 149 prefixes, 148 without a retained report.
 Rebuild SFT examples only after preserving complete task/tool context and
-verifying success in the retained segment. Its 496 task keys collapse into 370
-reviewed shared-atom components; split by those components, not by session or
-task-key spelling. Reserve a component-stratified teacher-validation slice
+verifying success in the retained segment. The historical audit groups its
+496 task keys into 370 components using exact atom-version locators;
+stripping version suffixes merges those into **356** stricter base-atom
+families. `training/family_roles.py` splits by those 356 and requires the
+reviewed Fleet holdout split and exact receipts. Five protected families were
+exposed by six teacher source versions (16 sessions, 381,734 tokens); all
+source versions in those families are quarantined as `test`, never trained or
+used for teacher validation. Its 37-family teacher-validation slice covers all
+seven source apps, but cannot claim representation on environment, difficulty,
+or vulnerability type without those missing source labels. Split by these
+families, not by session or task-key spelling. Reserve teacher validation
 before packing, and keep both that slice and the live development/final tasks
 out of all SFT and RL inputs. The existing 20 Teacher3K-clean live families
 are a useful debugging panel, **not** a powered test for a modest 10-point
