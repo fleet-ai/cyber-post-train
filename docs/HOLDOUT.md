@@ -58,10 +58,14 @@ After protected-family exclusion, 408 versions across the same 14 apps and
 311 independent families remain. The frozen 16-family first wave is metadata
 only. A direct API canary on September 25 created one exact environment and
 proved its deletion, but did **not** qualify the task: version-scoped rollout
-provisioning ignores the caller's create-request ID, so the durable claim could
-not be reconciled. `training/runtime_qualify.py` now refuses new provisions
-until that server contract is repaired. Neither the 16-wave nor the broader
-311-family pool is yet a runnable heldout set.
+provisioning ignored the caller's create-request ID, so the durable claim could
+not be reconciled. Theseus PR #35155 repaired this in source and staging now
+advertises the exact capability, but production still returned 404 on September
+25. `training/runtime_qualify.py` remains create-disabled until production
+readback. Its runtime receipt is deliberately not task acceptance: a positive
+intended-path/grade proof is also required. The first 16 candidates have no
+Pipeline Lanes and no solvability-stage Registry run, so neither the 16-wave nor
+the broader 311-family pool is yet a runnable heldout set.
 
 Teacher3K had 2,886 accepted whole-session successes, but its old packing
 clipped most windows inside messages, used tool names that differed from the
