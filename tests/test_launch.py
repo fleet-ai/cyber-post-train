@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import tempfile
+import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from training import launch
 
@@ -184,6 +186,146 @@ class LaunchTests(unittest.TestCase):
         self.config_path.write_text(json.dumps(self.config))
         with self.assertRaisesRegex(ValueError, "immutable safety/science gate"):
             launch.prepare(self.config_path, self.root / "too-long")
+
+    def test_cpu_job_is_exact_zero_gpu_c1_q1_and_root_alerts_off(self) -> None:
+        dest, request = self.prepare()
+        job = launch.cpu_job(dest)
+        self.assertEqual(job["metadata"]["annotations"]["fleet.ai/failure-alerts"], "off")
+        self.assertEqual(job["metadata"]["labels"]["kueue.x-k8s.io/priority-class"], "q1")
+        spec = job["spec"]["template"]["spec"]
+        self.assertEqual((spec["priorityClassName"], spec["priority"]), ("c1", 10000))
+        self.assertEqual(spec["containers"][0]["image"], request["image"])
+        self.assertNotIn("nvidia.com/gpu", json.dumps(spec))
+        self.assertTrue(spec["volumes"][0]["persistentVolumeClaim"]["readOnly"])
+        self.assertTrue(spec["containers"][0]["volumeMounts"][0]["readOnly"])
+        self.assertLess(max(len(e["value"]) for e in spec["containers"][0]["env"]), 131072)
+        launch._check_cpu_render(job, job)
+        bad = json.loads(json.dumps(job))
+        del bad["metadata"]["annotations"]["fleet.ai/failure-alerts"]
+        with self.assertRaisesRegex(ValueError, "root alert"):
+            launch._check_cpu_render(job, bad)
+        bad = json.loads(json.dumps(job))
+        bad["spec"]["template"]["spec"]["priorityClassName"] = "c0"
+        with self.assertRaisesRegex(ValueError, "c1/q1"):
+            launch._check_cpu_render(job, bad)
+
+    def test_cpu_preview_is_server_checked_and_create_is_not_implicit(self) -> None:
+        dest, _ = self.prepare()
+        job = launch.cpu_job(dest)
+        pvc = {"metadata": {"uid": "34cb6b11-8766-4294-9f9e-332064ea17d5"},
+               "status": {"phase": "Bound"}}
+        calls = []
+
+        def kubectl(_context, args, payload=None, **_kwargs):
+            calls.append(args)
+            return pvc if args[2:4] == ["get", "pvc"] else job
+
+        with mock.patch.object(launch, "_kubectl", side_effect=kubectl):
+            proof = launch.cpu_preview(dest, launch.PROD_CONTEXT)
+        self.assertEqual(proof["status"], "previewed_not_created")
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(any("--dry-run=server" in c for c in calls))
+        self.assertFalse((dest / "CPU-01-INTENT.json").exists())
+        with mock.patch.object(launch, "cpu_preview", return_value=proof):
+            with self.assertRaisesRegex(ValueError, "reviewed Job"):
+                launch.cpu_create(dest, launch.PROD_CONTEXT, "0" * 64)
+        self.assertFalse((dest / "CPU-01-INTENT.json").exists())
+
+    def test_gpu_submit_requires_fresh_uid_bound_cpu_receipt_before_network(self) -> None:
+        dest, _ = self.prepare()
+        native = {
+            "status": "passed", "gpus": 0, "checked": [
+                "native_sources", "model_files", "dataset_files", "native_config",
+                "native_forward_backward_signature", "native_train_only_loader",
+                "tokenization", "target_accounting"],
+            "counts": {"train": {"rows": 1, "supervised_tokens": 1},
+                       "dev": {"rows": 1, "supervised_tokens": 1}},
+        }
+        receipt = json.loads((dest / "PREPARED.json").read_text())
+        native.update({"plan_sha256": receipt["plan_sha256"],
+                       "request_sha256": receipt["request_sha256"]})
+        (dest / "PREFLIGHT.json").write_text(json.dumps(native))
+        with mock.patch.object(launch, "_lease") as lease:
+            with self.assertRaisesRegex(ValueError, "UID-bound"):
+                launch.submit(dest, "a" * 64)
+            lease.assert_not_called()
+        native["cpu_job"] = {"name": "pre", "uid": "u", "pod_uid": "p",
+                             "context": launch.PROD_CONTEXT, "output_absent": True,
+                             "observed_at_unix": 0}
+        (dest / "PREFLIGHT.json").write_text(json.dumps(native))
+        with mock.patch.object(launch, "_lease") as lease:
+            with self.assertRaisesRegex(ValueError, "fresh UID-bound"):
+                launch.submit(dest, "a" * 64)
+            lease.assert_not_called()
+
+    def test_capacity_counts_allocated_pod_not_its_running_rayjob_as_queued(self) -> None:
+        pod = {"metadata": {"name": "chris-q38-run-abcd-head-xyz", "labels": {
+            "fleet.ai/run-name": "chris-q38-run", "ray.io/cluster": "chris-q38-run-abcd-cluster"}},
+            "status": {"phase": "Running"}, "spec": {"nodeName": "node-1", "containers": [
+                {"resources": {"requests": {"nvidia.com/gpu": "8"}}}]}}
+        cpu = {"metadata": {"name": "chris-q38-cpu-pre-a01", "labels": {
+            "cyber-post-train.fleet.ai/owner": "chris"}}, "status": {"phase": "Running"},
+            "spec": {"nodeName": "node-cpu", "containers": [{"resources": {
+                "requests": {"cpu": "4"}}}]}}
+        running = {"metadata": {"name": "chris-q38-run-abcd"}, "status": {
+            "jobStatus": "RUNNING", "rayClusterName": "chris-q38-run-abcd-cluster"}}
+        queued = {"metadata": {"name": "chris-q38-next-efgh"}, "status": {
+            "jobStatus": "PENDING"}}
+
+        def kubectl(context, args, *_a, **_k):
+            if context == launch.DEV_CONTEXT:
+                return {"items": []}
+            if args[1] == "pods":
+                return {"items": [pod, cpu]}
+            if args[1] == "rayjobs.ray.io":
+                return {"items": [running, queued]}
+            return {"items": []}
+
+        with mock.patch.object(launch, "_kubectl", side_effect=kubectl):
+            census = launch.capacity()
+        self.assertEqual(census, {"active_nodes": 1, "active_gpus": 8,
+                                  "queued_jobs": 1, "owned_active_gpu_pods": 1})
+
+    def test_lease_release_must_match_original_holder(self) -> None:
+        existing = {"metadata": {"uid": "lease-uid", "resourceVersion": "3"},
+                    "spec": {"holderIdentity": "another", "renewTime": "2026-09-25T00:00:00Z",
+                             "leaseDurationSeconds": 900}}
+        with mock.patch.object(launch, "_kubectl", return_value=existing) as kubectl:
+            with self.assertRaisesRegex(ValueError, "identity changed"):
+                launch._lease(None, expected_uid="lease-uid", expected_holder="mine")
+            kubectl.assert_called_once()
+
+    def test_gpu_review_drift_blocks_post_under_lease(self) -> None:
+        dest, _ = self.prepare()
+        receipt = json.loads((dest / "PREPARED.json").read_text())
+        native = {"status": "passed", "gpus": 0,
+                  "plan_sha256": receipt["plan_sha256"],
+                  "request_sha256": receipt["request_sha256"],
+                  "checked": ["native_sources", "model_files", "dataset_files",
+                              "native_config", "native_forward_backward_signature",
+                              "native_train_only_loader", "tokenization", "target_accounting"],
+                  "counts": {"train": {"rows": 1, "supervised_tokens": 1},
+                             "dev": {"rows": 1, "supervised_tokens": 1}},
+                  "cpu_job": {"uid": "job", "pod_uid": "pod", "output_absent": True,
+                              "context": launch.PROD_CONTEXT, "observed_at_unix": time.time()}}
+        (dest / "PREFLIGHT.json").write_text(json.dumps(native))
+        historical = launch._legacy
+
+        def bridge(mode, value, **kwargs):
+            if mode == "preview":
+                return {"manifest_sha256": "b" * 64}
+            if mode == "submit":
+                self.fail("POST path reached despite reviewed-preview drift")
+            return historical(mode, value, **kwargs)
+
+        with (mock.patch.object(launch, "_lease", return_value={"metadata": {"uid": "lease"}})
+              as lease, mock.patch.object(launch, "capacity", return_value={"active_nodes": 1}),
+              mock.patch.object(launch, "_cpu_observation", return_value=native),
+              mock.patch.object(launch, "_legacy", side_effect=bridge)):
+            with self.assertRaisesRegex(ValueError, "reviewed GPU"):
+                launch.submit(dest, "a" * 64)
+        self.assertEqual(lease.call_count, 2)  # acquire and release, no POST intent
+        self.assertFalse((dest / "GPU-POST-INTENT.jsonl").exists())
 
 
 if __name__ == "__main__":

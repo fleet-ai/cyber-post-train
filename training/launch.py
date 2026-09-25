@@ -2,14 +2,16 @@
 
 This checkout intentionally does not vendor the old trainer. Exact historical
 Git objects are verified and used only in an isolated temporary directory.
-Prepare and CPU preflight do not allocate GPUs; preview is read-only. There is
-no POST/submit command: live capacity and create-once SFS checks are separate
-operator gates, not something a local preview can prove.
+Preparation does not allocate GPUs. A zero-GPU Kubernetes Job proves native
+input loading on shared storage before a separately reviewed, create-once GPU
+submission. No job is started by prepare or either preview command.
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
+import gzip
 import hashlib
 import json
 import os
@@ -17,10 +19,17 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 COMMIT = "c908d3a828d070c6b27611fc388b1e7e3b4049dd"
 ROOT = Path(__file__).resolve().parents[1]
+PROD_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
+DEV_CONTEXT = "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb"
+NAMESPACE = "fleet-train-jobs"
+LEASE = "chris-cpt-gpu-submit"
 SOURCES = {
     "training/__init__.py": "ecf358039bbb9b6cbab6546c9b1e61b9bc06c5b2d5b19907ff303a9277d77e27",
     "training/io.py": "7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
@@ -56,12 +65,12 @@ def historical_source(name: str) -> bytes:
 
 
 def _legacy(mode: str, value: dict, *, manifest: bytes | None = None) -> dict:
-    """Run the historical compiler/CPU gate in its own import path."""
+    """Run the historical compiler or Jobs client in its own import path."""
     script = """
 import json,os,sys
 from pathlib import Path
-from training.sft import compile_sft,job_request,preflight
-from cyber_post_train.jobs import Jobs,digest,validate_preview
+from training.sft import compile_sft,job_request
+from cyber_post_train.jobs import Jobs,validate_preview
 v=json.load(sys.stdin)
 try:
     if os.environ['SFT_BRIDGE_MODE']=='compile':
@@ -69,8 +78,6 @@ try:
         result={'plan':p,'request':job_request(p)}
     elif os.environ['SFT_BRIDGE_MODE']=='request':
         result={'request':job_request(v['plan'])}
-    elif os.environ['SFT_BRIDGE_MODE']=='preflight':
-        result=preflight(v['plan'])
     elif os.environ['SFT_BRIDGE_MODE']=='validate_preview':
         result=validate_preview(v['request'],v['preview'])
     elif os.environ['SFT_BRIDGE_MODE']=='preview':
@@ -85,6 +92,17 @@ try:
                     existing.get('title')==r['title']):
                     raise ValueError('duplicate API run identity')
             result=validate_preview(r,jobs.preview(r))
+    elif os.environ['SFT_BRIDGE_MODE']=='submit':
+        token=os.environ.get('FLEET_API_KEY')
+        if not token: raise ValueError('missing API credential')
+        class ReviewedJobs(Jobs):
+            def preview(self, request):
+                rendered=super().preview(request)
+                if validate_preview(request,rendered)['manifest_sha256']!=v['reviewed_manifest_sha256']:
+                    raise ValueError('server render differs from reviewed preview')
+                return rendered
+        with ReviewedJobs(token) as jobs:
+            result=jobs.submit_once(v['request'],Path(v['journal']))
     else: raise ValueError('unsupported bridge stage')
     print(json.dumps(result,sort_keys=True,allow_nan=False))
 except BaseException as exc:
@@ -180,7 +198,8 @@ def prepare(config_path: Path, destination: Path) -> dict:
         or request["failureAlerts"] is not False
         or request["priority_class"] != "c1"
         or request["workers"] != 1
-        or request["gpus_per_worker"] != 8):
+        or request["gpus_per_worker"] != 8
+        or Path(request["run_dir"]).name != request["name"]):
         raise ValueError("compiled debug request failed an immutable safety/science gate")
     receipt = {
         "schema": "qwen38_96k_debug_prepared_v1", "historical_commit": COMMIT,
@@ -225,25 +244,396 @@ def _preflight_matches(result: dict, receipt: dict) -> bool:
     )
 
 
-def preflight(directory: Path) -> dict:
+def _kubectl(context: str, args: list[str], payload: dict | None = None,
+             *, missing_ok: bool = False) -> dict | None:
+    if not context or not re.fullmatch(r"[A-Za-z0-9_.:@/-]+", context):
+        raise ValueError("explicit Kubernetes context required")
+    result = subprocess.run(
+        ["kubectl", "--context", context, "--request-timeout=60s", *args, "-o", "json"],
+        input=None if payload is None else canonical(payload), capture_output=True,
+        timeout=75, check=False,
+    )
+    if result.returncode or (not result.stdout and not missing_ok):
+        raise ValueError("Kubernetes operation failed; reconcile before retry")
+    if not result.stdout and missing_ok:
+        return None
+    value = json.loads(result.stdout)
+    if not isinstance(value, dict):
+        raise ValueError("Kubernetes returned a non-object")
+    return value
+
+
+def cpu_job(directory: Path, attempt: int = 1) -> dict:
     plan, request, receipt = prepared(directory)
-    path = directory / "PREFLIGHT.json"
-    if path.exists() or path.is_symlink():
-        raise ValueError("CPU preflight receipt already exists")
-    result = _legacy("preflight", {"plan": plan})
-    if not _preflight_matches(result, receipt):
-        raise ValueError("CPU preflight did not pass for this exact request")
-    path.write_bytes(canonical(result) + b"\n")
-    return {"status": "passed", "plan_sha256": receipt["plan_sha256"]}
+    if type(attempt) is not int or not 1 <= attempt <= 99:
+        raise ValueError("CPU attempt must be 1..99")
+    name = request["name"] + f"-pre-a{attempt:02d}"
+    if len(name) > 63:
+        raise ValueError("CPU Job name exceeds Kubernetes limit")
+    files = {"src/" + name: historical_source(name).decode()
+             for name in SOURCES if name.endswith(".py")}
+    worker = (ROOT / "training/preflight_worker.py").read_bytes()
+    manifest = {
+        "schema": "qwen38_cpu_preflight_bundle_v1", "run_name": request["name"],
+        "output_root": request["run_dir"], "plan_sha256": receipt["plan_sha256"],
+        "request_sha256": receipt["request_sha256"],
+        "files": {name: sha(text.encode()) for name, text in files.items()},
+    }
+    manifest["sha256"] = sha(canonical(manifest))
+    blob = gzip.compress(canonical({"manifest": manifest, "files": files, "plan": plan}), mtime=0)
+    encoded = base64.b64encode(blob).decode()
+    chunks = [encoded[i:i + 48_000] for i in range(0, len(encoded), 48_000)]
+    if not 1 <= len(chunks) <= 32:
+        raise ValueError("CPU preflight bundle exceeds environment bound")
+    annotations = {
+        "fleet.ai/failure-alerts": "off",
+        "cyber-post-train.fleet.ai/plan-sha256": receipt["plan_sha256"],
+        "cyber-post-train.fleet.ai/request-sha256": receipt["request_sha256"],
+        "cyber-post-train.fleet.ai/output-root": request["run_dir"],
+        "cyber-post-train.fleet.ai/bundle-sha256": sha(blob),
+        "cyber-post-train.fleet.ai/worker-sha256": sha(worker),
+    }
+    env = {"CUDA_VISIBLE_DEVICES": "", "NVIDIA_VISIBLE_DEVICES": "none",
+           "WANDB_MODE": "disabled", "HF_HUB_OFFLINE": "1",
+           "TRANSFORMERS_OFFLINE": "1", "PYTHONDONTWRITEBYTECODE": "1",
+           "Q38_BUNDLE_SHA256": sha(blob),
+           **{f"Q38_BUNDLE_{i}": text for i, text in enumerate(chunks)}}
+    return {
+        "apiVersion": "batch/v1", "kind": "Job",
+        "metadata": {"name": name, "namespace": "fleet-train-jobs",
+                     "annotations": annotations,
+                     "labels": {"kueue.x-k8s.io/queue-name": "training-lq",
+                                "kueue.x-k8s.io/priority-class": "q1",
+                                "cyber-post-train.fleet.ai/owner": "chris"}},
+        "spec": {"activeDeadlineSeconds": 1800, "backoffLimit": 0,
+                 "suspend": True, "ttlSecondsAfterFinished": 7200,
+                 "template": {"spec": {
+                     "automountServiceAccountToken": False, "restartPolicy": "Never",
+                     "nodeSelector": {"kubernetes.io/arch": "amd64",
+                                      "workload": "fleetai-training-ng-cpu"},
+                     "priorityClassName": "c1", "priority": 10000,
+                     "tolerations": [{"key": "workload", "operator": "Equal",
+                                      "value": "fleetai-training-ng-cpu", "effect": "NoSchedule"}],
+                     "containers": [{
+                         "name": "preflight", "image": request["image"],
+                         "command": ["python", "-u", "-c", worker.decode()],
+                         "env": [{"name": k, "value": v} for k, v in sorted(env.items())],
+                         "terminationMessagePolicy": "File",
+                         "resources": {"requests": {"cpu": "4", "memory": "16Gi"},
+                                       "limits": {"cpu": "8", "memory": "24Gi"}},
+                         "securityContext": {"allowPrivilegeEscalation": False,
+                                             "privileged": False},
+                         "volumeMounts": [{"name": "sfs", "mountPath": "/mnt/sfs",
+                                           "readOnly": True}],
+                     }],
+                     "volumes": [{"name": "sfs", "persistentVolumeClaim": {
+                         "claimName": "sfs-shared", "readOnly": True}}],
+                 }}},
+    }
+
+
+def _check_cpu_render(expected: dict, actual: dict) -> None:
+    meta, spec = actual.get("metadata", {}), actual.get("spec", {})
+    template = spec.get("template", {}).get("spec", {})
+    original = expected["spec"]["template"]["spec"]
+    containers = template.get("containers", [])
+    actual_env = containers[0].get("env", []) if len(containers) == 1 else []
+    expected_env = original["containers"][0]["env"]
+    env_equal = (len(actual_env) == len(expected_env)
+                 and len({v.get("name") for v in actual_env}) == len(actual_env)
+                 and {v.get("name"): v.get("value", "") for v in actual_env}
+                     == {v["name"]: v["value"] for v in expected_env})
+    if (actual.get("kind") != "Job" or meta.get("namespace") != "fleet-train-jobs"
+        or meta.get("name") != expected["metadata"]["name"]
+        or meta.get("annotations", {}).get("fleet.ai/failure-alerts") != "off"
+        or any(meta.get("annotations", {}).get(k) != v
+               for k, v in expected["metadata"]["annotations"].items())
+        or meta.get("labels", {}).get("kueue.x-k8s.io/queue-name") != "training-lq"
+        or meta.get("labels", {}).get("kueue.x-k8s.io/priority-class") != "q1"
+        or spec.get("suspend") is not True or spec.get("backoffLimit") != 0
+        or template.get("priorityClassName") != "c1" or template.get("priority") != 10000
+        or template.get("nodeSelector") != original["nodeSelector"]
+        or len(containers) != 1 or containers[0].get("image") != original["containers"][0]["image"]
+        or containers[0].get("command") != original["containers"][0]["command"]
+        or not env_equal
+        or containers[0].get("resources") != original["containers"][0]["resources"]
+        or containers[0].get("securityContext") != original["containers"][0]["securityContext"]
+        or containers[0].get("envFrom")
+        or template.get("automountServiceAccountToken") is not False
+        or any("nvidia.com/gpu" in str(c.get("resources", {})) for c in containers)
+        or template.get("volumes") != original["volumes"]
+        or containers[0].get("volumeMounts") != original["containers"][0]["volumeMounts"]):
+        raise ValueError("server-rendered CPU Job failed root alert, c1/q1, zero-GPU or SFS gate")
+
+
+def cpu_preview(directory: Path, context: str, attempt: int = 1) -> dict:
+    if context != PROD_CONTEXT:
+        raise ValueError("96k shared-SFS CPU proof requires the production context")
+    pvc = _kubectl(context, ["-n", NAMESPACE, "get", "pvc", "sfs-shared"])
+    if (pvc.get("metadata", {}).get("uid") != "34cb6b11-8766-4294-9f9e-332064ea17d5"
+        or pvc.get("status", {}).get("phase") != "Bound"):
+        raise ValueError("qualified SFS PVC identity drifted")
+    job = cpu_job(directory, attempt)
+    actual = _kubectl(context, ["create", "--dry-run=server", "-f", "-"], job)
+    _check_cpu_render(job, actual)
+    return {"status": "previewed_not_created", "name": job["metadata"]["name"],
+            "job_sha256": sha(canonical(job)), "gpus": 0,
+            "root_failure_alerts": "off", "priority": "c1/q1"}
+
+
+def _create_only(path: Path, value: dict) -> None:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "wb") as stream:
+        stream.write(canonical(value) + b"\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
+def cpu_create(directory: Path, context: str, reviewed_sha: str, attempt: int = 1) -> dict:
+    proof = cpu_preview(directory, context, attempt)
+    if proof["job_sha256"] != reviewed_sha:
+        raise ValueError("CPU server preview differs from reviewed Job")
+    job = cpu_job(directory, attempt)
+    name = job["metadata"]["name"]
+    if _kubectl(context, ["-n", "fleet-train-jobs", "get", "job", name,
+                          "--ignore-not-found"], missing_ok=True) is not None:
+        raise ValueError("CPU Job already exists")
+    journal = directory / f"CPU-{attempt:02d}-INTENT.json"
+    _create_only(journal, {"state": "CREATE_INTENT_DO_NOT_RETRY", **proof})
+    actual = _kubectl(context, ["-n", "fleet-train-jobs", "create", "-f", "-"], job)
+    _check_cpu_render(job, actual)
+    uid = actual.get("metadata", {}).get("uid")
+    if not uid:
+        raise ValueError("ambiguous CPU create response; reconcile before retry")
+    _create_only(directory / f"CPU-{attempt:02d}-CREATED.json",
+                 {"name": name, "uid": uid, "job_sha256": reviewed_sha})
+    return {"status": "created", "name": name, "uid": uid, "gpus": 0}
+
+
+def _cpu_observation(directory: Path, context: str, attempt: int = 1) -> dict:
+    job = cpu_job(directory, attempt)
+    created = json.loads((directory / f"CPU-{attempt:02d}-CREATED.json").read_text())
+    if created["job_sha256"] != sha(canonical(job)):
+        raise ValueError("CPU created binding drifted")
+    name, uid = created["name"], created["uid"]
+    actual = _kubectl(context, ["-n", "fleet-train-jobs", "get", "job", name])
+    _check_cpu_render(job, actual)
+    if (actual["metadata"].get("uid") != uid or actual.get("status", {}).get("succeeded") != 1
+        or not any(c.get("type") == "Complete" and c.get("status") == "True"
+                   for c in actual.get("status", {}).get("conditions", []))):
+        raise ValueError("CPU Job has not completed successfully")
+    pods = _kubectl(context, ["-n", "fleet-train-jobs", "get", "pods", "-l",
+                              f"batch.kubernetes.io/job-name={name}"])["items"]
+    owned = [p for p in pods if any(o.get("uid") == uid and o.get("kind") == "Job"
+                                      for o in p.get("metadata", {}).get("ownerReferences", []))]
+    if len(owned) != 1 or owned[0].get("status", {}).get("phase") != "Succeeded":
+        raise ValueError("CPU Pod identity or completion drifted")
+    pod = owned[0]
+    statuses = pod["status"].get("containerStatuses", [])
+    pod_spec = pod.get("spec", {})
+    pod_containers = pod_spec.get("containers", [])
+    mounts = pod_containers[0].get("volumeMounts", []) if len(pod_containers) == 1 else []
+    if (pod_spec.get("priorityClassName") != "c1" or
+        len(pod_containers) != 1 or not mounts or
+        "nvidia.com/gpu" in str(pod_containers[0].get("resources", {})) or
+        mounts[0].get("readOnly") is not True):
+        raise ValueError("CPU Pod was mutated to a GPU, non-c1, or writable mount")
+    digest = job["spec"]["template"]["spec"]["containers"][0]["image"].split("@")[-1]
+    if (len(statuses) != 1 or statuses[0].get("restartCount") != 0
+        or not statuses[0].get("imageID", "").endswith("@" + digest)
+        or statuses[0].get("state", {}).get("terminated", {}).get("exitCode") != 0):
+        raise ValueError("CPU Pod restart, image, or exit drifted")
+    envelope = json.loads(statuses[0]["state"]["terminated"].get("message", ""))
+    plan, _request, receipt = prepared(directory)
+    result = envelope.get("native", {})
+    stamp = envelope.get("observed_at_unix")
+    if (envelope.get("schema") != "qwen38_cpu_preflight_observation_v1"
+        or envelope.get("status") != "passed" or envelope.get("output_absent") is not True
+        or type(stamp) not in (int, float) or not 0 <= time.time() - stamp <= 1800
+        or envelope.get("bundle_sha256") != job["metadata"]["annotations"][
+            "cyber-post-train.fleet.ai/bundle-sha256"]
+        or not _preflight_matches(result, receipt)
+        or plan["output_root"] != job["metadata"]["annotations"].get(
+            "cyber-post-train.fleet.ai/output-root")):
+        raise ValueError("CPU native receipt or output-absence proof drifted")
+    result = {**result, "cpu_job": {"name": name, "uid": uid,
+              "pod_uid": pod["metadata"]["uid"], "context": context,
+              "observed_at_unix": envelope["observed_at_unix"], "output_absent": True}}
+    return result
+
+
+def cpu_collect(directory: Path, context: str, attempt: int = 1) -> dict:
+    result = _cpu_observation(directory, context, attempt)
+    _create_only(directory / "PREFLIGHT.json", result)
+    return {"status": "passed", "job_uid": result["cpu_job"]["uid"],
+            "pod_uid": result["cpu_job"]["pod_uid"],
+            "plan_sha256": result["plan_sha256"]}
 
 
 def preview(directory: Path) -> dict:
     _plan, request, receipt = prepared(directory)
     gate = json.loads((directory / "PREFLIGHT.json").read_text())
-    if not _preflight_matches(gate, receipt):
+    if not _preflight_matches(gate, receipt) or gate.get("cpu_job", {}).get("output_absent") is not True:
         raise ValueError("exact CPU preflight is absent")
     proof = _legacy("preview", {"request": request})
     return {**proof, "status": "previewed_not_submitted", "request_sha256": receipt["request_sha256"]}
+
+
+def _owned(obj: dict) -> bool:
+    meta = obj.get("metadata", {})
+    labels = meta.get("labels", {}) or {}
+    return any(str(value).startswith("chris-") for value in (
+        meta.get("name", ""), labels.get("fleet.ai/run-name", ""),
+        labels.get("inference.fleet.ai/model", ""),
+        labels.get("cyber-post-train.fleet.ai/owner", ""))) or labels.get(
+            "cyber-post-train.fleet.ai/owner") == "chris"
+
+
+def capacity() -> dict:
+    """Count live owned GPU Pods and unadmitted RayJobs on both clusters."""
+    active_nodes, gpus, queued, pod_count = set(), 0, set(), 0
+    for context in (PROD_CONTEXT, DEV_CONTEXT):
+        pods = _kubectl(context, ["get", "pods", "--all-namespaces"])["items"]
+        rayjobs = _kubectl(context, ["get", "rayjobs.ray.io", "--all-namespaces"])["items"]
+        batch_jobs = _kubectl(context, ["get", "jobs.batch", "--all-namespaces"])["items"]
+        workloads = _kubectl(context, ["get", "workloads.kueue.x-k8s.io",
+                                    "--all-namespaces"])["items"]
+        allocated_names, allocated_clusters = set(), set()
+        for pod in pods:
+            if not _owned(pod) or pod.get("status", {}).get("phase") not in {
+                "Pending", "Running", "Unknown"}:
+                continue
+            spec = pod.get("spec", {})
+            containers = spec.get("containers", []) + spec.get("initContainers", [])
+            quantities = [int(c.get("resources", {}).get("requests", {}).get("nvidia.com/gpu", 0)
+                              or c.get("resources", {}).get("limits", {}).get("nvidia.com/gpu", 0))
+                          for c in containers]
+            count = max(sum(quantities[:len(spec.get("containers", []))]),
+                        max(quantities[len(spec.get("containers", [])):] or [0]))
+            if not count:
+                continue
+            pod_count += 1
+            identity = (pod.get("metadata", {}).get("labels") or {}).get("fleet.ai/run-name")
+            if identity:
+                allocated_names.add(identity)
+            cluster = (pod.get("metadata", {}).get("labels") or {}).get("ray.io/cluster")
+            if cluster:
+                allocated_clusters.add(cluster)
+            if spec.get("nodeName"):
+                active_nodes.add((context, spec["nodeName"]))
+                gpus += count
+            else:
+                queued.add((context, identity or pod["metadata"]["name"]))
+        for job in rayjobs:
+            if not _owned(job) or job.get("status", {}).get("jobStatus") in {
+                "SUCCEEDED", "FAILED", "STOPPED"}:
+                continue
+            name = job["metadata"]["name"]
+            cluster = job.get("status", {}).get("rayClusterName")
+            if name not in allocated_names and cluster not in allocated_clusters:
+                queued.add((context, name))
+        for job in batch_jobs:
+            if not _owned(job) or job.get("status", {}).get("active", 0):
+                continue
+            conditions = job.get("status", {}).get("conditions", [])
+            if any(c.get("type") in {"Complete", "Failed"} and c.get("status") == "True"
+                   for c in conditions):
+                continue
+            queued.add((context, job["metadata"]["name"]))
+        for workload in workloads:
+            owners = [o for o in workload.get("metadata", {}).get("ownerReferences", [])
+                      if o.get("kind") == "RayJob" and str(o.get("name", "")).startswith("chris-")]
+            if not owners or any(c.get("type") == "Finished" and c.get("status") == "True"
+                                     for c in workload.get("status", {}).get("conditions", [])):
+                continue
+            if not any(c.get("type") == "Admitted" and c.get("status") == "True"
+                       for c in workload.get("status", {}).get("conditions", [])):
+                queued.add((context, owners[0]["name"]))
+    result = {"active_nodes": len(active_nodes), "active_gpus": gpus,
+              "queued_jobs": len(queued), "owned_active_gpu_pods": pod_count}
+    if result["active_nodes"] + 1 > 10 or gpus + 8 > 80 or result["queued_jobs"] + 1 > 10:
+        raise ValueError("project-owned active GPU or queue capacity is exhausted")
+    return result
+
+
+def _lease(holder: str | None, *, expected_uid: str | None = None,
+           expected_holder: str | None = None) -> dict:
+    """Use Kubernetes resourceVersion as a cross-process submit compare-and-swap."""
+    current = _kubectl(PROD_CONTEXT, ["-n", NAMESPACE, "get", "lease", LEASE,
+                                      "--ignore-not-found"], missing_ok=True)
+    now = datetime.now(timezone.utc)
+    if holder is not None:
+        if current:
+            spec = current.get("spec", {})
+            renew = spec.get("renewTime") or spec.get("acquireTime")
+            stamp = datetime.fromisoformat(renew.replace("Z", "+00:00")) if renew else now
+            if spec.get("holderIdentity") and (now - stamp).total_seconds() < min(
+                int(spec.get("leaseDurationSeconds", 900)), 900):
+                raise ValueError("another project submitter holds the capacity lease")
+            lease = {"apiVersion": "coordination.k8s.io/v1", "kind": "Lease",
+                     "metadata": {"name": LEASE, "namespace": NAMESPACE,
+                                  "resourceVersion": current["metadata"]["resourceVersion"]},
+                     "spec": {"holderIdentity": holder, "leaseDurationSeconds": 900,
+                              "acquireTime": now.isoformat(), "renewTime": now.isoformat()}}
+            verb = "replace"
+        else:
+            lease = {"apiVersion": "coordination.k8s.io/v1", "kind": "Lease",
+                     "metadata": {"name": LEASE, "namespace": NAMESPACE},
+                     "spec": {"holderIdentity": holder, "leaseDurationSeconds": 900,
+                              "acquireTime": now.isoformat(), "renewTime": now.isoformat()}}
+            verb = "create"
+    else:
+        if (not current or current["metadata"].get("uid") != expected_uid
+            or current.get("spec", {}).get("holderIdentity") != expected_holder):
+            raise ValueError("capacity lease identity changed before release")
+        lease = {"apiVersion": "coordination.k8s.io/v1", "kind": "Lease",
+                 "metadata": {"name": LEASE, "namespace": NAMESPACE,
+                              "resourceVersion": current["metadata"]["resourceVersion"]},
+                 "spec": {"holderIdentity": "", "leaseDurationSeconds": 0,
+                          "renewTime": now.isoformat()}}
+        verb = "replace"
+    result = _kubectl(PROD_CONTEXT, ["-n", NAMESPACE, verb, "-f", "-"], lease)
+    if result.get("spec", {}).get("holderIdentity") != (holder or ""):
+        raise ValueError("capacity lease compare-and-swap drifted")
+    return result
+
+
+def submit(directory: Path, reviewed_manifest_sha256: str) -> dict:
+    """Create one paid run only after the independent CPU and server-review gates."""
+    _plan, request, receipt = prepared(directory)
+    gate = json.loads((directory / "PREFLIGHT.json").read_text())
+    cpu = gate.get("cpu_job", {})
+    stamp = cpu.get("observed_at_unix")
+    age = time.time() - stamp if type(stamp) in (int, float) else float("inf")
+    if (not _preflight_matches(gate, receipt) or cpu.get("output_absent") is not True
+        or cpu.get("context") != PROD_CONTEXT or not cpu.get("uid") or not cpu.get("pod_uid")
+        or not 0 <= age <= 1800):
+        raise ValueError("fresh UID-bound shared-SFS CPU proof is absent")
+    if gate != _cpu_observation(directory, PROD_CONTEXT):
+        raise ValueError("saved CPU receipt differs from live exact Job and Pod")
+    if not re.fullmatch(r"[a-f0-9]{64}", reviewed_manifest_sha256):
+        raise ValueError("reviewed server manifest SHA-256 required")
+    journal = directory / "GPU-POST-INTENT.jsonl"
+    if journal.exists() or journal.is_symlink():
+        raise ValueError("GPU POST intent already exists; reconcile, never retry")
+    holder = f"{request['name']}-{uuid.uuid4()}"
+    acquired = _lease(holder)
+    lease_uid = acquired["metadata"]["uid"]
+    started = time.time()
+    try:
+        counts = capacity()
+        proof = _legacy("preview", {"request": request})
+        if proof["manifest_sha256"] != reviewed_manifest_sha256:
+            raise ValueError("reviewed GPU server render changed")
+        if time.time() - started > 600 or time.time() - cpu["observed_at_unix"] > 1800:
+            raise ValueError("capacity lease is too old to submit")
+        result = _legacy("submit", {"request": request, "journal": str(journal),
+                                    "reviewed_manifest_sha256": reviewed_manifest_sha256})
+    finally:
+        if not journal.exists() or "result" in locals():
+            _lease(None, expected_uid=lease_uid, expected_holder=holder)
+    return {"status": "submitted_once", "run": result, "capacity_before": counts,
+            "root_failure_alerts": "off", "priority": "c1/q1"}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -252,18 +642,28 @@ def main(argv: list[str] | None = None) -> int:
     p = commands.add_parser("prepare", help="compile a create-once exact request off-GPU")
     p.add_argument("config", type=Path)
     p.add_argument("destination", type=Path)
-    for action in ("preflight", "preview"):
+    for action in ("cpu-preview", "cpu-collect", "preview"):
         p = commands.add_parser(action)
         p.add_argument("prepared_directory", type=Path)
+    for action in ("cpu-create", "submit"):
+        p = commands.add_parser(action)
+        p.add_argument("prepared_directory", type=Path)
+        p.add_argument("reviewed_sha256")
     args = parser.parse_args(argv)
     try:
         if args.action == "prepare":
             result = prepare(args.config, args.destination)
-        elif args.action == "preflight":
-            result = preflight(args.prepared_directory)
+        elif args.action == "cpu-preview":
+            result = cpu_preview(args.prepared_directory, PROD_CONTEXT)
+        elif args.action == "cpu-create":
+            result = cpu_create(args.prepared_directory, PROD_CONTEXT, args.reviewed_sha256)
+        elif args.action == "cpu-collect":
+            result = cpu_collect(args.prepared_directory, PROD_CONTEXT)
+        elif args.action == "submit":
+            result = submit(args.prepared_directory, args.reviewed_sha256)
         else:
             result = preview(args.prepared_directory)
-    except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+    except (OSError, ValueError, KeyError, json.JSONDecodeError, subprocess.TimeoutExpired) as exc:
         print(f"{args.action} rejected: {type(exc).__name__}", file=sys.stderr)
         return 2
     print(json.dumps(result, sort_keys=True))
