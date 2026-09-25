@@ -5,7 +5,9 @@ Goal: measured lift on new Fleet blackbox tasks. Historical 96k run
 corrected-data study. See [HOLDOUT.md](HOLDOUT.md) for source and split evidence.
 Its checkpoints cannot satisfy this study: a new 96k arm needs separate data,
 name, output, saves, and matched held-out evaluations.
-Kueue auto-unsuspends admitted CPU Jobs; create SFS staging Jobs only when data is sealed, then release them after transfer.
+Kueue auto-unsuspends admitted CPU Jobs. For SFS staging, `/mnt/sfs/jobs`
+is root-owned (0755): preview a zero-GPU, alert-off root container, transfer
+only sealed data, verify remote digests, then release the exact staging Job.
 
 ## Why the old run cannot answer the question
 
