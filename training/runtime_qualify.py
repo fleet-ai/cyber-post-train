@@ -23,9 +23,8 @@ from training.qualify_live import PRIVATE, PROJECT, PUBLIC, TEAM
 
 CONTRACT = {"evidence_schema": "1.0.0", "submission_protocol": "2.0.0",
             "verifier_contract": "3.0.0"}
-# As deployed on 2026-09-25, version-scoped provisioning silently ignores
-# X-Request-ID and creates a random run ID. Keep recovery usable, but do not
-# create another environment until the server supplies a durable exact claim.
+# The old deployed route ignored X-Request-ID. Keep creates disabled until the
+# new capability is independently read back from production.
 VERSION_SCOPED_DURABLE_CREATE_VERIFIED = False
 PROBES = {"bash": {"script": "printf task-quality-runtime-ok"},
           "submit_report": {"verdict": "no_flag", "explanation":
@@ -69,6 +68,17 @@ def route(row: dict, instances: bool = False) -> str:
     version = row["task_version_id"]
     suffix = "/instances" if instances else ""
     return f"/v1/rollout-rewards/{key}/versions/{version}{suffix}"
+
+
+def create_instance(client: httpx.Client, row: dict, request_id: str) -> dict:
+    provision = request(client, "POST", route(row, True),
+                        json={"create_request_id": request_id, "ttl_seconds": 900})
+    if (provision.get("task_key") != row["task_key"]
+            or provision.get("task_version_id") != row["task_version_id"]
+            or provision.get("create_request_id") != request_id
+            or not provision.get("instance_id") or not provision.get("evidence_run_id")):
+        raise ValueError("provision response identity mismatch")
+    return provision
 
 
 def load_cell(wave_path: Path, index: int) -> tuple[dict, dict, str, str]:
@@ -117,6 +127,12 @@ def preflight(client: httpx.Client, row: dict, request_id: str) -> dict:
     instance_route = paths.get("/v1/env/instances/{instance_id}") or {}
     if not {"get", "delete"} <= set(claim_route) or not {"get", "delete"} <= set(instance_route):
         raise ValueError("exact claim/instance cleanup routes are not deployed")
+    capability = request(client, "GET", "/v1/rollout-rewards/capabilities")
+    if (capability.get("version_scoped_durable_create_claim") != "v1"
+            or capability.get("create_request_field") != "create_request_id"
+            or capability.get("claim_route") != "/v1/env/instances/create-requests/{request_id}"
+            or capability.get("ttl_seconds_range") != [60, 3600]):
+        raise ValueError("version-scoped durable create capability mismatch")
     for path in (route(row), route(row, True)):
         with client.stream("GET", PUBLIC + path) as response:
             if response.status_code != 405:
@@ -299,12 +315,7 @@ def run_cell(wave_path: Path, index: int, root: Path) -> dict:
             binding = preflight(client, row, request_id)
             write_once(cell / "BINDING.json", binding)
             write_once(cell / "INTENT.json", intent)
-            provision = request(client, "POST", route(row, True),
-                                headers={"X-Request-ID": request_id}, json={})
-            if (provision.get("task_key") != row["task_key"]
-                    or provision.get("task_version_id") != row["task_version_id"]
-                    or not provision.get("instance_id") or not provision.get("evidence_run_id")):
-                raise ValueError("provision response identity mismatch")
+            provision = create_instance(client, row, request_id)
             instance_id = provision["instance_id"]
             write_once(cell / "STARTED.json", seal({
                 "instance_id": instance_id,
@@ -379,7 +390,8 @@ def run_cell(wave_path: Path, index: int, root: Path) -> dict:
         cleanup_complete = True
     terminal = seal({"schema": "fleet_model_free_terminal_v1", "wave_sha256": sha,
                      "cell_index": index, "task_version_id": row["task_version_id"],
-                     "qualified": bool(passed and cleanup_complete),
+                     "runtime_checked": bool(passed and cleanup_complete),
+                     "qualified": False,  # Positive solvability/grading still unproven.
                      "cleanup_complete": cleanup_complete,
                      "error_type": error_type,
                      "private_content_persisted": False})

@@ -40,6 +40,11 @@ class RuntimeQualificationTests(unittest.TestCase):
                     "/v1/env/instances/create-requests/{request_id}":
                         {"get": {}, "delete": {}},
                     "/v1/env/instances/{instance_id}": {"get": {}, "delete": {}}}})
+            if path == "/v1/rollout-rewards/capabilities":
+                return response(200, {"version_scoped_durable_create_claim": "v1",
+                                      "create_request_field": "create_request_id",
+                                      "claim_route": "/v1/env/instances/create-requests/{request_id}",
+                                      "ttl_seconds_range": [60, 3600]})
             if path.startswith("/v1/rollout-rewards/"):
                 return response(405)
             if path.startswith("/v1/env/instances/create-requests/"):
@@ -71,6 +76,19 @@ class RuntimeQualificationTests(unittest.TestCase):
         self.assertEqual(binding["environment_version_id"], "env-version-1")
         self.assertEqual(binding["verifier_version_id"], "verifier-version-1")
         self.assertTrue(all(method == "GET" for method in methods))
+
+    def test_create_uses_durable_id_and_rejects_missing_echo(self):
+        def handle(request):
+            self.assertEqual(request.method, "POST")
+            self.assertEqual(json.loads(request.content),
+                             {"create_request_id": "request-1", "ttl_seconds": 900})
+            return response(200, {"task_key": ROW["task_key"],
+                                  "task_version_id": ROW["task_version_id"],
+                                  "instance_id": "instance-1", "evidence_run_id": "run-1"})
+
+        with httpx.Client(transport=httpx.MockTransport(handle)) as client:
+            with self.assertRaisesRegex(ValueError, "provision response identity mismatch"):
+                q.create_instance(client, ROW, "request-1")
 
     def test_cleanup_deletes_only_bound_instance(self):
         methods = []
