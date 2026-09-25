@@ -10,9 +10,10 @@ from pathlib import Path
 from . import source
 from .dense_bridge import (_digest, _file_sha, _legacy_digest, build_dense, validate_request,
                            ALGORITHM as MECHANICS, MANIFEST_SCHEMA, RECEIPT_SCHEMA, TARGET_BUILDER_SHA,
-                           TARGET_METHOD)
+                           TARGET_METHOD, LAYOUT, LAYOUT_BUILDER_SHA)
 
 METHOD = TARGET_METHOD
+LAZY_METHOD = "opencode_1_18_27_target_anchor_visible_only_multi_target_rowgroups_v1"
 SCHEMA = "qwen38_target_anchor_visible_only_method_v1"
 FILES = {"raw_sources": "raw-sources.private.jsonl", "dense_target_normalized": "dense-target-anchored.jsonl",
          "dense_success_evidence": "dense-success-evidence.jsonl", "tools": "model-facing-tools.json",
@@ -193,7 +194,7 @@ def audit(source_dir: Path) -> dict:
     return result
 
 
-def build(request_path: Path, source_dir: Path, output: Path) -> dict:
+def build(request_path: Path, source_dir: Path, output: Path, *, single_row_groups: bool = False) -> dict:
     """Run exact CPU-native mechanics and seal a distinct semantic method."""
     request_path, source_dir, output = Path(request_path).absolute(), Path(source_dir), Path(output)
     reviewed, request = audit(source_dir), validate_request(request_path)
@@ -209,10 +210,14 @@ def build(request_path: Path, source_dir: Path, output: Path) -> dict:
         if (bound.resolve() != (source_dir / FILES[name]).resolve()
                 or request[key]["sha256"] != source_receipt["files"][name]):
             raise ValueError("CPU mechanics request binds another source")
-    packed = build_dense(request_path, target_names=True)
-    method = {"schema": SCHEMA, "method": METHOD, "source_audit_sha256": reviewed["sha256"],
+    packed = build_dense(request_path, target_names=True, **({"single_row_groups": True}
+                                                          if single_row_groups else {}))
+    method = {"schema": SCHEMA, "method": LAZY_METHOD if single_row_groups else METHOD,
+              "source_audit_sha256": reviewed["sha256"],
               "source_receipt_sha256": reviewed["source_receipt_sha256"],
-              "request_sha256": request["sha256"], "mechanics_builder_sha256": TARGET_BUILDER_SHA,
+              "request_sha256": request["sha256"], "mechanics_builder_sha256": (
+                  LAYOUT_BUILDER_SHA if single_row_groups else TARGET_BUILDER_SHA),
+              **({"storage_layout": LAYOUT} if single_row_groups else {}),
               "mechanics_manifest_sha256": packed["manifest_sha256"],
               "mechanics_receipt_sha256": packed["receipt_sha256"],
               "train_parquet_sha256": packed["train_sha256"],
@@ -243,16 +248,21 @@ def verify_method(dense_dir: Path, source_dir: Path) -> dict:
     receipt = load("RECEIPT.json", RECEIPT_SCHEMA)
     train, parquet = manifest.get("files", {}).get("train", {}), dense_dir / "train.parquet"
     material = manifest.get("materialization", {})
-    if (method.get("method") != METHOD or method.get("trainer_ready") is not reviewed["trainer_ready"]
+    lazy = method.get("method") == LAZY_METHOD
+    builder = LAYOUT_BUILDER_SHA if lazy else TARGET_BUILDER_SHA
+    if (method.get("method") not in {METHOD, LAZY_METHOD}
+            or method.get("storage_layout") != (LAYOUT if lazy else None)
+            or train.get("storage_layout") != (LAYOUT if lazy else None)
+            or method.get("trainer_ready") is not reviewed["trainer_ready"]
             or method.get("source_audit_sha256") != reviewed["sha256"]
             or method.get("source_receipt_sha256") != reviewed["source_receipt_sha256"]
             or method.get("training_blocker") != reviewed["training_blocker"]
-            or method.get("mechanics_builder_sha256") != TARGET_BUILDER_SHA
+            or method.get("mechanics_builder_sha256") != builder
             or method.get("mechanics_manifest_sha256") != manifest["sha256"]
             or method.get("mechanics_receipt_sha256") != receipt["sha256"]
             or method.get("train_parquet_sha256") != train.get("sha256")
             or manifest.get("algorithm") != MECHANICS
-            or manifest.get("builder_sha256", {}).get("message_aligned_teacher_corpus.py") != TARGET_BUILDER_SHA
+            or manifest.get("builder_sha256", {}).get("message_aligned_teacher_corpus.py") != builder
             or material.get("request_sha256") != method.get("request_sha256")
             or material.get("normalized_sha256") != reviewed["source_files_sha256"]["dense_target_normalized"]
             or material.get("success_evidence_sha256") != reviewed["source_files_sha256"]["dense_success_evidence"]
@@ -266,8 +276,16 @@ def verify_method(dense_dir: Path, source_dir: Path) -> dict:
             or not isinstance(train.get("rows"), int) or train["rows"] < 1
             or parquet.is_symlink() or not parquet.is_file() or _file_sha(parquet) != train["sha256"]):
         raise ValueError("new target method differs from audited CPU mechanics")
-    rows = pq.read_table(parquet, columns=["source_session_id", "target_spans", "target_token_count",
-                                          "loss_mask", "window_algorithm"]).to_pylist()
+    columns = ["source_session_id", "target_spans", "target_token_count", "loss_mask", "window_algorithm"]
+    if lazy:
+        reader = pq.ParquetFile(parquet)
+        if (reader.num_row_groups != train["rows"] or any(
+                reader.metadata.row_group(i).num_rows != 1 for i in range(reader.num_row_groups))):
+            raise ValueError("target Parquet row-group layout differs")
+        rows = (row for batch in reader.iter_batches(batch_size=1, columns=columns)
+                for row in batch.to_pylist())
+    else:
+        rows = pq.read_table(parquet, columns=columns).to_pylist()
     seen, count = set(), 0
     for row in rows:
         spans = row["target_spans"]
@@ -278,7 +296,7 @@ def verify_method(dense_dir: Path, source_dir: Path) -> dict:
             raise ValueError("target token mask duplicates or differs")
         seen.update(unique)
         count += tokens
-    if len(rows) != train["rows"] or count != train["supervised_tokens"]:
+    if (reader.metadata.num_rows if lazy else len(rows)) != train["rows"] or count != train["supervised_tokens"]:
         raise ValueError("target token count differs from receipt")
     return {"method_sha256": method["sha256"], "manifest_sha256": manifest["sha256"],
             "trainer_ready": reviewed["trainer_ready"], "supervised_tokens": count}
@@ -290,10 +308,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("source_dir", type=Path)
     parser.add_argument("request_or_dense_dir", nargs="?", type=Path)
     parser.add_argument("output", nargs="?", type=Path)
+    parser.add_argument("--single-row-groups", action="store_true")
     args = parser.parse_args(argv)
     try:
         result = (audit(args.source_dir) if args.command == "audit" else
-                  build(args.request_or_dense_dir, args.source_dir, args.output) if args.command == "build" else
+                  build(args.request_or_dense_dir, args.source_dir, args.output,
+                        single_row_groups=args.single_row_groups) if args.command == "build" else
                   verify_method(args.request_or_dense_dir, args.source_dir))
     except Exception as error:
         print(f"target method {args.command} rejected: {type(error).__name__}", file=sys.stderr)

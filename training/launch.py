@@ -30,6 +30,9 @@ LEASE = "chris-cpt-gpu-submit"
 FULL_NAME = "chris-q38-corr96-full-v1"
 FULL_OUTPUT = f"/mnt/sfs/jobs/{FULL_NAME}"
 FULL_DATA_ROOT = "/mnt/sfs/jobs/chris-q38-corrected-corpus-v1/full96-data"
+FAST_NAME = "chris-q38-fast96-strict-v1"
+FAST_OUTPUT = f"/mnt/sfs/jobs/{FAST_NAME}"
+FAST_DATA_ROOT = "/mnt/sfs/jobs/chris-q38-fast96-strict-data-v1"
 MECHANICS_NAME = "chris-q38-prov96-step1-v1"
 MECHANICS_OUTPUT = f"/mnt/sfs/jobs/{MECHANICS_NAME}"
 MECHANICS_DATA_ROOT = "/mnt/sfs/jobs/chris-q38-provisional96-corpus-v1/step1-data"
@@ -60,7 +63,7 @@ def canonical(value: object) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
 
 
-def historical_source(name: str) -> bytes:
+def historical_source(name: str, *, lazy: bool = False) -> bytes:
     if name not in SOURCES:
         raise ValueError("unreviewed historical source")
     result = subprocess.run(
@@ -70,10 +73,13 @@ def historical_source(name: str) -> bytes:
         raise ValueError("qualified historical source is unavailable")
     if sha(result.stdout) != SOURCES[name]:
         raise ValueError("qualified historical source digest changed")
+    if lazy and name in ("training/sft.py", "training/sft_runtime.py"):
+        from .lazy_overlay import patch_frozen
+        return patch_frozen(name, result.stdout)
     return result.stdout
 
 
-def _legacy(mode: str, value: dict, *, manifest: bytes | None = None) -> dict:
+def _legacy(mode: str, value: dict, *, manifest: bytes | None = None, lazy: bool = False) -> dict:
     """Run the historical compiler or Jobs client in its own import path."""
     script = """
 import json,os,sys
@@ -125,7 +131,10 @@ except BaseException as exc:
         for name in SOURCES:
             path = root / name
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(historical_source(name))
+            path.write_bytes(historical_source(name, lazy=lazy))
+        if lazy:
+            helper = root / "training/lazy_overlay.py"
+            helper.write_bytes((ROOT / "training/lazy_overlay.py").read_bytes())
         if manifest is not None:
             path = root / "configs/data/corpus.json"
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -151,6 +160,8 @@ except BaseException as exc:
 
 def _require_profile_config(config: dict, full: bool) -> None:
     name, output, data_root, group, manifest = (
+        (FAST_NAME, FAST_OUTPUT, FAST_DATA_ROOT, "qwen38-fast96-strict-v1", "manifest.json")
+        if config.get("name") == FAST_NAME else
         (FULL_NAME, FULL_OUTPUT, FULL_DATA_ROOT, "qwen38-corrected-teacher96-full-v1", "qwen38-96k-full-v1.manifest.json")
         if full else (MECHANICS_NAME, MECHANICS_OUTPUT, MECHANICS_DATA_ROOT,
                       "qwen38-provisional96-mechanics-v1", "manifest.json"))
@@ -222,7 +233,7 @@ def _require_goal_anchor(_manifest: dict) -> None:
     raise ValueError("corrected target-anchor producer/attestation is not yet qualified")
 
 
-def _require_full_manifest(manifest: dict, data_root: str) -> None:
+def _require_full_manifest(manifest: dict, data_root: str, *, diagnostic: bool = False) -> None:
     train, dev = (manifest.get("files", {}).get(key, {}) for key in ("train", "dev"))
     composition = manifest.get("composition", {})
     from .runtime import MODEL, TOKENIZER_FILES
@@ -256,7 +267,24 @@ def _require_full_manifest(manifest: dict, data_root: str) -> None:
                             manifest.get("materialization", {}).get("request_sha256", ""))
         or set(train.get("task_keys", [])) & set(dev.get("task_keys", []))):
         raise ValueError("full corpus lacks sealed dense train and disjoint teacher-CE dev")
-    _require_goal_anchor(manifest)
+    if diagnostic:
+        from . import dense_bridge
+        if (manifest.get("diagnostic_only") is not True or manifest.get("training_ready") is not False
+            or manifest.get("source_limitations") != [
+                "historical_tool_result_target_parity_unverified", "teacher_DEV_small_nine_family_panel"]
+            or manifest.get("algorithm") != dense_bridge.ALGORITHM
+            or manifest.get("split_sha256") != dense_bridge.TARGET_ANCHOR_SHA
+            or manifest.get("builder_sha256", {}).get("message_aligned_teacher_corpus.py")
+                != dense_bridge.LAYOUT_BUILDER_SHA
+            or train.get("storage_layout") != dense_bridge.LAYOUT
+            or train.get("source_sessions") != 933 or dev.get("rows") != 27
+            or composition.get("dev_manifest_sha256") !=
+                "sha256:23ea22e051a6c84a145c7e8bc33a91dea0d94880370f811d4d38b1b1df4dab8e"
+            or composition.get("dev_source_receipt_sha256") !=
+                "sha256:e59970d3f7a8d47edfa026c2618a6978a0260b9ef591d82aa3360aedfb2b2713"):
+            raise ValueError("diagnostic fast96 source or limitation declaration differs")
+    else:
+        _require_goal_anchor(manifest)
 
 
 def prepare(config_path: Path, destination: Path,
@@ -265,18 +293,22 @@ def prepare(config_path: Path, destination: Path,
         raise ValueError("prepared destination already exists")
     config_bytes = config_path.read_bytes()
     config = json.loads(config_bytes)
-    full = config.get("name") == FULL_NAME
+    full = config.get("name") in {FULL_NAME, FAST_NAME}
     _require_profile_config(config, full)
     source = Path(config["data"]["manifest"])
     manifest_path = source if source.is_absolute() else config_path.parent / source
     manifest_bytes = manifest_path.read_bytes()
     manifest = json.loads(manifest_bytes)
+    if manifest.get("files", {}).get("train", {}).get("storage_layout") not in (
+            None, "dense_single_row_group_v1"):
+        raise ValueError("unreviewed train storage layout")
     mechanics_receipt = b"" if full else (manifest_path.parent / "RECEIPT.json").read_bytes()
     subset_bytes = projection_bytes = b""
     if full:
         if mechanics_proof is not None:
             raise ValueError("full run cannot use diagnostic proof")
-        _require_full_manifest(manifest, config["data"]["root"])
+        _require_full_manifest(manifest, config["data"]["root"],
+                               diagnostic=config["name"] == FAST_NAME)
     else:
         if mechanics_proof is None or len(mechanics_proof) != 6:
             raise ValueError("independent whole-TRAIN-session proof paths required")
@@ -296,7 +328,8 @@ def prepare(config_path: Path, destination: Path,
     staged["model"]["lock"] = "../models/qwen38-27b-1d4bf0f2.lock.json"
     staged["model"]["weights"] = "../models/qwen38-27b-1d4bf0f2.weights.json"
     staged["data"]["manifest"] = "../data/corpus.json"
-    compiled = _legacy("compile", {"config": staged}, manifest=manifest_bytes)
+    compiled = _legacy("compile", {"config": staged}, manifest=manifest_bytes,
+                       lazy=manifest["files"]["train"].get("storage_layout") == "dense_single_row_group_v1")
     plan, request = compiled["plan"], compiled["request"]
     if (plan["model"]["revision"] != "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
         or plan["validation_mode"] != ("teacher_cross_entropy" if full else "task_outcomes_only")
@@ -318,17 +351,20 @@ def prepare(config_path: Path, destination: Path,
         or (not full and (request["name"] != MECHANICS_NAME
                           or request["run_dir"] != MECHANICS_OUTPUT
                           or plan["corpus_manifest_sha256"] != manifest["sha256"]))
-        or (full and (request["name"] != FULL_NAME or request["run_dir"] != FULL_OUTPUT
+        or (full and (request["name"] != config["name"] or request["run_dir"] != config["output_root"]
                       or plan["datasets"]["train"]["supervised_tokens"] < 20_000_000
                       or plan["corpus_manifest_sha256"] != manifest["sha256"]
                       or plan["recipe"]["keep_checkpoints"] != plan["recipe"]["max_steps"]))):
         raise ValueError("compiled 96k request failed an immutable safety/science gate")
     receipt = {
-        "schema": "qwen38_96k_full_prepared_v1" if full else "qwen38_96k_mechanics_prepared_v1",
+        "schema": ("qwen38_96k_fast_diagnostic_prepared_v1" if config["name"] == FAST_NAME else
+                   "qwen38_96k_full_prepared_v1" if full else "qwen38_96k_mechanics_prepared_v1"),
         "historical_commit": COMMIT,
         "config_sha256": sha(config_bytes), "manifest_file_sha256": sha(manifest_bytes),
         "plan_sha256": sha(canonical(plan)), "request_sha256": sha(canonical(request)),
-        "status": "prepared_not_submitted", "purpose": "full_sft" if full else "one_step_mechanics_only",
+        "status": "prepared_not_submitted", "purpose": (
+            "diagnostic_fast_sft" if config["name"] == FAST_NAME else
+            "full_sft" if full else "one_step_mechanics_only"),
     }
     if not full:
         receipt["corpus_receipt_file_sha256"] = sha(mechanics_receipt)
@@ -359,7 +395,8 @@ def prepared(directory: Path) -> tuple[dict, dict, dict]:
     if (receipt.get("historical_commit") != COMMIT
         or receipt.get("plan_sha256") != sha(canonical(plan))
         or receipt.get("request_sha256") != sha(canonical(request))
-        or _legacy("request", {"plan": plan})["request"] != request):
+        or _legacy("request", {"plan": plan}, lazy=plan["datasets"]["train"].get(
+            "storage_layout") == "dense_single_row_group_v1")["request"] != request):
         raise ValueError("prepared binding changed")
     if (plan.get("execution", {}).get("priority") != "c1" or request.get("priority_class") != "c1"
         or request.get("failureAlerts") is not False or request.get("workers") != 1
@@ -370,8 +407,13 @@ def prepared(directory: Path) -> tuple[dict, dict, dict]:
     if receipt.get("manifest_file_sha256") != sha(manifest_bytes):
         raise ValueError("corpus manifest bytes changed")
     manifest = json.loads(manifest_bytes)
-    if receipt.get("schema") == "qwen38_96k_full_prepared_v1":
-        _require_full_manifest(manifest, FULL_DATA_ROOT)
+    if receipt.get("schema") in {"qwen38_96k_full_prepared_v1", "qwen38_96k_fast_diagnostic_prepared_v1"}:
+        diagnostic = receipt["schema"] == "qwen38_96k_fast_diagnostic_prepared_v1"
+        _require_full_manifest(manifest, FAST_DATA_ROOT if diagnostic else FULL_DATA_ROOT,
+                               diagnostic=diagnostic)
+        if request["name"] != (FAST_NAME if diagnostic else FULL_NAME) or receipt.get(
+                "purpose") != ("diagnostic_fast_sft" if diagnostic else "full_sft"):
+            raise ValueError("prepared full/diagnostic run identity differs")
         interval = plan["recipe"]["checkpoint_interval"]
         if (plan.get("schema") != "cyber_sft_runtime_dense_v1"
             or plan.get("corpus_manifest_sha256") != manifest["sha256"]
@@ -422,12 +464,13 @@ def _preflight_matches(result: dict, receipt: dict) -> bool:
         and result.get("request_sha256") == receipt["request_sha256"]
         and result.get("plan_sha256") == receipt["plan_sha256"]
         and required <= set(result.get("checked", []))
-        and set(counts) == ({"train", "dev"} if receipt["schema"] ==
-                            "qwen38_96k_full_prepared_v1" else {"train"})
+        and set(counts) == ({"train", "dev"} if receipt["schema"] in {
+                            "qwen38_96k_full_prepared_v1", "qwen38_96k_fast_diagnostic_prepared_v1"}
+                            else {"train"})
         and all(counts[split].get("rows", 0) > 0 and
                 counts[split].get("supervised_tokens", 0) > 0
                 for split in counts)
-        and (receipt["schema"] == "qwen38_96k_full_prepared_v1" or counts["train"]["rows"] > 8)
+        and (receipt["schema"] != "qwen38_96k_mechanics_prepared_v1" or counts["train"]["rows"] > 8)
     )
 
 
@@ -457,8 +500,11 @@ def cpu_job(directory: Path, attempt: int = 1) -> dict:
     name = request["name"] + f"-pre-a{attempt:02d}"
     if len(name) > 63:
         raise ValueError("CPU Job name exceeds Kubernetes limit")
-    files = {"src/" + name: historical_source(name).decode()
+    lazy = plan["datasets"]["train"].get("storage_layout") == "dense_single_row_group_v1"
+    files = {"src/" + name: historical_source(name, lazy=lazy).decode()
              for name in SOURCES if name.endswith(".py")}
+    if lazy:
+        files["src/training/lazy_overlay.py"] = (ROOT / "training/lazy_overlay.py").read_text()
     worker = (ROOT / "training/preflight_worker.py").read_bytes()
     manifest = {
         "schema": "qwen38_cpu_preflight_bundle_v1", "run_name": request["name"],

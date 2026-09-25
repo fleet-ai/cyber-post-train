@@ -3,9 +3,9 @@
 Goal: measured lift on new Fleet blackbox tasks. Historical 96k run
 `chris-q38-t3k96-b8-v3-e7d5c0f8` proves mechanics, **not** this independent
 corrected-data study. See [HOLDOUT.md](HOLDOUT.md) for source and split evidence.
-Its running Pod, checkpoints, and evaluations cannot satisfy any new 96k
-milestone below: the corrected run needs its own frozen data, name, output,
-checkpoint chain, and matched held-out evaluations.
+Its checkpoints cannot satisfy this study: a new 96k arm needs separate data,
+name, output, saves, and matched held-out evaluations.
+Kueue auto-unsuspends admitted CPU Jobs; create SFS staging Jobs only when data is sealed, then release them after transfer.
 
 ## Why the old run cannot answer the question
 
@@ -34,7 +34,10 @@ sessions quarantined. Hidden reasoning is excluded and OpenCode anchors/calls
 substituted. The current first-request Qwen wire is checked below, but
 historical tool-result parity is unproved. `use_tool` wrappers stay out:
 CLI/MCP blocks are unbound; none of 28,312 wrapped bash strings recovers a
-unique final status. One-text-block conversion adds 219 TRAIN/15 DEV:
+unique final status. A content-free census found `use_tool` in 937 rejected
+sessions and 39,365 string results, mostly legacy `OkayOutput` JSON; nested
+bash arguments often map, but result-to-OpenCode equivalence is unproved.
+One-text-block conversion adds 219 TRAIN/15 DEV:
 **1,162/42** sessions, **153/12** families, old token proxies
 **22,295,624/639,694**. Native masked tokens/live wire/tool-result parity
 remain unproved. OpenCode 1.18.27 truncates results above 50 KiB/2,000 lines;
@@ -68,6 +71,7 @@ instance was created; its durable claim was independently absent. Fresh teacher
 collection through Fleet OpenCode was also rejected before job creation with
 `sales_product_required`. The live OTS Cyber project has no default billing
 selection; the active catalog offers both OTS Dataminer and Platform General.
+The unsupported native OpenCode Jobs launcher was removed; matched DEV attempts use the direct, version-pinned `evals/direct.py` path.
 An exact one-task TRAIN-only probe against current production version
 `43dc2c52-f283-4454-8987-69c6cbbd4160` used Platform General. The Jobs API
 rejected `harness=opencode` (HTTP 400); it accepts Claude Code, Codex, Grok and

@@ -428,6 +428,42 @@ class FullLaunchTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "disjoint teacher-CE dev"):
             self.prepare()
 
+    def test_fast_diagnostic_is_separate_and_cannot_claim_accepted_source(self) -> None:
+        config = json.loads(FULL_CONFIG.read_text())
+        config.update(name=launch.FAST_NAME, output_root=launch.FAST_OUTPUT)
+        config["data"] = {"root": launch.FAST_DATA_ROOT, "manifest": "manifest.json"}
+        config["wandb"].update(group="qwen38-fast96-strict-v1", run_id=launch.FAST_NAME,
+                               name=launch.FAST_NAME)
+        manifest = fake_full_manifest()
+        manifest["algorithm"] = dense_bridge.ALGORITHM
+        manifest["split_sha256"] = dense_bridge.TARGET_ANCHOR_SHA
+        manifest["builder_sha256"] = {"message_aligned_teacher_corpus.py":
+                                       dense_bridge.LAYOUT_BUILDER_SHA}
+        manifest["files"]["train"].update(source_sessions=933,
+                                           storage_layout=dense_bridge.LAYOUT)
+        manifest["files"]["dev"].update(rows=27, supervised_tokens=5128)
+        manifest["composition"].update(
+            corpus_root=launch.FAST_DATA_ROOT,
+            dev_manifest_sha256="sha256:23ea22e051a6c84a145c7e8bc33a91dea0d94880370f811d4d38b1b1df4dab8e",
+            dev_source_receipt_sha256="sha256:e59970d3f7a8d47edfa026c2618a6978a0260b9ef591d82aa3360aedfb2b2713")
+        manifest.update(diagnostic_only=True, training_ready=False, source_limitations=[
+            "historical_tool_result_target_parity_unverified", "teacher_DEV_small_nine_family_panel"])
+        manifest["sha256"] = "sha256:" + launch.sha(launch.canonical({
+            k: v for k, v in manifest.items() if k != "sha256"}))
+        (self.root / "manifest.json").write_text(json.dumps(manifest))
+        path = self.root / "fast.json"; path.write_text(json.dumps(config))
+        destination = self.root / "fast-prepared"
+        launch.prepare(path, destination)
+        plan, request, receipt = launch.prepared(destination)
+        self.assertEqual((receipt["purpose"], request["name"], plan["validation_mode"]),
+                         ("diagnostic_fast_sft", launch.FAST_NAME, "teacher_cross_entropy"))
+        manifest["diagnostic_only"] = False
+        manifest["sha256"] = "sha256:" + launch.sha(launch.canonical({
+            k: v for k, v in manifest.items() if k != "sha256"}))
+        (self.root / "manifest.json").write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(ValueError, "diagnostic fast96"):
+            launch.prepare(path, self.root / "false-claim")
+
 
 if __name__ == "__main__":
     unittest.main()

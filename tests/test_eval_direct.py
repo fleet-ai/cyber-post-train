@@ -7,10 +7,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from evals.direct import CAPABILITY, _expected_readiness, preview, run_once
+from evals.direct import CAPABILITY, LaunchError, _expected_readiness, digest, preview, run_once
 from evals.fleet import seal_protocol, summarize
-from evals.launch import LaunchError, digest
-from test_eval_launch import fixture, sha
+from tests.eval_fixture import fixture, sha
 
 RUN = {"exit_code": 0, "trace_sha256": sha("a"), "steps": 2}
 runner = lambda *args: RUN

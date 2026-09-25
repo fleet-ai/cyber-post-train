@@ -66,6 +66,8 @@ TARGET_GROUP_PATCH_TO = '''        for index, message in enumerate(messages[2:],
             else:
                 ids, mask, _ = helper([message], tokenizer, tokenizer_kwargs={"tools": []})'''
 TARGET_BUILDER_SHA = "sha256:178d2c4f2ed3d6ad98bd1915b434b61cc714fb157cc30314e9aaf076ab4ae02c"
+LAYOUT = "dense_single_row_group_v1"
+LAYOUT_BUILDER_SHA = "sha256:d4f1d271242ad197f839ec1840d2ca58548051d0c32dc31025186a5cd635100c"
 
 
 def _digest(value: object) -> str:
@@ -133,7 +135,7 @@ def validate_request(path: Path) -> dict:
 
 
 def stage_historical(root: Path, *, repository: Path | None = None,
-                     target_names: bool = False) -> str:
+                     target_names: bool = False, single_row_groups: bool = False) -> str:
     """Copy only the exact historical source closure from a Git object."""
     repository = repository or Path(__file__).resolve().parents[1]
     frozen_root = os.environ.get("CYBER_HISTORICAL_ROOT")
@@ -153,6 +155,8 @@ def stage_historical(root: Path, *, repository: Path | None = None,
             payload = source.read_bytes()
         if hashlib.sha256(payload).hexdigest() != expected:
             raise ValueError("frozen source object is unavailable or differs")
+        if single_row_groups and not target_names:
+            raise ValueError("single-row-group layout requires target-only method")
         if target_names and relative == "training/message_aligned_teacher_corpus.py":
             before, after = TARGET_ALIAS_PATCH_FROM.encode(), TARGET_ALIAS_PATCH_TO.encode()
             if payload.count(before) != 1:
@@ -166,8 +170,22 @@ def stage_historical(root: Path, *, repository: Path | None = None,
             if payload.count(before) != 1:
                 raise ValueError("frozen source has no unique target-tool-group patch point")
             payload = payload.replace(before, after, 1)
+            if single_row_groups:
+                patches = (
+                    ('writer.write_table(pa.Table.from_pylist(rows, schema=_arrow_schema(pa)))',
+                     'writer.write_table(pa.Table.from_pylist(rows, schema=_arrow_schema(pa)), row_group_size=1)'),
+                    ('for batch in pq.ParquetFile(partial / "train.parquet").iter_batches()',
+                     'for batch in pq.ParquetFile(partial / "train.parquet").iter_batches(batch_size=8)'),
+                    ('            "format": DENSE_FORMAT,\n            "source_sessions": counts["source_sessions"],',
+                     f'            "format": DENSE_FORMAT,\n            "storage_layout": "{LAYOUT}",\n'
+                     '            "source_sessions": counts["source_sessions"],'),
+                )
+                for before, after in patches:
+                    if payload.count(before.encode()) != 1:
+                        raise ValueError("frozen source has no unique layout patch point")
+                    payload = payload.replace(before.encode(), after.encode(), 1)
             builder_sha = "sha256:" + hashlib.sha256(payload).hexdigest()
-            if builder_sha != TARGET_BUILDER_SHA:
+            if builder_sha != (LAYOUT_BUILDER_SHA if single_row_groups else TARGET_BUILDER_SHA):
                 raise ValueError("target-name mechanics patch digest differs")
         target = Path(root) / relative
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -176,7 +194,8 @@ def stage_historical(root: Path, *, repository: Path | None = None,
     return builder_sha
 
 
-def build_dense(request_path: Path, *, target_names: bool = False) -> dict:
+def build_dense(request_path: Path, *, target_names: bool = False,
+                single_row_groups: bool = False) -> dict:
     """Run the frozen packer, then independently verify its sealed output."""
     request_path = Path(request_path).absolute()
     request = validate_request(request_path)
@@ -186,7 +205,8 @@ def build_dense(request_path: Path, *, target_names: bool = False) -> dict:
     output = Path(request["output"])
     output = output if output.is_absolute() else request_path.parent / output
     with tempfile.TemporaryDirectory(prefix="q38-frozen-dense-") as temporary:
-        builder_sha = stage_historical(Path(temporary), target_names=target_names)
+        builder_sha = stage_historical(Path(temporary), target_names=target_names,
+                                       single_row_groups=single_row_groups)
         result = subprocess.run(
             [sys.executable, "-m", "training.message_aligned_teacher_corpus",
              "--config", str(request_path)], cwd=temporary, capture_output=True,
@@ -215,6 +235,7 @@ def build_dense(request_path: Path, *, target_names: bool = False) -> dict:
             or manifest.get("materialization", {}).get("request_sha256") != request["sha256"]
             or train.get("path") != "train.parquet" or train.get("format") != "pretokenized_assistant_segments_v1"
             or not isinstance(train.get("rows"), int) or train["rows"] < 1
+            or train.get("storage_layout") != (LAYOUT if single_row_groups else None)
             or parquet.is_symlink() or not parquet.is_file() or _file_sha(parquet) != train.get("sha256")
             or receipt.get("schema") != RECEIPT_SCHEMA
             or receipt.get("sha256") != _legacy_digest({k: v for k, v in receipt.items() if k != "sha256"})
@@ -224,212 +245,20 @@ def build_dense(request_path: Path, *, target_names: bool = False) -> dict:
             or receipt.get("rows") != train["rows"]
             or receipt.get("supervised_tokens") != train.get("supervised_tokens")):
         raise ValueError("frozen dense output failed independent receipt checks")
+    if single_row_groups:
+        import pyarrow.parquet as pq
+        meta = pq.ParquetFile(parquet).metadata
+        if meta.num_rows != train["rows"] or meta.num_row_groups != train["rows"] or any(
+            meta.row_group(i).num_rows != 1 for i in range(meta.num_row_groups)
+        ):
+            raise ValueError("native Parquet row-group layout differs")
     return {"manifest_sha256": manifest["sha256"], "receipt_sha256": receipt["sha256"],
             "train_sha256": train["sha256"], "rows": train["rows"],
             "supervised_tokens": train["supervised_tokens"]}
 
 
-def compose_teacher_ce(dense_dir: Path, dev_dir: Path, dev_source_dir: Path,
-                       roster_path: Path, corpus_root: Path, output: Path,
-                       *, train_source_dir: Path | None = None) -> dict:
-    """Bind dense train and contiguous dev to one teacher-CE SFT manifest.
-
-    No payload is copied. The caller must set the SFT config's ``data.root`` to
-    this exact corpus root; all stored paths are relative to it. The native
-    packer remains train-only and the development converter remains unchanged.
-    """
-    import pyarrow.parquet as pq
-
-    dense_dir, dev_dir = Path(dense_dir), Path(dev_dir)
-    dev_source_dir, roster_path = Path(dev_source_dir), Path(roster_path)
-    corpus_root, output = Path(corpus_root), Path(output)
-    if output.exists() or output.is_symlink() or corpus_root.is_symlink() or not corpus_root.is_dir():
-        raise ValueError("composition output or corpus root is unsafe")
-
-    def sealed(path: Path, schema: str, digest=_legacy_digest, key="schema") -> dict:
-        if path.is_symlink() or not path.is_file():
-            raise ValueError("bound manifest or receipt is absent or linked")
-        value = json.loads(path.read_text())
-        if (not isinstance(value, dict) or value.get(key) != schema
-                or value.get("sha256") != digest({k: v for k, v in value.items() if k != "sha256"})):
-            raise ValueError("bound manifest or receipt seal differs")
-        return value
-
-    dense_path, dev_path = dense_dir / "manifest.json", dev_dir / "manifest.json"
-    dense = sealed(dense_path, MANIFEST_SCHEMA)
-    new_method = (dense_dir / "TARGET-METHOD.json").exists()
-    target_verified = None
-    if new_method:
-        if train_source_dir is None:
-            raise ValueError("new target-anchor method requires its exact private source")
-        from .target_dense import verify_method
-        target_verified = verify_method(dense_dir, train_source_dir)
-        if target_verified["trainer_ready"] is not True:
-            raise ValueError("new target-anchor method lacks live serving attestation")
-    native = sealed(dev_path, "qwen38_tool_aware_parquet_v1")
-    dense_receipt = sealed(dense_dir / "RECEIPT.json", RECEIPT_SCHEMA)
-    source_receipt = sealed(dev_source_dir / "RECEIPT.json", "structured_message_windows_v1",
-                            key="format")
-    roster = sealed(roster_path, "cyber_exact_task_family_role_roster_v1", _digest)
-    train, dev = dense.get("files", {}).get("train", {}), native.get("files", {}).get("dev", {})
-    expected_builders = {
-        "message_aligned_teacher_corpus.py": (TARGET_BUILDER_SHA if new_method else
-                                              "sha256:" + SOURCES["training/message_aligned_teacher_corpus.py"]),
-        "dense.py": "sha256:" + SOURCES["training/dense.py"],
-        "corpus.py": "sha256:" + SOURCES["training/corpus.py"],
-        "native_helper": NATIVE_HELPER_SHA,
-    }
-    if (dense.get("algorithm") != ALGORITHM or dense.get("validation_mode") != "task_outcomes_only"
-            or set(dense.get("files", {})) != {"train"}
-            or dense.get("builder_sha256") != expected_builders
-            or dense.get("materialization", {}).get("family_roster_sha256") != roster["sha256"]
-            or dense.get("split_sha256") != roster.get("family_role_anchor_sha256")
-            or dense_receipt.get("manifest_file_sha256") != _file_sha(dense_path)
-            or dense_receipt.get("manifest_sha256") != dense["sha256"]
-            or dense_receipt.get("train_parquet_sha256") != train.get("sha256")
-            or dense_receipt.get("rows") != train.get("rows")
-            or dense_receipt.get("supervised_tokens") != train.get("supervised_tokens")
-            or native.get("trainer_ready") is not True
-            or native.get("validation_mode") != "teacher_cross_entropy"
-            or set(native.get("files", {})) != {"train", "dev"}
-            or native.get("source_receipt_sha256") != source_receipt["sha256"]
-            or train.get("format") != "pretokenized_assistant_segments_v1"
-            or dev.get("format") != "chat_messages_last_assistant_v2"
-            or train.get("path") != "train.parquet" or dev.get("path") != "dev.parquet"
-            or not isinstance(train.get("rows"), int) or train["rows"] < 1
-            or not isinstance(dev.get("rows"), int) or dev["rows"] < 1
-            or source_receipt.get("trainer_ready") is not False
-            or set(source_receipt.get("partitions", {})) != {"train", "dev"}):
-        raise ValueError("source manifests do not define exact dense-train/contiguous-dev inputs")
-
-    from .runtime import BACKEND_SHA, MODEL, TOKENIZER_FILES, TOKENIZER_SHA
-
-    tokenizer = dense.get("tokenizer", {})
-    expected_files = [{"path": path, "sha256": digest} for path, digest in TOKENIZER_FILES.items()]
-    if (tokenizer.get("repo") != MODEL[0] or tokenizer.get("revision") != MODEL[1]
-            or tokenizer.get("files") != expected_files
-            or tokenizer.get("chat_template_sha256") != TOKENIZER_FILES["chat_template.jinja"]
-            or tokenizer.get("backend_sha256") != BACKEND_SHA
-            or native.get("tokenizer") != {"repo": MODEL[0], "revision": MODEL[1],
-                                           "sha256": TOKENIZER_SHA}):
-        raise ValueError("train and dev tokenizer identities differ")
-
-    identities = roster.get("identities")
-    if not isinstance(identities, list) or not identities:
-        raise ValueError("reviewed family identities are absent")
-    expected_root = TARGET_ROOT_ID if new_method else "fleet-blackbox-current-study-20260914-v2"
-    if (roster.get("root_role_anchor_id") != expected_root
-            or new_method and roster.get("family_role_anchor_sha256") != TARGET_ANCHOR_SHA):
-        raise ValueError("reviewed root identity differs")
-    by_pair, by_version, family_roles = {}, {}, {}
-    for item in identities:
-        if not isinstance(item, dict) or set(item) != {"task_key", "task_version_id", "group_id", "split"}:
-            raise ValueError("reviewed family identity is malformed")
-        task, version, group, split = (item[key] for key in
-                                       ("task_key", "task_version_id", "group_id", "split"))
-        if (not isinstance(task, str) or not task or not isinstance(version, str) or not version
-                or not _sha(group) or split not in {"train", "dev", "final_test"}
-                or (task, version) in by_pair or version in by_version
-                or family_roles.setdefault(group, split) != split):
-            raise ValueError("reviewed family roles conflict")
-        by_pair[task, version] = (group, split)
-        by_version[version] = (group, split)
-    if (roster.get("heldout_group_ids") != sorted(g for g, role in family_roles.items()
-                                                  if role != "train")
-            or not roster["heldout_group_ids"]):
-        raise ValueError("held-out family roster differs")
-    projected = {version: {"family_id": group, "split": "test" if role == "final_test" else role}
-                 for version, (group, role) in by_version.items()}
-    dev_partition = source_receipt["partitions"]["dev"]
-    dev_proof = dev_partition.get("receipt", {})
-    dev_input = dev_proof.get("inputs_sha256", {})
-    source_dev_file = dev_source_dir / "dev.jsonl"
-    if source_dev_file.is_symlink() or not source_dev_file.is_file():
-        raise ValueError("development source partition is absent or linked")
-    if (dev_input.get("roster") != _legacy_digest(projected)
-            or dev_input.get("tools") != dense.get("materialization", {}).get("target_tools_sha256")
-            or dev_partition.get("path") != "dev.jsonl"
-            or not isinstance(dev_partition.get("bytes"), int)
-            or dev_partition["bytes"] < 1
-            or dev_partition.get("sha256") != _file_sha(source_dev_file)
-            or dev_partition["bytes"] != source_dev_file.stat().st_size
-            or dev_proof.get("sha256") != _legacy_digest({k: v for k, v in dev_proof.items()
-                                                          if k != "sha256"})
-            or dev_proof.get("rows") != dev.get("rows")):
-        raise ValueError("development source uses another roster or tool contract")
-
-    root = corpus_root.resolve(strict=True)
-    def inside(path: Path, expected: str) -> tuple[Path, str]:
-        if path.is_symlink() or not path.is_file() or not _sha(expected) or _file_sha(path) != expected:
-            raise ValueError("bound Parquet payload differs")
-        try:
-            relative = path.resolve(strict=True).relative_to(root)
-        except ValueError as error:
-            raise ValueError("dataset is outside the selected corpus root") from error
-        if not relative.parts or ".." in relative.parts:
-            raise ValueError("dataset path is unsafe")
-        return path, relative.as_posix()
-
-    train_file, train_relative = inside(dense_dir / "train.parquet", train["sha256"])
-    dev_file, dev_relative = inside(dev_dir / "dev.parquet", dev["sha256"])
-    train_rows = pq.read_table(train_file, columns=["task_key", "source_task_version_id",
-                                                    "source_group_id"]).to_pylist()
-    dev_rows = pq.read_table(dev_file, columns=["task_version_id", "family_id"]).to_pylist()
-    if (len(train_rows) != train["rows"] or len(dev_rows) != dev["rows"]
-            or any(by_pair.get((r["task_key"], r["source_task_version_id"])) !=
-                   (r["source_group_id"], "train") for r in train_rows)
-            or any(by_version.get(r["task_version_id"]) != (r["family_id"], "dev")
-                   for r in dev_rows)
-            or sorted({r["task_key"] for r in train_rows}) != train.get("task_keys")
-            or sorted({r["task_version_id"] for r in dev_rows}) != dev.get("task_keys")
-            or {r["source_group_id"] for r in train_rows} & {r["family_id"] for r in dev_rows}
-            or _file_sha(train_file) != train["sha256"] or _file_sha(dev_file) != dev["sha256"]):
-        raise ValueError("train/dev rows violate the frozen family roles")
-
-    result = {**dense, "algorithm": (TARGET_METHOD
-                                      if new_method else ALGORITHM),
-              "validation_mode": "teacher_cross_entropy", "dev_windows": dev["rows"],
-              "files": {"train": {**train, "path": train_relative},
-                        "dev": {**dev, "path": dev_relative}},
-              "composition": {"schema": "qwen38_dense_train_contiguous_dev_v1",
-                              "dense_manifest_sha256": dense["sha256"],
-                              "dense_receipt_sha256": dense_receipt["sha256"],
-                              "dev_manifest_sha256": native["sha256"],
-                              "dev_source_receipt_sha256": source_receipt["sha256"],
-                              "family_roster_sha256": roster["sha256"],
-                              "corpus_root": str(root)}}
-    if target_verified:
-        result["composition"]["target_method_sha256"] = target_verified["method_sha256"]
-    result["sha256"] = _legacy_digest({k: v for k, v in result.items() if k != "sha256"})
-    output.parent.mkdir(parents=True, exist_ok=True)
-    with os.fdopen(os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as stream:
-        json.dump(result, stream, sort_keys=True, separators=(",", ":"), allow_nan=False)
-        stream.write("\n")
-        stream.flush()
-        os.fsync(stream.fileno())
-    return {"manifest_sha256": result["sha256"], "train_rows": train["rows"],
-            "dev_rows": dev["rows"], "corpus_root": str(root)}
-
-
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
-    if argv and argv[0] == "compose":
-        parser = argparse.ArgumentParser(description="Bind frozen dense train and contiguous CE dev")
-        parser.add_argument("dense_dir", type=Path)
-        parser.add_argument("dev_dir", type=Path)
-        parser.add_argument("dev_source_dir", type=Path)
-        parser.add_argument("family_roster", type=Path)
-        parser.add_argument("corpus_root", type=Path)
-        parser.add_argument("output", type=Path)
-        args = parser.parse_args(argv[1:])
-        try:
-            receipt = compose_teacher_ce(args.dense_dir, args.dev_dir, args.dev_source_dir,
-                                         args.family_roster, args.corpus_root, args.output)
-        except Exception as error:
-            print(f"mixed corpus rejected: {type(error).__name__}", file=sys.stderr)
-            return 2
-        print(json.dumps(receipt, sort_keys=True))
-        return 0
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("request", type=Path)
     args = parser.parse_args(argv)

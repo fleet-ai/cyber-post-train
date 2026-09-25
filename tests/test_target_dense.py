@@ -11,7 +11,7 @@ from training import source
 from training import target_dense
 from training.dense_bridge import (ALGORITHM as MECHANICS, INPUTS, REQUEST_SCHEMA,
                                    SOURCES, NATIVE_HELPER_SHA, _digest, _file_sha, _legacy_digest,
-                                   compose_teacher_ce, TARGET_BUILDER_SHA)
+                                   TARGET_BUILDER_SHA, LAYOUT_BUILDER_SHA, LAYOUT)
 from training.target_dense import METHOD as ALGORITHM, audit, build, verify_method
 
 
@@ -61,7 +61,7 @@ def test_new_dense_wrapper_retains_old_mechanics_but_is_not_train_ready():
             request_file = fixture.root / "request.json"
             request_file.write_text(json.dumps(request))
 
-            def fake_frozen_builder(path, *, target_names):
+            def fake_frozen_builder(path, *, target_names, single_row_groups=False):
                 assert target_names is True
                 generated = json.loads(Path(path).read_text())
                 stage = Path(generated["output"])
@@ -70,11 +70,13 @@ def test_new_dense_wrapper_retains_old_mechanics_but_is_not_train_ready():
                     "source_session_id": "session-a", "target_spans": [
                         {"assistant_index": 0, "token_start": 1, "token_end": 3}],
                     "target_token_count": 2, "loss_mask": [0, 1, 1, 0],
-                    "window_algorithm": MECHANICS}]), stage / "train.parquet")
+                    "window_algorithm": MECHANICS}]), stage / "train.parquet", row_group_size=1)
                 (stage / "source-selection.private.jsonl").write_text("{}\n")
                 train = {"path": "train.parquet", "sha256": _file_sha(stage / "train.parquet"),
                          "format": "pretokenized_assistant_segments_v1", "rows": 1,
                          "supervised_tokens": 2}
+                if single_row_groups:
+                    train["storage_layout"] = LAYOUT
                 manifest = {"schema": "cyber_dense_sft_corpus_v1", "algorithm": MECHANICS,
                             "validation_mode": "task_outcomes_only", "files": {"train": train},
                             "materialization": {"request_sha256": generated["sha256"],
@@ -82,7 +84,8 @@ def test_new_dense_wrapper_retains_old_mechanics_but_is_not_train_ready():
                                                 "success_evidence_sha256": generated["evidence"]["sha256"],
                                                 "model_request_capture_sha256": generated["model_request_capture"]["sha256"]},
                             "builder_sha256": {
-                                "message_aligned_teacher_corpus.py": TARGET_BUILDER_SHA,
+                                "message_aligned_teacher_corpus.py": (LAYOUT_BUILDER_SHA if single_row_groups
+                                                                     else TARGET_BUILDER_SHA),
                                 "dense.py": "sha256:" + SOURCES["training/dense.py"],
                                 "corpus.py": "sha256:" + SOURCES["training/corpus.py"],
                                 "native_helper": NATIVE_HELPER_SHA}, "limitations": []}
@@ -103,10 +106,13 @@ def test_new_dense_wrapper_retains_old_mechanics_but_is_not_train_ready():
             with patch.object(target_dense, "build_dense", fake_frozen_builder):
                 published = build(request_file, private, destination)
             checked = verify_method(destination, private)
-            with pytest.raises(ValueError, match="lacks live serving attestation"):
-                compose_teacher_ce(destination, fixture.root / "dev", fixture.root / "dev-source",
-                                   fixture.root / "roster.json", fixture.root, fixture.root / "mixed.json",
-                                   train_source_dir=private)
+            lazy_request = {**request, "output": str(fixture.root / "target-dense-lazy")}
+            lazy_request["sha256"] = _digest({k: v for k, v in lazy_request.items() if k != "sha256"})
+            lazy_file = fixture.root / "lazy-request.json"
+            lazy_file.write_text(json.dumps(lazy_request))
+            with patch.object(target_dense, "build_dense", fake_frozen_builder):
+                lazy_result = build(lazy_file, private, Path(lazy_request["output"]), single_row_groups=True)
+            assert verify_method(Path(lazy_request["output"]), private)["method_sha256"] == lazy_result["method_sha256"]
         assert json.loads((destination / "TARGET-METHOD.json").read_text())["method"] == ALGORITHM
         assert published["trainer_ready"] is False
         assert checked["method_sha256"] == published["method_sha256"]

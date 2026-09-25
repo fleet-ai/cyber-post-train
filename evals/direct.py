@@ -14,11 +14,97 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
-from urllib.parse import quote
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.parse import quote, urlencode
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 from evals.fleet import validate_protocol
-from evals.launch import TEAM_ID, FleetClient, LaunchError, _check_task, _families, _sha, digest
+
+TEAM_ID = "a1025f0b-ad67-49fc-a023-51800ab43e84"
+SHA = re.compile(r"sha256:[0-9a-f]{64}\Z")
+
+
+class LaunchError(ValueError):
+    """A pre-submit gate failed; uncertain creates must never be replayed."""
+
+
+def digest(value: object) -> str:
+    return "sha256:" + hashlib.sha256(json.dumps(
+        value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+
+
+def _sha(value: object) -> bool:
+    return isinstance(value, str) and SHA.fullmatch(value) is not None
+
+
+def _families(plan: dict) -> None:
+    roles = plan["family_roles"]
+    if set(roles) != {"train", "dev", "final"}:
+        raise LaunchError("frozen family roles are required")
+    seen = set()
+    for role, rows in roles.items():
+        if not isinstance(rows, list) or (role != "train" and not rows):
+            raise LaunchError("frozen development and final family rosters are required")
+        for row in rows:
+            if (not isinstance(row, list) or len(row) != 2
+                    or any(not isinstance(x, str) or not x for x in row)
+                    or tuple(row) in seen):
+                raise LaunchError("train/development/final family overlap or duplicate")
+            seen.add(tuple(row))
+    selected = {(x["application"], x["family_id"]) for x in plan["protocol"]["tasks"]}
+    if selected != {tuple(x) for x in roles[plan["protocol"]["role"]]}:
+        raise LaunchError("protocol tasks differ from frozen family roster")
+
+
+def _check_task(task: dict, live: dict, expected_digest: str) -> None:
+    verifier, metadata = live.get("verifier") or {}, live.get("metadata") or {}
+    manifest = metadata.get("runtime_seed_manifest") or {}
+    files = manifest.get("files") if isinstance(manifest, dict) else None
+    seed_bound = (isinstance(files, list) and bool(files)
+                  and type(manifest.get("version")) is int and manifest["version"] > 0
+                  and isinstance(manifest.get("data_root"), str) and bool(manifest["data_root"])
+                  and all(isinstance(row, dict) and _sha("sha256:" + str(row.get("sha256")))
+                          and isinstance(row.get("target_path"), str) and bool(row["target_path"])
+                          and type(row.get("size_bytes")) is int and row["size_bytes"] > 0
+                          for row in files)
+                  and ("content_sha256" not in manifest
+                       or _sha("sha256:" + str(manifest["content_sha256"]))))
+    if (live.get("team_id") != TEAM_ID or live.get("key") != task["task_key"]
+        or live.get("eval_task_version_id") != task["task_version_id"]
+        or live.get("environment_version_id") != task["environment_version_id"]
+        or live.get("data_version") != task["data_version"]
+        or "sha256:" + str(verifier.get("sha256")) != task["verifier_sha256"]
+        or not verifier.get("verifier_version_id") or not seed_bound
+        or metadata.get("projection_id") != "blackbox_ctf_v1"
+        or live.get("task_lifecycle_status") != "production"
+        or "seed_config" not in live
+        or (live["seed_config"] is not None and not isinstance(live["seed_config"], dict))
+        or digest(live) != expected_digest):
+        raise LaunchError("live exact-version task/runtime/verifier binding changed")
+
+
+class FleetClient:
+    """Small authenticated Fleet boundary; never logs private content."""
+
+    def _request(self, method: str, path: str, *, query: dict | None = None,
+                 body: dict | None = None) -> dict:
+        key = os.environ.get("FLEET_API_KEY")
+        if not key:
+            raise LaunchError("Fleet API credential unavailable")
+        url = "https://orchestrator.fleetai.com" + path
+        if query:
+            url += "?" + urlencode(query)
+        request = Request(url, data=None if body is None else json.dumps(body).encode(),
+                          method=method, headers={"Authorization": "Bearer " + key,
+                                                  "Content-Type": "application/json"})
+        with urlopen(request, timeout=30) as response:
+            return json.load(response)
+
+    def account_get(self) -> dict:
+        return self._request("GET", "/v1/account")
+
+    def task_get(self, task_key: str, version_id: str) -> dict:
+        return self._request("GET", "/v1/tasks/" + quote(task_key, safe=""),
+                             query={"version_id": version_id})
 
 SCHEMA = "fleet_direct_opencode_v1"
 CAPABILITY = {"version_scoped_durable_create_claim": "v1", "create_request_field": "create_request_id", "claim_route": "/v1/env/instances/create-requests/{request_id}", "ttl_seconds_range": [60, 3600]}
