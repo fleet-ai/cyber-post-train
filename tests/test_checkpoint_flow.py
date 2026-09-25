@@ -174,6 +174,7 @@ def test_stage_specs_require_c1_root_alert_opt_out(tmp_path, monkeypatch):
     assert cpu["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
     assert cpu["spec"]["suspend"] is True
     assert cpu["spec"]["template"]["spec"]["priorityClassName"] == "c1"
+    assert cpu["spec"]["template"]["spec"]["containers"][0]["resources"]["requests"] == {"cpu": "8", "memory": "16Gi"}
     assert "nvidia.com/gpu" not in str(cpu)
     assert flow.validate_stage_preview({"job": cpu}, cpu)["status"] == "previewed_not_created"
     normalized = json.loads(json.dumps(cpu))

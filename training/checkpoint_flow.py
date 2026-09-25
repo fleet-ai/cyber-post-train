@@ -354,7 +354,8 @@ sys.argv=['checkpoint_flow',os.environ['CKPT_STAGE'],str(root/'prepared'),os.env
 runpy.run_module('training.checkpoint_flow',run_name='__main__')
 """
     env.update({"CKPT_STAGE": stage, "CKPT_STEP": str(step)})
-    name = f"q38-ck-{receipt['plan_sha256'][:8]}-{step:06d}-{stage}"
+    name = (f"q38s-{receipt['plan_sha256'][:8]}-{step:06d}-seal" if stage == "seal"
+            else f"q38-ck-{receipt['plan_sha256'][:8]}-{step:06d}-{stage}")
     if len(name) > 31 or not re.fullmatch(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?", name):
         raise ValueError("checkpoint stage name is not a Kubernetes name")
     command = ["python", "-u", "-c", worker]
@@ -388,7 +389,7 @@ runpy.run_module('training.checkpoint_flow',run_name='__main__')
                                 "containers": [{"name": stage, "image": request["image"],
                                                 "command": command,
                                                 "env": [{"name": k, "value": v} for k, v in sorted(env.items())],
-                                                "resources": {"requests": {"cpu": "16", "memory": "96Gi"},
+                                                "resources": {"requests": {"cpu": "8" if stage == "seal" else "16", "memory": "16Gi" if stage == "seal" else "96Gi"},
                                                               "limits": {"cpu": "32", "memory": "192Gi"}},
                                                 "securityContext": {"allowPrivilegeEscalation": False,
                                                                     "privileged": False},
