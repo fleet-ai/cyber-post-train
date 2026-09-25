@@ -12,6 +12,7 @@ import base64
 import gzip
 import hashlib
 import json
+import math
 import os
 import re
 import shlex
@@ -217,6 +218,12 @@ def _teacher_ce(plan: dict, prepared: dict, step: int) -> dict:
     dev = _receipt(path)
     if dev.get("optimizer_step") != step or dev.get("plan_sha256") != prepared["plan_sha256"]:
         raise ValueError("teacher-loss development receipt differs from checkpoint")
+    if (any(type(dev.get(k)) not in (int, float) or not math.isfinite(dev[k]) or dev[k] < 0
+            for k in ("eval_loss", "task_macro_loss"))
+        or any(type(dev.get(k)) is not int or dev[k] <= 0
+               for k in ("supervised_tokens", "windows", "tasks"))
+        or dev["tasks"] != len(set(plan["datasets"]["dev"]["task_keys"]))):
+        raise ValueError("teacher-loss development metrics are incomplete")
     return {"teacher_loss_receipt_sha256": dev["receipt_sha256"],
             "teacher_loss_file_sha256": _file_sha(path)}
 
@@ -424,6 +431,7 @@ def validate_stage_preview(spec: dict, server_preview: dict) -> dict:
         obj = yaml.safe_load(server_preview["manifest_yaml"])
         meta, actual = obj.get("metadata", {}), obj.get("spec", {})
         if (obj.get("kind") != "RayJob"
+            or meta.get("name") != request["name"]
             or meta.get("namespace") != "fleet-train-jobs"
             or meta.get("annotations", {}).get("fleet.ai/failure-alerts") != "off"
             or meta.get("annotations", {}).get("fleet.ai/run-dir") != request["run_dir"]

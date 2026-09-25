@@ -1,11 +1,12 @@
 """No GPU, source checkpoint, or Fleet job is needed for bridge contract tests."""
 
 import json
+from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
 
-from training import checkpoint_flow as flow
+from training import checkpoint_flow as flow, checkpoint_tick as dispatch
 
 
 def signed(value):
@@ -22,11 +23,14 @@ def test_step_flow_is_create_once_and_digest_bound(tmp_path, monkeypatch, step, 
     root, prepared_dir = tmp_path / "run", tmp_path / "prepared"
     prepared_dir.mkdir()
     (prepared_dir / "PREPARED.json").write_text("{}\n")
+    image = "example@sha256:" + "a" * 64
     plan = {"run_name": "q38-corrected", "output_root": str(root),
+            "execution": {"image": image},
+            "datasets": {"dev": {"task_keys": ["task-a"]}},
             "validation_mode": "teacher_cross_entropy",
             "recipe": {"max_steps": max_steps, "checkpoint_interval": 16, "eval_interval": 16}}
     request = {"name": plan["run_name"], "run_dir": str(root),
-               "priority_class": "c1", "failureAlerts": False}
+               "priority_class": "c1", "failureAlerts": False, "image": image}
     prepared = {"plan_sha256": flow._sha(flow._canonical(plan)),
                 "request_sha256": flow._sha(flow._canonical(request))}
     monkeypatch.setattr(flow, "_prepared", lambda _: (plan, request, prepared))
@@ -83,6 +87,11 @@ def test_step_flow_is_create_once_and_digest_bound(tmp_path, monkeypatch, step, 
     with pytest.raises(ValueError, match="development receipt differs"):
         flow.stage_spec(prepared_dir, step, "ready")
     write(dev, {"optimizer_step": step, "plan_sha256": prepared["plan_sha256"]})
+    with pytest.raises(ValueError, match="metrics are incomplete"):
+        flow.run(prepared_dir, step, "ready")
+    write(dev, {"optimizer_step": step, "plan_sha256": prepared["plan_sha256"],
+                "eval_loss": 1.2, "task_macro_loss": 1.3,
+                "supervised_tokens": 10, "windows": 1, "tasks": 1})
     flow.run(prepared_dir, step, "ready")
     proof = flow._receipt(flow._paths(plan, step)["ready"])
     assert proof["checkpoint_sha256"] == flow._file_sha(flow._paths(plan, step)["seal"])
@@ -91,6 +100,18 @@ def test_step_flow_is_create_once_and_digest_bound(tmp_path, monkeypatch, step, 
     assert proof["serving_qualified"] is False
     with pytest.raises(ValueError, match="create-once"):
         flow.run(prepared_dir, step, "ready")
+    write(root / "checkpoint_receipts" / f"step-{step:06d}.json",
+          {"optimizer_step": step, "plan_sha256": prepared["plan_sha256"],
+           "checkpoint_path": str(root / "checkpoints" / f"global_step_{step}")})
+    uid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    live = {"name": request["name"], "uid": uid, "namespace": "fleet-train-jobs",
+            "status": "SUCCEEDED", "run_dir": str(root), "image": image}
+    def no_stage(*_):
+        pytest.fail("ready checkpoint must await route parity, not dispatch")
+    state = dispatch.tick(prepared_dir, uid, live_get=lambda _: live, lease=no_stage,
+                          duplicate_get=no_stage, capacity_get=no_stage,
+                          preview_get=no_stage, submit=no_stage)
+    assert state["status"] == "pending_served_route_parity_and_fleet_pass4"
 
 
 def test_tampered_cpu_gate_rejects_ready(tmp_path):
@@ -141,6 +162,7 @@ def test_stage_specs_require_c1_root_alert_opt_out(tmp_path, monkeypatch):
     assert gpu["request"]["priority_class"] == "c1"
     assert gpu["request"]["failureAlerts"] is False
     manifest = {"kind": "RayJob", "metadata": {
+        "name": gpu["request"]["name"],
         "namespace": "fleet-train-jobs",
         "annotations": {"fleet.ai/failure-alerts": "off",
                         "fleet.ai/run-dir": gpu["request"]["run_dir"]},
@@ -157,6 +179,23 @@ def test_stage_specs_require_c1_root_alert_opt_out(tmp_path, monkeypatch):
     manifest["metadata"]["annotations"]["fleet.ai/failure-alerts"] = "on"
     with pytest.raises(ValueError, match="drifted"):
         flow.validate_stage_preview(gpu, {**preview, "manifest_yaml": json.dumps(manifest)})
+    uid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    live = {"name": request["name"], "uid": uid, "namespace": "fleet-train-jobs",
+            "status": "RUNNING", "run_dir": request["run_dir"], "image": request["image"]}
+    def uncertain(*_):
+        raise TimeoutError("synthetic uncertain create")
+    args = {"live_get": lambda _: live, "lease": lambda: nullcontext(),
+            "duplicate_get": lambda *_: None,
+            "capacity_get": lambda: {"active_nodes": 1, "active_gpus": 8, "queued_jobs": 0},
+            "preview_get": lambda spec: spec["job"], "submit": uncertain}
+    with pytest.raises(ValueError, match="capacity exhausted"):
+        dispatch.tick(tmp_path, uid, **{**args, "capacity_get": lambda: {
+            "active_nodes": 1, "active_gpus": 8, "queued_jobs": 10}})
+    with pytest.raises(ValueError, match="already exists remotely"):
+        dispatch.tick(tmp_path, uid, **{**args, "duplicate_get": lambda *_: {"uid": "peer"}})
+    with pytest.raises(TimeoutError, match="uncertain create"):
+        dispatch.tick(tmp_path, uid, **args)
+    assert dispatch.tick(tmp_path, uid, **args)["status"] == "stage_pending_reconcile"
 
 
 def test_all_historical_checkpoint_sources_match_pinned_bytes():

@@ -69,6 +69,13 @@ supervised tokens, potentially more than Qwen's visible masked targets. The
 counts on sealed files and live target-tool/result equivalence; if short,
 collect fresh successes with exact target tools.
 
+A separately marked, provisional one-text-block result conversion can admit
+another 219 training and 15 validation sessions. A private structural dry run
+then totals **1,162 / 42 sessions** across **153 / 12 families**, with
+**22,295,624 / 639,694** old source-token proxies. This is not a native count
+or an accepted corpus: pinned local Grok/OpenCode render tests match, but the
+historical deployed tool-result parity and live served-Qwen wire remain unproved.
+
 ## Parallel execution lanes
 
 - **96k fast lane:** start from proven one-node/eight-GPU full-weight mechanics
