@@ -93,3 +93,13 @@ out of all SFT and RL inputs. The existing 20 Teacher3K-clean live families
 are a useful debugging panel, **not** a powered test for a modest 10-point
 improvement. Four attempts per family do not make four independent tasks.
 Expand and freeze a genuinely new final set before repeated checkpoint tuning.
+
+The frozen metadata-only role file is
+`configs/data/qwen38-teacher3k-family-roles-20260925-v1.json` (SHA-256
+`6c56b9b1ae9c0e5b21a36e48f0d5b6a451bda9da24ecab8262cb737acb1e2b68`).
+It covers all 1,176 exact teacher source versions: train has 1,057 versions,
+2,671 sessions, and 52,569,390 source supervised tokens; teacher validation
+has 113 versions, 199 sessions, and 4,433,757 tokens; quarantine has six
+versions, 16 sessions, and 381,734 tokens. These are source-lineage totals, not
+repacked training-window counts. A separate historical packer roster still
+needs a truthful new role-anchor binding before corpus materialization.

@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 from collections import defaultdict
+from pathlib import Path
 
 from training.qualify import components, load, metadata_only
 
@@ -94,12 +95,18 @@ def main() -> None:
     parser.add_argument("--protected-split", required=True)
     parser.add_argument("--protected-receipts", required=True)
     parser.add_argument("--validation-families", type=int, default=37)
+    parser.add_argument("--output", type=Path, help="create one immutable metadata-only roster")
     args = parser.parse_args()
-    print(json.dumps(roles(load(args.teacher_map),
-                           protected_split=load(args.protected_split),
-                           protected_receipts=load(args.protected_receipts),
-                           validation_families=args.validation_families),
-                     sort_keys=True, separators=(",", ":"), ensure_ascii=False))
+    text = json.dumps(roles(load(args.teacher_map),
+                            protected_split=load(args.protected_split),
+                            protected_receipts=load(args.protected_receipts),
+                            validation_families=args.validation_families),
+                      sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    if args.output:
+        with args.output.open("x", encoding="utf-8") as stream:
+            stream.write(text + "\n")
+    else:
+        print(text)
 
 
 if __name__ == "__main__":
