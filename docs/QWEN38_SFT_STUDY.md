@@ -124,6 +124,22 @@ with other tool/argument mismatches. Teacher-validation exclusions are
 respectively 10, 65, 96, and 1. The narrow exact-discovery elision adds no
 sessions once wrapper-dependent examples are correctly quarantined.
 
+The 867 train-session `use_tool` exclusion is deliberate, not a parser
+oversight. The frozen Fleet Grok driver pins Grok CLI 1.0.13, but the stored
+teacher transcripts do not attest the exact CLI version used per session or
+preserve the underlying MCP result-block boundaries. In a local, synthetic
+two-text-block MCP probe, the Grok `OkayOutput` inner string exactly matched
+what Grok sent back to its model (48 bytes, SHA-256 prefix `5c56e82e`), while
+the same blocks passed through pinned OpenCode 1.18.27 produced different
+model-facing text (49 bytes, SHA-256 prefix `c25c3287`). Grok inserted one
+line break between blocks; OpenCode inserted two. All 28,312 historical
+wrapped-bash `OkayOutput` strings lacked a uniquely parseable final status
+block from which to recover that boundary. Therefore simply unwrapping the
+old result is not a proven lossless conversion; those sessions stay out until
+the exact original block structure is attested or new target-harness traces
+replace them. This probe used local mock responses only, not a paid job or
+live task data.
+
 The 943 retained train sessions account for **20,675,618 historical source
 supervised-token estimates**; the 27 validation sessions account for 480,294.
 These are **not** Qwen's actual visible, masked target-token counts and may
