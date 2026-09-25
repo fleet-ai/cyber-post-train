@@ -269,92 +269,6 @@ def _target_user(prompt: str) -> str:
     return '"' + argument.replace('"', '\\"') + '"' if " " in argument else argument
 
 
-def _exact_discovery_metadata(content: Any, tools: list[dict]) -> bool:
-    try:
-        value = json.loads(content) if isinstance(content, str) else None
-    except ValueError:
-        return False
-    if (not isinstance(value, dict) or set(value) != {"note", "results", "status", "total_hidden_tools"}
-            or value["note"] is not None or value["status"] != "ready"
-            or type(value["total_hidden_tools"]) is not int or not isinstance(value["results"], list)):
-        return False
-    expected = {"fleet_environment__" + tool["function"]["name"].removeprefix("fleet_"):
-                tool["function"] for tool in tools}
-    for group in value["results"]:
-        if (not isinstance(group, dict) or set(group) != {"server", "tools"}
-                or group["server"] != "fleet_environment" or not isinstance(group["tools"], list)):
-            return False
-        for tool in group["tools"]:
-            if (not isinstance(tool, dict) or set(tool) != {"description", "input_schema", "score", "tool_name"}
-                    or not isinstance(tool["tool_name"], str) or tool["tool_name"] not in expected
-                    or type(tool["score"]) not in {int, float}
-                    or not math.isfinite(tool["score"])):
-                return False
-            target = expected[tool["tool_name"]]
-            if (tool["description"] != target["description"] or
-                    tool["input_schema"] != {key: val for key, val in target["parameters"].items()
-                                             if key != "additionalProperties"}):
-                return False
-    return True
-
-
-def _elide_exact_discovery(messages: list[dict], end: int, tools: list[dict]) -> tuple[list[dict], dict] | None:
-    """Drop only up-front, state-free discovery of tools already in the target anchor."""
-    out, removed = [], []
-    index, executable = 0, False
-    helper_reference = re.compile(r"\b(?:search_tool|ToolSearch|submit_final_answer)\b", re.IGNORECASE)
-    while index <= end:
-        message = messages[index]
-        calls = message.get("tool_calls") or []
-        if message.get("role") == "assistant" and any(
-            _tool_kind(call) in {"fleet_bash", "fleet_submit_report"} for call in calls
-        ):
-            executable = True
-        search = [call for call in calls if isinstance(call, dict)
-                  and isinstance(call.get("function"), dict)
-                  and call["function"].get("name") == "search_tool"]
-        if search:
-            ids = [call.get("id") for call in search]
-            results = messages[index + 1:index + 1 + len(search)]
-            content = message.get("content")
-            if (executable or len(search) != len(calls)
-                    or not all(isinstance(x, str) and x for x in ids)
-                    or len(set(ids)) != len(ids)
-                    or content is not None and not isinstance(content, str)
-                    or helper_reference.search(content or "")
-                    or len(results) != len(search)
-                    or not all(isinstance(result, dict)
-                               and isinstance(result.get("tool_call_id"), str) for result in results)
-                    or {result["tool_call_id"] for result in results} != set(ids)
-                    or any(result.get("role") != "tool" or
-                           not _exact_discovery_metadata(result.get("content"), tools)
-                           for result in results)):
-                return None
-            removed.extend({"call_sha256": digest(call),
-                            "result_sha256": digest(next(result for result in results
-                                                          if result.get("tool_call_id") == call["id"]))}
-                           for call in search)
-            if message.get("content"):
-                out.append({key: val for key, val in message.items() if key != "tool_calls"})
-            index += 1 + len(search)
-            continue
-        out.append(message)
-        index += 1
-    if not removed:
-        return None
-    out.extend(messages[end + 1:])
-    if any(helper_reference.search(message.get("content") or "") for message in out[2:]
-           if message.get("role") == "assistant" and isinstance(message.get("content"), str)):
-        return None
-    transform = {"schema": "fleet_exact_target_tool_discovery_elision_v1",
-                 "method": "exact_target_tool_discovery_elision_v1",
-                 "source_messages_sha256": digest(messages),
-                 "output_messages_sha256": digest(out),
-                 "removed_calls": removed}
-    transform["sha256"] = digest(transform)
-    return out, transform
-
-
 def _text_content(value: Any) -> str | None:
     if isinstance(value, str):
         return value
@@ -746,14 +660,6 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
             report_end = next(index for index, message in enumerate(training_messages)
                               if message.get("role") == "tool" and message.get("tool_call_id") == report_id)
             tool_checked = _tool_operations(training_messages, report_end)
-            discovery = None
-            if tool_checked is None:
-                candidate = _elide_exact_discovery(training_messages, report_end, tools)
-                if candidate is not None:
-                    training_messages, discovery = candidate
-                    report_end = next(index for index, message in enumerate(training_messages)
-                                      if message.get("role") == "tool" and message.get("tool_call_id") == report_id)
-                    tool_checked = _tool_operations(training_messages, report_end)
             if tool_checked is None:
                 exclusions["tool_argument_or_result_contract_mismatch"] += 1
                 quarantine.append({"selection": item, "summary": summary,
@@ -791,7 +697,7 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
                       "split": roster[version]["split"], "trace_sha256": item["trace_sha256"],
                       "summary_sha256": digest(summary), "messages": target_messages,
                       "anchor_transform": transform, "tool_transform": tool_transform,
-                      "visibility_transform": visibility, "discovery_transform": discovery}
+                      "visibility_transform": visibility, "discovery_transform": None}
             records.append(record)
             proofs[sid] = {"verified_success": True, "source_sha256": digest(record, ascii=True),
                            "report_call_id": report_id, "verifier_execution_id": verifier["id"],
@@ -807,7 +713,7 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
                    "outcome": {"infra_valid": True, "success": True, "score": score},
                    "messages": target_messages, "anchor_transform": transform,
                    "tool_transform": tool_transform, "visibility_transform": visibility,
-                   "discovery_transform": discovery}
+                   "discovery_transform": None}
             old["content_digest"] = digest(old)
             target_records.append(old)
             old_proof = {"schema": "fleet_broad_success_evidence_v2", "session_id": sid,
@@ -848,8 +754,7 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
                    "retained_by_split": dict(sorted(Counter(row["split"] for row in records).items())),
                    "excluded_sessions": dict(sorted(exclusions.items())),
                    "original_anchor_legacy_tool_name_sessions": old_anchor_mentions,
-                   "exact_discovery_elided_sessions": sum(
-                       record["discovery_transform"] is not None for record in records),
+                   "exact_discovery_elided_sessions": 0,
                    "anchor_method": ANCHOR_METHOD,
                    "visibility_method": "visible_only_assistant_content_v1",
                    "model_facing_tools_sha256": TOOL_DIGEST,

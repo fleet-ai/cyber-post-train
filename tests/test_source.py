@@ -179,28 +179,19 @@ class SourceTests(unittest.TestCase):
         self.assertFalse(self.get_calls)
         self.assertFalse((self.root / "private-output").exists())
 
-    def test_exact_target_discovery_is_elided_with_separate_digest_receipt(self):
-        metadata = {"note": None, "status": "ready", "total_hidden_tools": 2,
-                    "results": [{"server": "fleet_environment", "tools": [
-                        {"tool_name": "fleet_environment__" + tool["function"]["name"].removeprefix("fleet_"),
-                         "description": tool["function"]["description"],
-                         "input_schema": tool["function"]["parameters"], "score": 1}
-                        for tool in self.tools]}]}
+    def test_source_tool_discovery_is_not_silently_deleted(self):
         self.messages[2:2] = [
-            {"role": "assistant", "content": "I need the available tools.", "tool_calls": [
+            {"role": "assistant", "content": "", "tool_calls": [
                 {"id": "discovery-1", "function": {"name": "search_tool", "arguments": {"query": "Fleet"}}}]},
-            {"role": "tool", "tool_call_id": "discovery-1", "content": json.dumps(metadata)},
+            {"role": "tool", "tool_call_id": "discovery-1", "content": "metadata"},
         ]
         self.selection["trace_sha256"] = source.digest(self.envelope)
         with (patch.object(source, "TOOL_DIGEST", source.digest(self.tools, ascii=True)),
               patch.object(source, "TARGET_SYSTEM_DIGEST", source.text_digest("Target system.")),
               patch.object(source, "MIN_ANCHOR_PROBES", 1)):
             receipt = source.fetch(self.request(), get=self.get)
-        self.assertEqual(receipt["exact_discovery_elided_sessions"], 1)
-        record = json.loads((self.root / "private-output" / "records.jsonl").read_text())
-        self.assertIsNotNone(record["discovery_transform"])
-        self.assertNotIn("search_tool", json.dumps(record["messages"]))
-        self.assertEqual(record["messages"][2]["content"], "I need the available tools.")
+        self.assertEqual(receipt["retained_sessions"], 0)
+        self.assertEqual(receipt["exact_discovery_elided_sessions"], 0)
         raw = json.loads((self.root / "private-output" / "raw-sources.private.jsonl").read_text())
         self.assertIn("search_tool", json.dumps(raw["transcript_envelope"]))
 
