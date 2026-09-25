@@ -184,6 +184,8 @@ def main():
     base._checked_file(args.plan, args.plan_sha256)
     plan = json.loads(args.plan.read_text())
     check(plan)
+    if not plan["reload_gate"]["submission_authorized"]:
+        raise ValueError("restore-only GPU launch has not received separate root review")
     plan["plan_sha256"] = args.plan_sha256
     output = Path(plan["output_root"])
     output.mkdir(parents=True, exist_ok=True, mode=0o700)  # Bundle bootstrap made output/.runtime.
