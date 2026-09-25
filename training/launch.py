@@ -35,8 +35,8 @@ MECHANICS_OUTPUT = f"/mnt/sfs/jobs/{MECHANICS_NAME}"
 MECHANICS_DATA_ROOT = "/mnt/sfs/jobs/chris-q38-provisional96-corpus-v1/step1-data"
 MECHANICS_BUILDER = "sha256:178d2c4f2ed3d6ad98bd1915b434b61cc714fb157cc30314e9aaf076ab4ae02c"
 PROVISIONAL_SOURCE = "sha256:ffb3a687c4f1a325d2000dec30855f90cf6166acf7e03c7c6e13acbc5cf9a54a"
-PROVISIONAL_NORMALIZED = "sha256:cb72d652909c43f2c18514c1c9c9f78872e23306156000991697e025388922d4"
-PROVISIONAL_EVIDENCE = "sha256:4d28f14230b4ae66e34152afaba2fa69b7c3d6627f968d527dc1335645beb6b8"
+PROJECTION_FILE_SHA = "574adda7f9ed2bda5edb1c6e1453f69eb122fff4bfbf6806f9258f021d3d08bd"
+SUBSET_FILE_SHA = "aa491003e49f823feffefcc9680b312cab82e533a8def1e992e6aa2d8d00234e"
 SOURCES = {
     "training/__init__.py": "ecf358039bbb9b6cbab6546c9b1e61b9bc06c5b2d5b19907ff303a9277d77e27",
     "training/io.py": "7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
@@ -170,8 +170,9 @@ def _require_profile_config(config: dict, full: bool) -> None:
 
 
 def _require_mechanics_manifest(manifest: dict, manifest_bytes: bytes, receipt_bytes: bytes,
-                                parquet: Path | None = None) -> None:
+                                proof: dict, parquet: Path | None = None) -> None:
     from . import dense_bridge as dense
+    from .projection import _digest
     from .runtime import MODEL, TOKENIZER_FILES
     train, material = manifest.get("files", {}).get("train", {}), manifest.get("materialization", {})
     receipt = json.loads(receipt_bytes)
@@ -189,13 +190,19 @@ def _require_mechanics_manifest(manifest: dict, manifest_bytes: bytes, receipt_b
             "repo": MODEL[0], "revision": MODEL[1],
             "files": [{"path": p, "sha256": d} for p, d in TOKENIZER_FILES.items()]}.items())
         or manifest.get("split_sha256") != dense.TARGET_ANCHOR_SHA
-        or material.get("normalized_sha256") != PROVISIONAL_NORMALIZED
-        or material.get("success_evidence_sha256") != PROVISIONAL_EVIDENCE
+        or proof.get("schema") != "qwen38_diagnostic_whole_train_subset_v1"
+        or proof.get("sha256") != _digest({k: v for k, v in proof.items() if k != "sha256"})
+        or proof.get("source_receipt_file_sha256") != PROVISIONAL_SOURCE
+        or proof.get("selected_sessions") != 8 or proof.get("whole_sessions") is not True
+        or proof.get("diagnostic_only") is not True or proof.get("training_ready") is not False
+        or material.get("normalized_sha256") != proof.get("child_files_sha256", {}).get("normalized")
+        or material.get("success_evidence_sha256") != proof.get("child_files_sha256", {}).get("evidence")
+        or material.get("request_sha256") != proof.get("child_request_sha256")
         or material.get("family_role_anchor_sha256") != dense.TARGET_ANCHOR_SHA
         or manifest.get("max_length") != 98304 or manifest.get("context_tokens") != 98304
         or train.get("format") != "pretokenized_assistant_segments_v1" or train.get("path") != "train.parquet"
         or type(train.get("rows")) is not int or train["rows"] <= 8
-        or type(train.get("source_sessions")) is not int or train["source_sessions"] < 8
+        or train.get("source_sessions") != proof["selected_sessions"]
         or receipt.get("schema") != dense.RECEIPT_SCHEMA
         or receipt.get("sha256") != dense._legacy_digest({k: v for k, v in receipt.items() if k != "sha256"})
         or receipt.get("manifest_file_sha256") != "sha256:" + sha(manifest_bytes)
@@ -208,11 +215,6 @@ def _require_mechanics_manifest(manifest: dict, manifest_bytes: bytes, receipt_b
     if parquet is not None and (parquet.is_symlink() or not parquet.is_file()
                                 or dense._file_sha(parquet) != train["sha256"]):
         raise ValueError("parent v2 TRAIN Parquet differs from sealed receipt")
-    _require_projection_receipt(manifest)
-
-
-def _require_projection_receipt(_manifest: dict) -> None:
-    raise ValueError("independent v2 TRAIN-only projection receipt is not qualified")
 
 
 def _require_goal_anchor(_manifest: dict) -> None:
@@ -257,7 +259,8 @@ def _require_full_manifest(manifest: dict, data_root: str) -> None:
     _require_goal_anchor(manifest)
 
 
-def prepare(config_path: Path, destination: Path) -> dict:
+def prepare(config_path: Path, destination: Path,
+            mechanics_proof: tuple[Path, ...] | None = None) -> dict:
     if destination.exists() or destination.is_symlink():
         raise ValueError("prepared destination already exists")
     config_bytes = config_path.read_bytes()
@@ -269,16 +272,27 @@ def prepare(config_path: Path, destination: Path) -> dict:
     manifest_bytes = manifest_path.read_bytes()
     manifest = json.loads(manifest_bytes)
     mechanics_receipt = b"" if full else (manifest_path.parent / "RECEIPT.json").read_bytes()
+    subset_bytes = projection_bytes = b""
     if full:
+        if mechanics_proof is not None:
+            raise ValueError("full run cannot use diagnostic proof")
         _require_full_manifest(manifest, config["data"]["root"])
     else:
+        if mechanics_proof is None or len(mechanics_proof) != 6:
+            raise ValueError("independent whole-TRAIN-session proof paths required")
+        from .projection import verify_subset
+        proof = verify_subset(*mechanics_proof)
+        subset_bytes = mechanics_proof[-1].read_bytes()
+        projection_bytes = (mechanics_proof[1] / "PROJECTION.json").read_bytes()
+        if (sha(subset_bytes) != SUBSET_FILE_SHA or sha(projection_bytes) != PROJECTION_FILE_SHA
+            or json.loads(subset_bytes) != proof
+            or "sha256:" + sha(projection_bytes) != proof["full_projection_file_sha256"]):
+            raise ValueError("whole-session proof changed after replay")
         _require_mechanics_manifest(manifest, manifest_bytes, mechanics_receipt,
-                                    manifest_path.parent / "train.parquet")
+                                    proof, manifest_path.parent / "train.parquet")
     staged = json.loads(json.dumps(config))
-    if full:
-        rows, batch = manifest["files"]["train"]["rows"], config["recipe"]["batch_size"]
-        steps = (rows + batch - 1) // batch
-        staged["recipe"]["keep_checkpoints"] = steps
+    rows, batch = manifest["files"]["train"]["rows"], config["recipe"]["batch_size"]
+    staged["recipe"]["keep_checkpoints"] = (rows + batch - 1) // batch
     staged["model"]["lock"] = "../models/qwen38-27b-1d4bf0f2.lock.json"
     staged["model"]["weights"] = "../models/qwen38-27b-1d4bf0f2.weights.json"
     staged["data"]["manifest"] = "../data/corpus.json"
@@ -320,17 +334,21 @@ def prepare(config_path: Path, destination: Path) -> dict:
         receipt["corpus_receipt_file_sha256"] = sha(mechanics_receipt)
         receipt["provisional_source_receipt_file_sha256"] = PROVISIONAL_SOURCE
         receipt["train_parquet_sha256"] = manifest["files"]["train"]["sha256"]
+        receipt["subset_receipt_file_sha256"] = sha(subset_bytes)
+        receipt["projection_receipt_file_sha256"] = sha(projection_bytes)
     if full:
         receipt["supervised_tokens"] = plan["datasets"]["train"]["supervised_tokens"]
         interval = plan["recipe"]["checkpoint_interval"]
         receipt["planned_native_checkpoints"] = (plan["recipe"]["max_steps"] + interval - 1) // interval
         receipt["checkpoint_retention_capacity"] = plan["recipe"]["keep_checkpoints"]
-    destination.mkdir(parents=True)
-    (destination / "corpus.manifest.json").write_bytes(manifest_bytes)
+    destination.mkdir(parents=True, mode=0o700)
+    _create_only(destination / "corpus.manifest.json", manifest_bytes)
     if not full:
-        (destination / "corpus.RECEIPT.json").write_bytes(mechanics_receipt)
+        _create_only(destination / "corpus.RECEIPT.json", mechanics_receipt)
+        _create_only(destination / "SUBSET.json", subset_bytes)
+        _create_only(destination / "PROJECTION.json", projection_bytes)
     for name, value in (("plan.json", plan), ("request.json", request), ("PREPARED.json", receipt)):
-        (destination / name).write_bytes(canonical(value) + b"\n")
+        _create_only(destination / name, value)
     return receipt
 
 
@@ -365,11 +383,18 @@ def prepared(directory: Path) -> tuple[dict, dict, dict]:
             raise ValueError("full run evidence/retention binding changed")
     elif receipt.get("schema") == "qwen38_96k_mechanics_prepared_v1":
         mechanics_receipt = (directory / "corpus.RECEIPT.json").read_bytes()
-        _require_mechanics_manifest(manifest, manifest_bytes, mechanics_receipt)
+        subset_bytes = (directory / "SUBSET.json").read_bytes()
+        projection_bytes = (directory / "PROJECTION.json").read_bytes()
+        proof = json.loads(subset_bytes)
+        _require_mechanics_manifest(manifest, manifest_bytes, mechanics_receipt, proof)
         if (receipt.get("purpose") != "one_step_mechanics_only"
             or receipt.get("corpus_receipt_file_sha256") != sha(mechanics_receipt)
             or receipt.get("provisional_source_receipt_file_sha256") != PROVISIONAL_SOURCE
             or receipt.get("train_parquet_sha256") != manifest["files"]["train"]["sha256"]
+            or receipt.get("subset_receipt_file_sha256") != sha(subset_bytes)
+            or receipt.get("projection_receipt_file_sha256") != sha(projection_bytes)
+            or sha(subset_bytes) != SUBSET_FILE_SHA or sha(projection_bytes) != PROJECTION_FILE_SHA
+            or proof.get("full_projection_file_sha256") != "sha256:" + sha(projection_bytes)
             or plan.get("schema") != "cyber_sft_runtime_dense_v1"
             or plan.get("validation_mode") != "task_outcomes_only"
             or set(plan.get("datasets", {})) != {"train"}
@@ -377,6 +402,7 @@ def prepared(directory: Path) -> tuple[dict, dict, dict]:
             or plan.get("pause_after_step") != 1 or plan["recipe"]["max_steps"] <= 1
             or plan["recipe"]["eval_interval"] != 0
             or plan["recipe"]["checkpoint_interval"] != 1
+            or plan["recipe"]["keep_checkpoints"] != plan["recipe"]["max_steps"]
             or request["name"] != MECHANICS_NAME or request["run_dir"] != MECHANICS_OUTPUT):
             raise ValueError("one-step mechanics binding changed")
     else:
@@ -542,10 +568,10 @@ def cpu_preview(directory: Path, context: str, attempt: int = 1) -> dict:
             "root_failure_alerts": "off", "priority": "c1/q1"}
 
 
-def _create_only(path: Path, value: dict) -> None:
+def _create_only(path: Path, value: dict | bytes) -> None:
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "wb") as stream:
-        stream.write(canonical(value) + b"\n")
+        stream.write(value if isinstance(value, bytes) else canonical(value) + b"\n")
         stream.flush()
         os.fsync(stream.fileno())
 
@@ -798,6 +824,8 @@ def main(argv: list[str] | None = None) -> int:
     p = commands.add_parser("prepare", help="compile a create-once exact request off-GPU")
     p.add_argument("config", type=Path)
     p.add_argument("destination", type=Path)
+    p.add_argument("--mechanics-proof", nargs=6, type=Path,
+                   metavar=("SOURCE", "FULL", "LEGACY", "CHILD", "SELECTION", "SUBSET"))
     for action in ("cpu-preview", "cpu-collect", "preview"):
         p = commands.add_parser(action)
         p.add_argument("prepared_directory", type=Path)
@@ -808,7 +836,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.action == "prepare":
-            result = prepare(args.config, args.destination)
+            result = prepare(args.config, args.destination, args.mechanics_proof)
         elif args.action == "cpu-preview":
             result = cpu_preview(args.prepared_directory, PROD_CONTEXT)
         elif args.action == "cpu-create":

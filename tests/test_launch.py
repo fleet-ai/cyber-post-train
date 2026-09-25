@@ -12,7 +12,7 @@ from unittest import mock
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from training import dense_bridge, launch
+from training import dense_bridge, launch, projection
 from training.runtime import MODEL, TOKENIZER_FILES
 
 
@@ -21,8 +21,8 @@ FULL_CONFIG = Path(__file__).resolve().parents[1] / "configs/runs/qwen38-96k-ful
 
 
 def mechanics_parquet() -> bytes:
-    rows = [{"source_session_id": f"session-{i}", "token_count": 90_000,
-             "split": "train"} for i in range(16)]
+    rows = [{"source_session_id": f"session-{i % 8}", "token_count": 90_000,
+             "split": "train"} for i in range(119)]
     sink = pa.BufferOutputStream()
     pq.write_table(pa.Table.from_pylist(rows), sink)
     return sink.getvalue().to_pybytes()
@@ -33,8 +33,9 @@ def fake_mechanics_manifest() -> dict:
              "validation_mode": "task_outcomes_only", "source_sha256": "sha256:" + "a" * 64,
              "split_sha256": dense_bridge.TARGET_ANCHOR_SHA,
              "max_length": 98304, "context_tokens": 98304,
-             "materialization": {"normalized_sha256": launch.PROVISIONAL_NORMALIZED,
-                                 "success_evidence_sha256": launch.PROVISIONAL_EVIDENCE,
+             "materialization": {"normalized_sha256": "sha256:" + "b" * 64,
+                                 "success_evidence_sha256": "sha256:" + "c" * 64,
+                                 "request_sha256": "sha256:" + "d" * 64,
                                  "family_role_anchor_sha256": dense_bridge.TARGET_ANCHOR_SHA},
              "builder_sha256": {"message_aligned_teacher_corpus.py": launch.MECHANICS_BUILDER,
                                 "dense.py": "sha256:" + dense_bridge.SOURCES["training/dense.py"],
@@ -44,8 +45,8 @@ def fake_mechanics_manifest() -> dict:
                            "files": [{"path": p, "sha256": d} for p, d in TOKENIZER_FILES.items()],
                            "chat_template_sha256": TOKENIZER_FILES["chat_template.jinja"]},
              "files": {"train": {"path": "train.parquet", "sha256": "sha256:" + launch.sha(mechanics_parquet()),
-                                 "rows": 16, "task_keys": ["train-family"], "format": "pretokenized_assistant_segments_v1",
-                                 "supervised_tokens": 16, "source_sessions": 16, "assistant_responses": 16,
+                                 "rows": 119, "task_keys": ["train-family"], "format": "pretokenized_assistant_segments_v1",
+                                 "supervised_tokens": 239022, "source_sessions": 8, "assistant_responses": 16,
                                  "source_total_assistant_responses": 16, "excluded_assistant_responses": 0}}}
     value["sha256"] = "sha256:" + launch.sha(launch.canonical(value))
     return value
@@ -109,7 +110,7 @@ def native_preflight(receipt: dict) -> dict:
             "checked": ["native_sources", "model_files", "dataset_files", "native_config",
                         "native_forward_backward_signature", "native_train_only_loader",
                         "tokenization", "target_accounting"],
-            "counts": {"train": {"rows": 16, "supervised_tokens": 16}}}
+            "counts": {"train": {"rows": 119, "supervised_tokens": 239022}}}
 
 
 class LaunchTests(unittest.TestCase):
@@ -125,25 +126,48 @@ class LaunchTests(unittest.TestCase):
         (self.root / "manifest.json").write_bytes(payload)
         (self.root / "RECEIPT.json").write_text(json.dumps(fake_mechanics_receipt(manifest, payload)))
         self.config_path = self.root / "run.json"
-        self.projection = mock.patch.object(launch, "_require_projection_receipt")
+        full, child = self.root / "full", self.root / "child"
+        full.mkdir(); child.mkdir()
+        parent_bytes = b'{"schema":"synthetic"}\n'
+        (full / "PROJECTION.json").write_bytes(parent_bytes)
+        proof = {"schema": "qwen38_diagnostic_whole_train_subset_v1",
+                 "source_receipt_file_sha256": launch.PROVISIONAL_SOURCE,
+                 "full_projection_file_sha256": "sha256:" + launch.sha(parent_bytes),
+                 "selected_sessions": 8, "whole_sessions": True,
+                 "diagnostic_only": True, "training_ready": False,
+                 "child_files_sha256": {"normalized": manifest["materialization"]["normalized_sha256"],
+                                        "evidence": manifest["materialization"]["success_evidence_sha256"]},
+                 "child_request_sha256": manifest["materialization"]["request_sha256"]}
+        proof["sha256"] = projection._digest(proof)
+        (child / "SUBSET.json").write_text(json.dumps(proof))
+        for name, path in (("SUBSET_FILE_SHA", child / "SUBSET.json"),
+                           ("PROJECTION_FILE_SHA", full / "PROJECTION.json")):
+            patch = mock.patch.object(launch, name, launch.sha(path.read_bytes()))
+            patch.start(); self.addCleanup(patch.stop)
+        self.proof_paths = (self.root / "source", full, self.root / "legacy", child,
+                            self.root / "selection", child / "SUBSET.json")
+        self.projection = mock.patch.object(projection, "verify_subset", return_value=proof)
         self.projection.start(); self.addCleanup(self.projection.stop)
 
     def prepare(self) -> tuple[Path, dict]:
         self.config_path.write_text(json.dumps(self.config))
         dest = self.root / "prepared"
-        launch.prepare(self.config_path, dest)
+        launch.prepare(self.config_path, dest, self.proof_paths)
         return dest, json.loads((dest / "request.json").read_text())
 
     def test_prepares_exact_historical_runtime_and_immutable_request(self) -> None:
         dest, request = self.prepare()
         plan, rebuilt, receipt = launch.prepared(dest)
         self.assertEqual(request, rebuilt)
-        self.assertEqual((plan["recipe"]["max_steps"], plan["pause_after_step"]), (2, 1))
+        self.assertEqual((plan["recipe"]["max_steps"], plan["pause_after_step"]), (15, 1))
+        self.assertEqual(plan["recipe"]["keep_checkpoints"], 15)
         self.assertEqual(plan["recipe"]["max_length"], 98304)
         self.assertEqual(plan["validation_mode"], "task_outcomes_only")
         self.assertEqual(set(plan["datasets"]), {"train"})
         self.assertEqual(plan["recipe"]["checkpoint_interval"], 1)
         self.assertEqual(receipt["purpose"], "one_step_mechanics_only")
+        self.assertEqual(dest.stat().st_mode & 0o777, 0o700)
+        self.assertTrue(all(p.stat().st_mode & 0o777 == 0o600 for p in dest.iterdir()))
         self.assertEqual(request["priority_class"], "c1")
         self.assertIs(request["failureAlerts"], False)
         self.assertEqual(receipt["historical_commit"], launch.COMMIT)
@@ -155,13 +179,13 @@ class LaunchTests(unittest.TestCase):
         (self.root / "RECEIPT.json").write_text("{}")
         self.config_path.write_text(json.dumps(self.config))
         with self.assertRaisesRegex(ValueError, "complete-session v2 parent"):
-            launch.prepare(self.config_path, self.root / "unproven")
+            launch.prepare(self.config_path, self.root / "unproven", self.proof_paths)
 
     def test_real_prepare_rejects_unsealed_projection(self) -> None:
         self.projection.stop()
         self.config_path.write_text(json.dumps(self.config))
-        with self.assertRaisesRegex(ValueError, "TRAIN-only projection receipt"):
-            launch.prepare(self.config_path, self.root / "unproven")
+        with self.assertRaisesRegex(ValueError, "projection input or output bytes differ"):
+            launch.prepare(self.config_path, self.root / "unproven", self.proof_paths)
 
     def test_rendered_root_alert_and_priority_drift_fail_closed(self) -> None:
         _dest, request = self.prepare()
@@ -192,7 +216,7 @@ class LaunchTests(unittest.TestCase):
         self.config["cluster"]["priority"] = "c0"
         self.config_path.write_text(json.dumps(self.config))
         with self.assertRaisesRegex(ValueError, "c1 recipe differs"):
-            launch.prepare(self.config_path, self.root / "bad")
+            launch.prepare(self.config_path, self.root / "bad", self.proof_paths)
         self.config["cluster"]["priority"] = "c1"
         dest, request = self.prepare()
         request["failureAlerts"] = True
@@ -215,7 +239,7 @@ class LaunchTests(unittest.TestCase):
                 (self.root / "RECEIPT.json").write_text(json.dumps(fake_mechanics_receipt(manifest, payload)))
                 self.config_path.write_text(json.dumps(self.config))
                 with self.assertRaisesRegex(ValueError, "complete-session v2 parent"):
-                    launch.prepare(self.config_path, self.root / "bad")
+                    launch.prepare(self.config_path, self.root / "bad", self.proof_paths)
 
     def test_cpu_job_is_exact_zero_gpu_c1_q1_and_root_alerts_off(self) -> None:
         dest, request = self.prepare()
