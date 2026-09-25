@@ -63,6 +63,8 @@ class LazyOverlayTest(unittest.TestCase):
             self.assertEqual(hashlib.sha256(patched).hexdigest(), PATCHED[name])
             self.assertNotEqual(patched, original)
             compile(patched, name, "exec")
+            if name == "training/sft_runtime.py":
+                self.assertIn(b'if plan["datasets"]["train"].get("storage_layout") != "dense_single_row_group_v1":\n                    trainer.dispatch.finalize_pending_saves("policy")', patched)
             with self.assertRaises(ValueError):
                 patch_frozen(name, original + b"\n")
         self.assertEqual(stage_historical(self.root / "layout", target_names=True,

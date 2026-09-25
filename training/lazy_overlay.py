@@ -13,7 +13,7 @@ LAYOUT = "dense_single_row_group_v1"
 FROZEN = {"training/sft.py": "447dcaac2b610c1b6c124a13e7d541edc4c3145d26d8ff31577d75b37d8dd67d",
           "training/sft_runtime.py": "8cb671f377d089e1303248e237f386c256b212b15e41dadc07ac49cf2695ee17"}
 PATCHED = {"training/sft.py": "dd16b7084e0a0c9c6fe1b3aad909f13de12fb4e8b33979b713a6f9a11f152722",
-           "training/sft_runtime.py": "25c9c7150b9ccc3806d71ec00a22adc909c6dc843ecc3bd39b31aba3167798e3"}
+           "training/sft_runtime.py": "ed02280ec077cf19240c30a15827219fef1f0c3743952051cab431a401e5321d"}
 
 
 def require_pin(plan: dict) -> None:
@@ -77,6 +77,9 @@ def patch_frozen(name: str, payload: bytes) -> bytes:
              '                tokenized = ({"input_ids": range(n)} for n in tokenized.sequence_lengths)\n'
              '            return super()._log_dataset_stats(tokenized)\n\n'
              '        def load_dataset(self):'),
+            ('                trainer.dispatch.finalize_pending_saves("policy")',
+             '                if plan["datasets"]["train"].get("storage_layout") != "dense_single_row_group_v1":\n'
+             '                    trainer.dispatch.finalize_pending_saves("policy")'),
         )
     text = payload.decode()
     for before, after in edits:

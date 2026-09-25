@@ -176,6 +176,11 @@ def test_stage_specs_require_c1_root_alert_opt_out(tmp_path, monkeypatch):
     assert cpu["spec"]["template"]["spec"]["priorityClassName"] == "c1"
     assert "nvidia.com/gpu" not in str(cpu)
     assert flow.validate_stage_preview({"job": cpu}, cpu)["status"] == "previewed_not_created"
+    normalized = json.loads(json.dumps(cpu))
+    for item in normalized["spec"]["template"]["spec"]["containers"][0]["env"]:
+        if item.get("value") == "":
+            item.pop("value")
+    assert flow.validate_stage_preview({"job": cpu}, normalized)["status"] == "previewed_not_created"
     with pytest.raises(ValueError, match="immutable receipt file missing"):
         flow.stage_spec(tmp_path, 16, "export")
     monkeypatch.setattr(flow, "_seal", lambda *_: ({"receipt_sha256": "0" * 64}, "1" * 64))

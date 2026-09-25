@@ -3,6 +3,8 @@
 Goal: measured lift on new Fleet blackbox tasks. Historical 96k run `chris-q38-t3k96-b8-v3-e7d5c0f8` proves mechanics, **not** this independent corrected-data study. See [HOLDOUT.md](HOLDOUT.md) for source and split evidence. Its checkpoints cannot satisfy this study: a new 96k arm needs separate data, name, output, saves, and matched held-out evaluations.
 Kueue auto-unsuspends admitted CPU Jobs. For SFS staging, `/mnt/sfs/jobs` is root-owned (0755): preview a zero-GPU, alert-off root container, transfer only sealed data, verify remote digests, then release the exact staging Job. Native teacher DEV needs a unique `window_id`; the first image preflight failed at pinned `sft_runtime.py:1282`, and corrected data v2 has remote SHA-256 `9ea52340b56daba3b2a7b2afd091d078e759bdac45bcab4a29f5a10bbaa0e252`. The first provisional fast96 corpus had 12,869 windows, 1,198,182,936 input tokens and only 20,295,844 masked targets (1.69%); one family supplies 27.9% and the top ten 77.8% of targets. Do not submit its 1,609-step plan as an accepted lift experiment; source/tool parity and family balance remain open. Exact-image zero-GPU CPU preflight passed under Job UID `ed32ed5f-9f1e-4704-ba99-21a99b03c239`/Pod UID `d18e81d2-a13f-4663-8ecd-dd6ef6bb5f9f`. The separate one-step diagnostic `chris-q38-fast96-probe-v1-5dc31065` was admitted at 2026-09-25T17:47:37Z: RayJob UID `8f2b38fd-926d-490b-8ca8-d8ee3d86bf28`, Workload UID `888b9104-e22e-4c41-b888-75d02748b624`, RayCluster UID `36e36ac5-de4b-4a63-bfe2-022a421fafa2`, Pod UID `56f11e8f-86ff-475a-9a74-d298edeaaf56`, root alerts off. Its CPU gate Job UID `b2bd8e21-5577-4b90-853f-1c5f48157dc7`/Pod UID `8c97215b-bc89-4b27-9576-121e6c042661` passed. The GPU POST succeeded once; local command then reported failure because it tried to release a Lease with forbidden duration 0. Code now preserves duration 900, and the exact project Lease was released. Never retry the POST. This is a mechanics probe, not a scientific capability run.
 
+The probe completed one finite optimizer step and wrote a native checkpoint plus teacher DEV receipts for steps 0 and 1. DEV token-weighted CE was 0.3094313→0.3097003 and task-macro CE 0.2914641→0.2925198; one step is insufficient to infer a trend. It failed only after these artifacts, at the planned-pause finalizer: pinned `WorkerDispatch` has no `finalize_pending_saves`, while its FSDP save already synchronously waits via `ray.get`, barrier and CUDA sync. Exact Jobs API deletion and UID-bound Kubernetes readback confirmed all eight GPUs released. The successor overlay skips that nonexistent finalizer only for the reviewed dense FSDP layout; checkpoint receipts remain mandatory. The step-1 seal Job `q38-ck-cd72bc84-000001-seal` (UID `96c1a696-ffa0-4884-84b5-772ea4cd952b`) is CPU-only, c1/q1, root alerts off and queued; sealing/export/reload do not turn this diagnostic corpus into accepted scientific data.
+
 ## Why the old run cannot answer the question
 
 Old packing clipped **11,794/14,693** rows, often losing task/tool anchors; tools differed from OpenCode eval. Of 149 prefix-salvaged sessions, 148 lost the final report. Step-1000 mixed output-limit failures and leaked families: **not defensible lift evidence**. New data must retain private originals, match target anchors/tools, preserve complete early/middle/late rounds without duplicate targets or submit bias, freeze roles, and verify native masks. A controlled repack reduced optional prior context from 96k to 16k with the same 96k maximum and source: **2,407** windows, **156,971,822** input tokens and exactly the same **20,295,844** unique masked targets from 933 sessions/115 families as the 12,869-window source. The independent sorted target-set SHA-256 matched (`43553d9e1c5183e086538fb228451a800ea21c9b038de7d184c5d904fe3e5bdd`); target density rose from 1.69% to 12.93% (7.63× less input), with one Parquet row group per window. The repacked TRAIN receipt is `sha256:f0f143ca2c96bb46f1cd8d34e0881a3c08656eb038677a7d00d464a38f184fe6`. A disjoint 27-window teacher DEV was sealed with it as diagnostic manifest `sha256:a0b8896d03a22b5acc15a14380cb2e2fe52f820368c1ec728dba35380ed05b6d` and staged at `/mnt/sfs/jobs/chris-q38-fast96-dense-data-v3`; local/remote SHA-256s agree for TRAIN (`ce93adc897bf80ec567fefbdd581afff7e6976f53e83d272e5a2b8fc14d26c66`), DEV (`565da059a56f723f0230c96ad464226f1e8f83661013b5a04278cfe708423956`), and manifest (`e283af1cf2e06ed62c1a1390acc6647d08ceeaa9e37f65c277beba06cdb9e98c`). A zero-GPU staging Job first lacked root-owned SFS write permission and was deleted; exact replacement Job UID `8cb6b4cc-0207-4fc4-9893-0e4c799549c5` staged, verified, and was deleted. The corpus is still **diagnostic-only**: tool-result parity and family concentration remain unresolved. `target_dense.audit` correctly rejects the v2 private source because it lacks the later required served-request attestation; do not relabel that source as accepted.
@@ -13,38 +15,18 @@ Teacher cross-entropy on unseen successes diagnoses optimization, **not** exploi
 
 ## Source-to-OpenCode compatibility
 
-All **2,886** envelopes passed session/version/transcript digests. Provisional
-strict set: **943 TRAIN/116 families**, **27 teacher DEV/9**; 16 protected
-sessions quarantined. Hidden reasoning is excluded and OpenCode anchors/calls
-substituted. The current first-request Qwen wire is checked below, but
-historical tool-result parity is unproved. `use_tool` wrappers stay out:
-CLI/MCP blocks are unbound; none of 28,312 wrapped bash strings recovers a
-unique final status. A private aggregate-only recount found `use_tool` in 934
-source sessions, with 28,703 `OkayOutput` strings all below OpenCode's 50-KiB/
-2,000-line caps. Truncation is not the main wrapper obstacle; exact result-to-OpenCode equivalence remains unproved.
+All **2,886** envelopes passed session/version/transcript digests. Provisional strict set: **943 TRAIN/116 families**, **27 teacher DEV/9**; 16 protected sessions quarantined. Hidden reasoning is excluded and OpenCode anchors/calls substituted. The current first-request Qwen wire is checked below, but historical tool-result parity is unproved. `use_tool` wrappers stay out: CLI/MCP blocks are unbound; none of 28,312 wrapped bash strings recovers a unique final status. A private aggregate-only recount found `use_tool` in 934 source sessions, with 28,703 `OkayOutput` strings all below OpenCode's 50-KiB/2,000-line caps. Truncation is not the main wrapper obstacle; exact result-to-OpenCode equivalence remains unproved.
 One-text-block conversion adds 219 TRAIN/15 DEV: **1,162/42** sessions, **153/12** families, old token proxies **22,295,624/639,694**.
 Native masked counts, live wire and tool-result parity remain unproved. OpenCode 1.18.27 truncates above 50 KiB/2,000 lines; only 362 TRAIN/7 DEV sessions are size-safe—too little for accepted full SFT.
 
 ## Bounded live target-wire probe (2026-09-25)
 
-The Chris-owned exact-base route (model UID `54beeb64-c498-4e7d-a504-05a8d694808b`,
-Pod UID `6a7308b4-4e8b-4683-a21f-9c32147dfd0a`) served two frozen TRAIN task
-anchors through pinned OpenCode 1.18.27 and the fixed proxy. Both first requests
-matched the reviewed system/user and two-tool hashes; both returned complete
-HTTP-200 SSE streams with distinct response IDs. The synthetic local MCP did
-not execute task tools. The first probe entered a tool loop: 10 bounded live
-chat requests total, each capped at 128 output tokens. The route was paused
-and independently read back at zero Pods/replicas and routing disabled.
+The Chris-owned exact-base route (model UID `54beeb64-c498-4e7d-a504-05a8d694808b`, Pod UID `6a7308b4-4e8b-4683-a21f-9c32147dfd0a`) served two frozen TRAIN task anchors through pinned OpenCode 1.18.27 and the fixed proxy. Both first requests matched the reviewed system/user and two-tool hashes; both returned complete HTTP-200 SSE streams with distinct response IDs. The synthetic local MCP did not execute task tools. The first probe entered a tool loop: 10 bounded live chat requests total, each capped at 128 output tokens. The route was paused and independently read back at zero Pods/replicas and routing disabled.
 Private sealed diagnostic: `/private/tmp/cpt-q38-live-qwen-wire.YKisC9/LIVE_WIRE_DIAGNOSTIC.json`
 (file SHA-256 `c6d475ba5b54bb2a34b1f2f68ee4aa4e10964873de0208d7cc4ae326e81eeeed`).
 This proves first-request wire, **not** historical tool-result parity or corpus acceptance; `training_ready` stays false.
 
-An isolated OpenCode 1.18.27 mock confirmed that two one-block MCP text results
-reached its model request byte-for-byte. A separate current TRAIN task/version
-was then probed with one exact historical bash call: the stored teacher result
-was 2,451 characters, while the fresh MCP text was 2,444 characters and marked
-as a tool error. The fresh instance was independently confirmed stopped with
-its durable claim (sealed terminal
+An isolated OpenCode 1.18.27 mock confirmed that two one-block MCP text results reached its model request byte-for-byte. A separate current TRAIN task/version was then probed with one exact historical bash call: the stored teacher result was 2,451 characters, while the fresh MCP text was 2,444 characters and marked as a tool error. The fresh instance was independently confirmed stopped with its durable claim (sealed terminal
 `sha256:53d52f465cc5428da273428d7551d1131b7aa137cd4a4fe25459f75ad18b7294`).
 Different runtime output may explain the difference; it does **not** prove a
 renderer bug or equivalence. The historical corpus remains unaccepted. An

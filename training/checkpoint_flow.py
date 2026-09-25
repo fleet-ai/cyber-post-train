@@ -420,7 +420,7 @@ def validate_stage_preview(spec: dict, server_preview: dict) -> dict:
             or len(pod.get("containers", [])) != 1
             or pod["containers"][0].get("image") != wanted["containers"][0]["image"]
             or pod["containers"][0].get("command") != wanted["containers"][0]["command"]
-            or pod["containers"][0].get("env") != wanted["containers"][0]["env"]
+            or [{**item, "value": item.get("value", "")} for item in pod["containers"][0].get("env", [])] != wanted["containers"][0]["env"]
             or pod["containers"][0].get("resources") != wanted["containers"][0]["resources"]
             or pod["containers"][0].get("securityContext") != wanted["containers"][0]["securityContext"]
             or pod["containers"][0].get("envFrom")
