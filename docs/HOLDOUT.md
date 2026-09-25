@@ -1,9 +1,9 @@
 # Blackbox data and holdout qualification
 
-`python3 -m training.qualify` is a **read-only metadata report**, not a job
-launcher or a replacement for checking signed source receipts. It prints task
-keys, exact version IDs, counts, and hashed lineage components; it never prints
-prompts, traces, scores, answers, or flags. Supply only sanitized JSON.
+`training.qualify.components` groups reviewed task versions by shared atoms.
+The frozen current candidate order is replayed by
+`python3 -m training.qualification_order <file>`; runtime qualification is a
+separate live test. Neither metadata step certifies a runnable task.
 
 There are three separate questions:
 
@@ -25,22 +25,12 @@ There are three separate questions:
    The tool does not admit unknown atom lineage and reports teacher-exposed heldout
    tasks instead of counting them as clean.
 
-The CLI accepts a metadata-only current catalog at `--catalog` (`-` means
-standard input), one or more reviewed `--lineage` files, an optional frozen
-`--split`, `--teacher-lineage`, sanitized per-session `--sessions`, and exact
-version model-free `--runtime` receipts. `--rosters` adds exact key/version
-lists for follow-up; without it the output is compact. Session projections
-need opaque SHA-256 session/receipt/trace digests and the five historical
-success booleans named in `training/qualify.py`; SFT admission additionally
-needs `trace_intact`, `retained_successful_report`, and
-`tool_contract_proven`. Runtime projections need an exact receipt digest and
-all five runtime booleans. **The producer must independently authenticate and
-rehash those upstream receipts.** This tool checks identity, field completeness,
-and lineage; it cannot certify a forged JSON assertion. It always emits
-`launch_authorized: false`. `--teacher-lineage` means the lineage of a corpus
-**already used to train a checkpoint** when auditing that checkpoint's live
-holdout; do not pass an unsplit pool as if every candidate had been trained on.
-Frozen roles are `train`, `teacher_validation`, `dev`, and `final_test`.
+The retired all-in-one metadata report was not an admission authority. The
+current tools keep the decisions separate: source receipts prove historical
+success, family roles prevent train/test leakage, and exact-version runtime
+receipts prove what worked at a particular time. All input summaries must be
+independently authenticated; a JSON assertion alone is not proof. Frozen roles
+are `train`, `teacher_validation`, `dev`, and `final_test`.
 
 For the September 24 frozen census, the report finds 1,217 blackbox versions. Seventy-
 five have prior exact-version execution receipts; another 33 have reviewed

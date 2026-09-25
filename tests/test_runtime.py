@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from training.corpus import sha256
+from training.runtime import sha256
 from training.runtime import FORMAT, TOKENIZER_FILES, _ids, load_pinned_tokenizer, materialize_parquet
 
 

@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from training import source
-from training.corpus import sha256 as corpus_sha256
+from training.runtime import sha256 as corpus_sha256
 
 
 def seal(value):

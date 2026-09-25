@@ -17,8 +17,6 @@ from functools import cache
 from pathlib import Path
 from typing import Callable
 
-from .corpus import sha256
-
 FORMAT = "chat_messages_last_assistant_v2"
 MODEL = ("Qwen/Qwen3.8-27B", "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0")
 TOKENIZER_SHA = "sha256:3938a9a8172f2738fed1be44efc11e2562059269d50d3721213f44802b53b4e1"
@@ -34,6 +32,11 @@ SKYRL_FILES = {
     "sft_trainer.py": "a5ef8a2e22de785b6760abffdd9353f1246a5898983b4d27b4aadd8089a3579a",
     "generators/utils.py": "55c15b660067749febda00d4fb1c2110ff436717bbd4b73bf66055a73d0b87d5",
 }
+
+
+def sha256(value: object) -> str:
+    body = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    return "sha256:" + hashlib.sha256(body).hexdigest()
 
 
 def _file_sha(path: Path) -> str:
@@ -119,15 +122,6 @@ def pinned_tokenize(row: dict, tokenizer) -> tuple[list[int], int]:
             or native["loss_mask"] != [1] * native["num_actions"]):
         raise ValueError("native assistant mask differs from full tool-aware render")
     return full, native["num_actions"]
-
-
-def pinned_count_tokens(messages: list[dict], tools: list[dict], target_index: int,
-                        tokenizer) -> tuple[int, int]:
-    """Supply this callback to ``corpus.build_corpus`` with the exact tokenizer."""
-    if target_index != len(messages) - 1:
-        raise ValueError("only last-assistant targets are supported")
-    ids, actions = pinned_tokenize({"messages": messages, "tools": tools}, tokenizer)
-    return len(ids), actions
 
 
 def _source_partition(source: Path, split: str, receipt: dict) -> list[dict]:
