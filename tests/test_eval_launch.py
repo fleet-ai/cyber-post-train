@@ -149,6 +149,12 @@ def gates(plan, live, cluster):
     }
 
 
+def launch_gates(plan, live, cluster):
+    return {**gates(plan, live, cluster),
+            "capacity_reserve": lambda identity, arm: "synthetic-shared-lease",
+            "capacity_release": lambda lease: None}
+
+
 class LaunchTests(unittest.TestCase):
     def test_preview_is_read_only_and_binds_both_arms(self):
         plan, live = fixture()
@@ -222,7 +228,7 @@ class LaunchTests(unittest.TestCase):
         plan, live = fixture()
         cluster = FakeCluster()
         with tempfile.TemporaryDirectory() as directory:
-            result = launch_once(plan, "base", **gates(plan, live, cluster),
+            result = launch_once(plan, "base", **launch_gates(plan, live, cluster),
                                  journal_dir=Path(directory))
             self.assertEqual(result["job_uid"], "synthetic-uid")
             self.assertEqual(len(cluster.creates), 1)
@@ -230,9 +236,20 @@ class LaunchTests(unittest.TestCase):
             self.assertEqual([json.loads(x)["state"] for x in journal.read_text().splitlines()],
                              ["CREATE_INTENT_DO_NOT_RETRY", "CREATED"])
             with self.assertRaisesRegex(LaunchError, "create intent already exists"):
-                launch_once(plan, "base", **gates(plan, live, cluster),
+                launch_once(plan, "base", **launch_gates(plan, live, cluster),
                             journal_dir=Path(directory))
             self.assertEqual(len(cluster.creates), 1)
+
+    def test_atomic_capacity_reservation_is_required_before_create(self):
+        plan, live = fixture()
+        cluster = FakeCluster()
+        with tempfile.TemporaryDirectory() as directory:
+            checks = launch_gates(plan, live, cluster)
+            checks["capacity_reserve"] = lambda identity, arm: ""
+            with self.assertRaisesRegex(LaunchError, "reservation was not acquired"):
+                launch_once(plan, "base", **checks, journal_dir=Path(directory))
+            self.assertEqual(cluster.creates, [])
+            self.assertEqual(list(Path(directory).iterdir()), [])
 
 
 if __name__ == "__main__":

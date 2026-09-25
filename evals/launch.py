@@ -327,7 +327,9 @@ def launch_once(plan: dict, arm: str, *, cluster: Cluster,
                 readiness_check: Callable[[dict, dict], dict[str, str]],
                 qualification_check: Callable[[dict, dict], dict[str, str]],
                 output_exists: Callable[[str], bool],
-                capacity_check: Callable[[], bool], journal_dir: Path) -> dict:
+                capacity_check: Callable[[], bool],
+                capacity_reserve: Callable[[str, str], str],
+                capacity_release: Callable[[str], None], journal_dir: Path) -> dict:
     """Create exactly one arm after duplicate/digest checks; uncertain = stop."""
     identity = validate_plan(plan)
     journal = journal_dir / f"{identity[7:]}-{arm}.jsonl"
@@ -343,18 +345,33 @@ def launch_once(plan: dict, arm: str, *, cluster: Cluster,
                      capacity_check=capacity_check)
     if first != second:
         raise LaunchError("pre-create previews changed")
+    # This provider must atomically count live jobs plus *all* outstanding
+    # project reservations. A read-only capacity snapshot cannot prevent races.
+    lease = capacity_reserve(identity, arm)
+    if not isinstance(lease, str) or not lease:
+        raise LaunchError("shared capacity reservation was not acquired")
     if not journal_dir.is_dir() or journal_dir.is_symlink():
+        capacity_release(lease)
         raise LaunchError("durable journal directory is unavailable")
     try:
         fd = os.open(journal, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     except FileExistsError as exc:
+        capacity_release(lease)
         raise LaunchError("concurrent create intent already exists") from exc
-    with os.fdopen(fd, "w") as stream:
-        json.dump({"state": "CREATE_INTENT_DO_NOT_RETRY", "plan_sha256": digest(plan),
-                   "arm": arm, "server_preview_sha256": first}, stream, sort_keys=True)
-        stream.write("\n")
-        stream.flush()
-        os.fsync(stream.fileno())
+    except OSError as exc:
+        capacity_release(lease)
+        raise LaunchError("could not create durable create intent") from exc
+    try:
+        with os.fdopen(fd, "w") as stream:
+            json.dump({"state": "CREATE_INTENT_DO_NOT_RETRY", "plan_sha256": digest(plan),
+                       "arm": arm, "server_preview_sha256": first,
+                       "capacity_lease_sha256": digest(lease)}, stream, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+    except OSError as exc:
+        capacity_release(lease)
+        raise LaunchError("create intent could not be durably written") from exc
     try:
         dir_fd = os.open(journal_dir, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
         try:
@@ -362,6 +379,7 @@ def launch_once(plan: dict, arm: str, *, cluster: Cluster,
         finally:
             os.close(dir_fd)
     except OSError as exc:
+        capacity_release(lease)
         raise LaunchError("create intent could not be durably synchronized") from exc
     try:
         created = cluster.create_once(plan["jobs"][arm])
