@@ -114,7 +114,7 @@ class LazyOverlayTest(unittest.TestCase):
         data = DenseRowGroups(self.write(rows), _spec(rows), 8)
         with self.assertRaises(ValueError):
             verify_complete_sessions(data, self.dense_rows, 100)
-        oversized = [{**_rows()[0], "window_id": f"synthetic-{i}"} for i in range(129)]
+        oversized = [{**_rows()[0], "window_id": f"synthetic-{i}"} for i in range(513)]
         spec = {**_spec(oversized), "source_sessions": 1, "task_keys": ["task-0"]}
         with self.assertRaisesRegex(ValueError, "memory envelope"):
             verify_complete_sessions(DenseRowGroups(self.write(oversized), spec, 8), self.dense_rows, 100)

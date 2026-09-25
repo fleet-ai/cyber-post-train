@@ -170,7 +170,7 @@ def verify_complete_sessions(dataset: DenseRowGroups, dense_rows, vocab_size: in
             group.clear()
         if source in seen_sources or row["window_id"] in seen_windows:
             raise ValueError("dense source or window is repeated non-contiguously")
-        if len(group) >= 128 or sum(r["token_count"] for r in group) + row["token_count"] > 12_582_912:
+        if len(group) >= 512 or sum(r["token_count"] for r in group) + row["token_count"] > 40_000_000:
             raise ValueError("source session exceeds bounded CPU preflight memory envelope")
         seen_windows.add(row["window_id"])
         group.append(row)

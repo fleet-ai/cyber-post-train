@@ -71,7 +71,7 @@ creation after the server materialized an instance. Its exact durable claim
 enabled cleanup, and independent readback confirmed that instance `stopped`.
 No further retry of that probe is planned without a changed diagnostic.
 
-A read-only check of one exact strict TRAIN session found 53 stored tool-result
+A September 25 read-only scan of all 144 strict TRAIN task keys found 6,648 historical sessions (4,143 successful); only seven began after September 20, and the four successes were Qwen on one key, not new teacher data. An exact strict TRAIN session had 53 stored tool-result
 strings but neither raw MCP response blocks nor a separately captured next
 model-facing tool message. Its harness metadata lacks a renderer binary/image
 digest, and its instance lacks environment-version/image pins; exact session
