@@ -4,7 +4,7 @@ from copy import deepcopy
 import json
 import unittest
 
-from training.long_context import SPEC, preflight, validate_example, validate_historical_hooks, validate_length_audit, validate_rendered_job, validate_spec
+from training.long_context import SPEC, preflight, validate_cpu_preflight, validate_example, validate_historical_hooks, validate_length_audit, validate_real_row_witness, validate_rendered_job, validate_spec
 
 
 class LongContextTests(unittest.TestCase):
@@ -16,6 +16,9 @@ class LongContextTests(unittest.TestCase):
         validate_spec(self.spec)
         validate_historical_hooks(self.spec)
         validate_length_audit(self.spec)
+        self.assertEqual(validate_cpu_preflight(self.spec)["status"], "Succeeded")
+        row = validate_real_row_witness(self.spec)
+        self.assertEqual((row["sequence_tokens"], row["supervised_tokens"]), (262144, 153984))
         self.assertEqual(self.spec["status"], "unqualified_hypothesis")
 
     def test_scientific_and_submission_drift_fails(self):
@@ -62,8 +65,12 @@ class LongContextTests(unittest.TestCase):
         group = {"template": {"spec": {"priorityClassName": "c1", "containers": [{"image": image, "resources": {"requests": {"nvidia.com/gpu": 8}, "limits": {"nvidia.com/gpu": 8}}}]}}}
         job = {"kind": "RayJob", "metadata": {"annotations": {"fleet.ai/failure-alerts": "off"}, "labels": {"kueue.x-k8s.io/priority-class": "q1"}}, "spec": {"shutdownAfterJobFinishes": True, "ttlSecondsAfterFinished": 0, "rayClusterSpec": {"headGroupSpec": group, "workerGroupSpecs": [{**group, "replicas": 3}]}}}
         validate_rendered_job(self.spec, job)
-        example = {"schema": "qwen38_262k_real_row_summary_v1", "source_kind": "real_training_row", "dataset_sha256": self.spec["data"]["sha256"], "row_sha256": "a" * 64, "sequence_tokens": 262144, "nonpadding_tokens": 250000, "supervised_tokens": 1000}
-        self.assertEqual(preflight(self.spec, example, job)["gpu_qualified"], False)
+        omitted_ttl = deepcopy(job)
+        del omitted_ttl["spec"]["ttlSecondsAfterFinished"]
+        validate_rendered_job(self.spec, omitted_ttl)
+        example = validate_real_row_witness(self.spec)
+        result = preflight(self.spec, example, job)
+        self.assertEqual((result["real_row_verified"], result["native_cpu_preflight"], result["gpu_qualified"]), (True, "passed", False))
         for section, key, bad in (("metadata", "annotations", {}), ("metadata", "labels", {}), ("spec", "ttlSecondsAfterFinished", 30)):
             with self.subTest(section=section, key=key):
                 wrong = deepcopy(job)

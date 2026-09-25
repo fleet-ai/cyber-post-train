@@ -40,6 +40,14 @@
     "path": "docs/evidence/qwen38-262k-capacity-lengths-20260925.json",
     "file_sha256": "81ea8ddc237cf3ea66ae614e09bacde5f7aabe831ca76b5286a96711c1d2b42e"
   },
+  "real_row_witness": {
+    "path": "docs/evidence/qwen38-262k-real-row-20260925.json",
+    "file_sha256": "d1ce78b634358dbbcaea9e07ee729090c9c5e1cfcc947460252320bb0efd1fa6"
+  },
+  "cpu_preflight": {
+    "path": "docs/evidence/qwen38-262k-four-node-cpu-preflight-v4-passed.json",
+    "file_sha256": "39c827afa6db9733e175c6ebb3b5c75478e661d5266a265fa6402f40132b5cf0"
+  },
   "recipe": {
     "full_weight": true,
     "nodes": 4,

@@ -1,0 +1,24 @@
+{
+  "schema": "qwen38_262k_four_node_successor_v1",
+  "base_spec": "configs/runs/qwen38-262k-four-node-canary.json",
+  "base_spec_sha256": "c1f2e4006756f77b11dbc71b079146fcb19f67e5f96405fc876517471e6012b1",
+  "name": "chris-q38-t3k262-4n-can-v2",
+  "output_root": "/mnt/sfs/jobs/chris-q38-t3k262-4n-can-v2",
+  "delta": "create-once identity and root-approved gate only; no trainer, model, data, or recipe change",
+  "accepted": false,
+  "submission_authorized": true,
+  "root_review": {
+    "scope": "one create-once v2 four-node capacity canary; one finite step, checkpoint, and reload; not scientific training",
+    "v1_cpu_receipt_sha256": "39c827afa6db9733e175c6ebb3b5c75478e661d5266a265fa6402f40132b5cf0",
+    "v2_false_gate_preview_sha256": "19b4bd9265751fa96992daff8004ac6348de9a948e5f7403f597d28b11752963"
+  },
+  "cpu_preflight": {
+    "path": "docs/evidence/qwen38-262k-four-node-cpu-preflight-v5-passed.json",
+    "file_sha256": "699dd2362f181f615cd4bbda8e969a97cc24d65286908dcd5935651340903235"
+  },
+  "remaining_gates": [
+    "fresh Jobs API preview, duplicate census, output absence, and capacity check",
+    "root final review of gate-true request before one GPU POST",
+    "finite step, saved checkpoint, and separate zero-optimizer reload proof"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "schema": "qwen38_262k_real_row_summary_v1",
+  "observed_at_utc": "2026-09-25T07:38:58Z",
+  "read_only_observer_pod_uid": "eacead90-fb9f-4227-93c4-7cd176a0587a",
+  "source_kind": "real_training_row",
+  "dataset_sha256": "2359c54e5c5cd756761a0f6e8c250ec8b32b87c8f84f0888252ddac932cfc5ec",
+  "row_index": 0,
+  "row_sha256": "9066682b07161743c211a1ede10c26f8627871cdda5515ce65142236ec960c4f",
+  "row_hash_fields": ["input_ids", "loss_mask", "token_count", "target_token_count"],
+  "row_hash_encoding": "UTF-8 JSON, sorted keys, compact separators",
+  "sequence_tokens": 262144,
+  "nonpadding_tokens": 262144,
+  "supervised_tokens": 153984,
+  "limits": "A real source row exists. This does not prove it is sampled in the first batch, four-node GPU fit, an optimizer update, or reload. No token IDs or text are recorded."
+}

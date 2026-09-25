@@ -69,7 +69,7 @@ def _sha256(value: bytes) -> str:
 
 def validate_spec(spec: dict) -> None:
     """Check immutable intent, not execution or capacity."""
-    _require(set(spec) == {"schema", "status", "accepted", "submission_authorized", "name", "output_root", "parent", "model", "data", "length_audit", "recipe", "cluster", "example_gate"}, "unexpected canary spec fields")
+    _require(set(spec) == {"schema", "status", "accepted", "submission_authorized", "name", "output_root", "parent", "model", "data", "length_audit", "real_row_witness", "cpu_preflight", "recipe", "cluster", "example_gate"}, "unexpected canary spec fields")
     _require(spec["schema"] == "qwen38_262k_four_node_capacity_canary_v1", "wrong canary schema")
     _require(spec["status"] == "unqualified_hypothesis" and spec["accepted"] is False and spec["submission_authorized"] is False, "unproven acceptance or submission claim")
     _require(spec["name"] == "chris-q38-t3k262-4n-can-v1" and spec["output_root"] == "/mnt/sfs/jobs/chris-q38-t3k262-4n-can-v1", "wrong create-once identity")
@@ -82,6 +82,8 @@ def validate_spec(spec: dict) -> None:
     _require(spec["model"] == {"repo": "Qwen/Qwen3.8-27B", "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0", "weight_manifest_sha256": "06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"}, "wrong model")
     _require(spec["data"] == {"path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher3k-262k-v1/capacity-v5/train.parquet", "sha256": "2359c54e5c5cd756761a0f6e8c250ec8b32b87c8f84f0888252ddac932cfc5ec", "rows": 112, "purpose": "capacity_only_not_scientific_training"}, "wrong capacity corpus")
     _require(spec["length_audit"] == {"path": "docs/evidence/qwen38-262k-capacity-lengths-20260925.json", "file_sha256": "81ea8ddc237cf3ea66ae614e09bacde5f7aabe831ca76b5286a96711c1d2b42e"}, "wrong length audit")
+    _require(spec["real_row_witness"] == {"path": "docs/evidence/qwen38-262k-real-row-20260925.json", "file_sha256": "d1ce78b634358dbbcaea9e07ee729090c9c5e1cfcc947460252320bb0efd1fa6"}, "wrong real-row witness")
+    _require(spec["cpu_preflight"] == {"path": "docs/evidence/qwen38-262k-four-node-cpu-preflight-v4-passed.json", "file_sha256": "39c827afa6db9733e175c6ebb3b5c75478e661d5266a265fa6402f40132b5cf0"}, "wrong CPU preflight binding")
     _require(spec["recipe"] == RECIPE and RECIPE["world_size"] == RECIPE["nodes"] * RECIPE["gpus_per_node"] and RECIPE["batch_size"] == RECIPE["world_size"] * RECIPE["microbatch_per_gpu"] * RECIPE["gradient_accumulation"], "wrong four-node recipe")
     cluster = spec["cluster"]
     _require(cluster == {"image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4", "priority_class": "c1", "queue_priority": "q1", "root_annotation": {"fleet.ai/failure-alerts": "off"}, "shutdown_after_finish": True, "ttl_seconds_after_finish": 0}, "wrong cluster binding")
@@ -140,13 +142,36 @@ def validate_length_audit(spec: dict) -> None:
     )
 
 
+def validate_real_row_witness(spec: dict) -> dict:
+    """Bind a specific, hash-only row observation from the exact capacity file."""
+    path = ROOT / spec["real_row_witness"]["path"]
+    blob = path.read_bytes()
+    _require(_sha256(blob) == spec["real_row_witness"]["file_sha256"], "real-row witness digest mismatch")
+    row = json.loads(blob)
+    validate_example(spec, row)
+    _require(row.get("row_index") == 0 and row.get("row_sha256") == "9066682b07161743c211a1ede10c26f8627871cdda5515ce65142236ec960c4f", "wrong real-row identity")
+    return row
+
+
+def validate_cpu_preflight(spec: dict) -> dict:
+    """Check the hash-bound zero-GPU native receipt; never infer GPU fit."""
+    blob = (ROOT / spec["cpu_preflight"]["path"]).read_bytes()
+    _require(_sha256(blob) == spec["cpu_preflight"]["file_sha256"], "CPU receipt digest mismatch")
+    receipt = json.loads(blob)
+    _require(receipt.get("status") == "Succeeded" and receipt.get("gpu_request") == 0 and receipt.get("pod_restarts") == 0, "CPU preflight did not pass cleanly")
+    _require(receipt.get("candidate_plan_sha256") == "3f96ba9d9233a969e47110f70ccf52c0e72d7c2f01d1ab5ce09678d982507a7e" and receipt.get("candidate_request_sha256") == "1679d4699b36bbd6e687ae9e84f6c0d6288620583bdb7a857ec873b87b908470", "CPU preflight is not bound to the exact candidate")
+    _require(receipt.get("train_rows") == 112 and receipt.get("train_tasks") == 27 and receipt.get("supervised_tokens") == 3022959, "CPU data inventory drift")
+    return receipt
+
+
 def validate_rendered_job(spec: dict, job: dict) -> None:
     """Inspect a server-rendered root RayJob, not a request flag or Pod label."""
     _require(job.get("kind") == "RayJob", "preview is not a RayJob")
     _require(job.get("metadata", {}).get("annotations", {}).get("fleet.ai/failure-alerts") == "off", "root failed-job alert opt-out missing")
     _require(job.get("metadata", {}).get("labels", {}).get("kueue.x-k8s.io/priority-class") == "q1", "wrong queue priority")
     ray = job.get("spec", {})
-    _require(ray.get("shutdownAfterJobFinishes") is True and ray.get("ttlSecondsAfterFinished") == 0, "job will not release promptly")
+    # KubeRay defaults an omitted TTL to zero. The live Jobs API omits it.
+    _require(ray.get("shutdownAfterJobFinishes") is True and ray.get("ttlSecondsAfterFinished", 0) == 0, "job will not release promptly")
     groups = ray.get("rayClusterSpec", {})
     head, workers = groups.get("headGroupSpec", {}), groups.get("workerGroupSpecs", [])
     _require(isinstance(workers, list) and len(workers) == 1 and workers[0].get("replicas") == 3, "preview is not four nodes")
@@ -166,8 +191,10 @@ def preflight(spec: dict, example: dict, rendered_job: dict) -> dict:
     validate_historical_hooks(spec)
     validate_length_audit(spec)
     validate_example(spec, example)
+    _require(example == validate_real_row_witness(spec), "example is not the recorded real-row witness")
+    validate_cpu_preflight(spec)
     validate_rendered_job(spec, rendered_job)
-    return {"metadata_checks": "passed", "aggregate_lengths_verified": True, "real_row_verified": False, "gpu_qualified": False, "checkpoint_reload_proven": False, "submission_authorized": False}
+    return {"metadata_checks": "passed", "aggregate_lengths_verified": True, "real_row_verified": True, "native_cpu_preflight": "passed", "gpu_qualified": False, "checkpoint_reload_proven": False, "submission_authorized": False}
 
 
 def main() -> None:

@@ -1,0 +1,31 @@
+{
+  "schema": "qwen38_262k_cpu_preflight_attempt_v1",
+  "job": "fleet-train-jobs/chris-q38-262k4n-cpu-pre-v5",
+  "job_uid": "83a256c6-66c7-4939-b413-f454dd8aa44c",
+  "pod_uid": "f595c932-5d55-4360-a04f-57ff1868d0c9",
+  "image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "root_failure_alert_annotation": "off",
+  "priority": "c1/q1",
+  "gpu_request": 0,
+  "pod_restarts": 0,
+  "status": "Succeeded",
+  "exit_code": 0,
+  "job_and_pod_released": true,
+  "candidate_plan_sha256": "c1aa4371a94efab1fee41bff436615db527afa779fd978abaa07d2527df6efec",
+  "candidate_request_sha256": "3cb50179559f6b819da1b477f6fcf0eff9a8a53a6d9b9540cf65805f1d9667c3",
+  "preflight_log_sha256": "67314aef8fcf06ed6cf588a3379c7386db7f65ba480dded6b2d006c5d56934ce",
+  "checked": [
+    "native_sources",
+    "model_files",
+    "dataset_files",
+    "native_config",
+    "native_forward_backward_signature",
+    "native_train_only_loader",
+    "tokenization",
+    "target_accounting"
+  ],
+  "train_rows": 112,
+  "train_tasks": 27,
+  "supervised_tokens": 3022959,
+  "limits": "CPU-only source, data and native-contract checks. Does not prove 4-node GPU fit, optimizer update, checkpoint reload, or scientific acceptance. No four-node GPU job submitted."
+}

@@ -1,0 +1,17 @@
+{
+  "schema": "qwen38_262k_cpu_preflight_attempt_v1",
+  "job": "fleet-train-jobs/chris-q38-262k4n-cpu-pre-v2",
+  "job_uid": "81319f34-1e73-42a5-85fc-a410fc33609a",
+  "pod_uid": "52ad7eea-3f3a-49c0-a70f-cbb9d9d84fb6",
+  "image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "root_failure_alert_annotation": "off",
+  "priority": "c1/q1",
+  "gpu_request": 0,
+  "pod_restarts": 0,
+  "status": "Failed",
+  "exit_code": 1,
+  "sanitized_error_class": "ValueError",
+  "preflight_log_sha256": "a01c231a527e85b23bebdabfa4543686b52d6f14517b880c8044d5ca766f63ea",
+  "resource_release": "Exact failed Job deleted; exact Job and Pod confirmed absent",
+  "limits": "Error class alone does not identify the cause. No raw logs, training content, or traceback text are preserved here. No four-node GPU job was submitted."
+}
