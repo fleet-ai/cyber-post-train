@@ -25,7 +25,8 @@ not a defensible estimate of model lift.
 
 The successor must re-read structured source sessions, verify exact-version
 success and transcript integrity, bind the model-facing OpenCode tool contract,
-and build whole-message windows with the original task/tool anchor. Cover
+and build whole-message windows with an explicitly labeled OpenCode target
+anchor while retaining the original anchor privately for audit. Cover
 early, middle, and late useful actions, but never duplicate target tokens or
 train mostly on final submission. Keep all accepted sources in the provenance
 ledger and temper sampling from dominant task components or teachers. Freeze
@@ -102,6 +103,36 @@ OpenCode 1.18.27 probe confirmed the target user and system anchors differ
 from the source transcript, even though the Fleet task prompt itself matches
 the source user text by hash. The tool definitions match the target names, but
 an anchor transform remains unqualified until independently reproduced.
+
+### Full source compatibility census
+
+All 2,886 selected transcript envelopes were fetched into a private 0700
+cache and checked against their exact historical session/version and transcript
+digests. The source importer keeps originals separate, strips hidden assistant
+reasoning, substitutes the two-version-probed OpenCode instruction anchor,
+and rewrites only proven tool calls. This is a **new target-anchor method**, not
+the old original-anchor packer. The local probe does not yet attest the live
+Fleet tool server or the final request received by the served Qwen model.
+
+After the reviewed family split, 2,671 source sessions are assigned to train,
+199 to teacher-validation, and 16 to protected test (excluded). The current
+strict compatibility check provisionally retains **943 train sessions across
+116 families** and **27 teacher-validation sessions across 9 families**. Its
+train exclusions are 170 without one bound successful report, 867 with
+unproven `use_tool` result wrappers, 652 with non-text tool results, and 39
+with other tool/argument mismatches. Teacher-validation exclusions are
+respectively 10, 65, 96, and 1. The narrow exact-discovery elision adds no
+sessions once wrapper-dependent examples are correctly quarantined.
+
+The 943 retained train sessions account for **20,675,618 historical source
+supervised-token estimates**; the 27 validation sessions account for 480,294.
+These are **not** Qwen's actual visible, masked target-token counts and may
+overstate usable learning signal after the visible-only transform. The
+required 20-million-token train threshold is therefore **not established**.
+No corrected full training run should be launched until the native tokenizer
+counts the sealed train/validation files and live target-tool/result equivalence
+is proved. Fresh successful teacher traces using the exact target OpenCode
+tools are the cleanest expansion path if this strict subset falls short.
 
 ## Parallel execution lanes
 

@@ -42,7 +42,7 @@ class SourceTests(unittest.TestCase):
                         "status": "completed", "verifier_execution": self.verifier}
         self.selection = {"session_id": "session-a", "task_key": "task-a",
                           "task_version_id": "version-a", "model_id": "teacher",
-                          "group_id": "sha256:" + "1" * 64,
+                          "group_id": "task-key:synthetic",
                           "trace_sha256": source.digest(self.envelope),
                           "acceptance_sha256": "sha256:" + "2" * 64,
                           "harness_mode": "tool-use", "harness_sha256": source.digest(self.harness)}
@@ -227,6 +227,15 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(second["new_sessions"], 0)
         self.assertEqual(self.get_calls, ["/v1/account"])
         self.assertEqual(second["receipt_sha256"], first["receipt_sha256"])
+        attested = source.verify_hydration_cache(
+            self.root / "private-hydration", Path(selection["path"]),
+            source.file_digest(self.root / "private-hydration" / "HYDRATED.json"))
+        self.assertEqual(attested["selected_sessions"], 1)
+        self.assertEqual(attested["selection_sha256"], selection["sha256"])
+        session_file.chmod(0o644)
+        with self.assertRaises(source.SourceError):
+            source.verify_hydration_cache(self.root / "private-hydration", Path(selection["path"]),
+                                          source.file_digest(self.root / "private-hydration" / "HYDRATED.json"))
 
     def test_hydration_rejects_changed_success_without_receipt(self):
         selection = self._file("hydration-selection.jsonl", [self.selection], jsonl=True)
@@ -250,6 +259,20 @@ class SourceTests(unittest.TestCase):
 
     def test_non_text_tool_result_is_not_laundered_into_target(self):
         self.messages[3]["content"] = {"stdout": "ok"}
+        self.selection["trace_sha256"] = source.digest(self.envelope)
+        with (patch.object(source, "TOOL_DIGEST", source.digest(self.tools, ascii=True)),
+              patch.object(source, "TARGET_SYSTEM_DIGEST", source.text_digest("Target system.")),
+              patch.object(source, "MIN_ANCHOR_PROBES", 1)):
+            receipt = source.fetch(self.request(), get=self.get)
+        self.assertEqual(receipt["retained_sessions"], 0)
+        self.assertEqual(receipt["excluded_sessions"],
+                         {"tool_argument_or_result_contract_mismatch": 1})
+
+    def test_source_use_tool_wrapper_is_not_assumed_opencode_text(self):
+        self.messages[2]["tool_calls"][0]["function"] = {
+            "name": "use_tool", "arguments": {"tool_name": "fleet_environment__bash",
+                                             "tool_input": {"script": "true"}}}
+        self.messages[3]["content"] = json.dumps({"OkayOutput": "ok"})
         self.selection["trace_sha256"] = source.digest(self.envelope)
         with (patch.object(source, "TOOL_DIGEST", source.digest(self.tools, ascii=True)),
               patch.object(source, "TARGET_SYSTEM_DIGEST", source.text_digest("Target system.")),

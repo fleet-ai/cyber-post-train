@@ -223,9 +223,8 @@ def _tool_operations(messages: list[dict], end: int) -> tuple[list[dict], list[d
                 except ValueError:
                     return None
             if name == "use_tool":
-                if not isinstance(args, dict) or set(args) != {"tool_name", "tool_input"}:
-                    return None
-                name, args = args["tool_name"], args["tool_input"]
+                # Its result is a source-harness wrapper, not OpenCode MCP text.
+                return None
             elif name == "shell":
                 if not isinstance(args, dict) or set(args) != {"command"}:
                     return None
@@ -544,6 +543,51 @@ def hydrate(request: dict, *, get: Callable[[str], dict] = _request,
     return result
 
 
+def verify_hydration_cache(root: Path, selection_path: Path,
+                           expected_receipt_file_sha: str) -> dict:
+    """Read-only exact cache attestation, including every private envelope."""
+    root, selection_path = Path(root), Path(selection_path)
+    receipt_path, request_path, sessions = (root / name for name in
+                                            ("HYDRATED.json", "HYDRATE_REQUEST.json", "sessions"))
+    if (not _sha(expected_receipt_file_sha) or not root.is_absolute()
+            or root.is_symlink() or not root.is_dir() or root.stat().st_mode & 0o077
+            or sessions.is_symlink() or not sessions.is_dir() or sessions.stat().st_mode & 0o077
+            or any(path.is_symlink() or not path.is_file() or path.stat().st_mode & 0o077
+                   for path in (receipt_path, request_path))
+            or file_digest(receipt_path) != expected_receipt_file_sha):
+        raise SourceError("private hydration cache is absent, changed, or unsafe")
+    try:
+        receipt, request = json.loads(receipt_path.read_text()), json.loads(request_path.read_text())
+    except (OSError, ValueError):
+        raise SourceError("private hydration cache has invalid JSON") from None
+    _sealed(receipt, "fleet_teacher_hydration_receipt_v1")
+    _sealed(request, "fleet_teacher_source_hydration_v1")
+    if (receipt.get("request_sha256") != request["sha256"]
+            or receipt.get("selection_sha256") != request.get("selection", {}).get("sha256")):
+        raise SourceError("private hydration request and receipt disagree")
+    rows = _source_rows({"path": str(selection_path), "sha256": receipt["selection_sha256"]})
+    names = {hashlib.sha256(row["session_id"].encode()).hexdigest() + ".json" for row in rows}
+    files = list(sessions.iterdir())
+    if (receipt.get("session_count") != len(rows) or {path.name for path in files} != names
+            or any(path.is_symlink() or not path.is_file() or path.stat().st_mode & 0o077
+                   for path in files)
+            or digest({path.name: file_digest(path) for path in files}) != receipt.get("sessions_sha256")):
+        raise SourceError("private hydration session set is incomplete or changed")
+    for row in rows:
+        path = sessions / (hashlib.sha256(row["session_id"].encode()).hexdigest() + ".json")
+        try:
+            saved = json.loads(path.read_text())
+        except (OSError, ValueError):
+            raise SourceError("private hydrated session has invalid JSON") from None
+        if (not isinstance(saved, dict) or saved.get("schema") != "fleet_teacher_hydrated_session_v1"
+                or saved.get("selection") != row):
+            raise SourceError("private hydrated session identity differs")
+        _validate_raw(row, saved.get("transcript_envelope"))
+    return {"selected_sessions": len(rows), "selection_sha256": receipt["selection_sha256"],
+            "hydration_receipt_file_sha256": expected_receipt_file_sha,
+            "sessions_sha256": receipt["sessions_sha256"]}
+
+
 def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
     """Download only digest-bound, verified successes; receipt contains no content."""
     _sealed(request, "fleet_teacher_source_fetch_v1")
@@ -557,15 +601,11 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
     _sealed(hydration, "fleet_teacher_hydration_receipt_v1")
     hydrated_root = Path(request["hydration"]["path"]).parent
     hydrated_files = hydrated_root / "sessions"
-    if (hydration.get("selection_sha256") != request["selection"]["sha256"]
-            or hydration.get("session_count") != len(selection)
-            or hydrated_root.is_symlink() or hydrated_root.stat().st_mode & 0o077
-            or hydrated_files.is_symlink() or hydrated_files.stat().st_mode & 0o077
-            or {path.name for path in hydrated_files.glob("*.json")} !=
-            {hashlib.sha256(row["session_id"].encode()).hexdigest() + ".json" for row in selection}
-            or digest({path.name: file_digest(path) for path in hydrated_files.glob("*.json")})
-            != hydration.get("sessions_sha256")):
-        raise SourceError("private hydrated source is incomplete or changed")
+    verified = verify_hydration_cache(hydrated_root, Path(request["selection"]["path"]),
+                                      request["hydration"]["sha256"])
+    if (verified["selected_sessions"] != len(selection)
+            or verified["selection_sha256"] != request["selection"]["sha256"]):
+        raise SourceError("private hydration and selection disagree")
     roles = _bound_file(request["roles"])
     capture = _bound_file(request["tool_capture"])
     _sealed(roles, "fleet_teacher_family_roles_v1")
@@ -616,7 +656,8 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
         sid, key, version = (item.get(name) for name in ("session_id", "task_key", "task_version_id"))
         if (not all(isinstance(x, str) and x for x in (sid, key, version, item.get("model_id")))
                 or not _sha(item.get("trace_sha256")) or not _sha(item.get("acceptance_sha256"))
-                or not _sha(item.get("group_id")) or sid in seen or
+                or not isinstance(item.get("group_id"), str) or not item["group_id"]
+                or sid in seen or
                 roster.get(version, {}).get("task_key") != key):
             raise SourceError("source selection lacks exact reviewed identity")
         seen.add(sid)
