@@ -282,10 +282,11 @@ class DenseBridgeTest(unittest.TestCase):
             self.assertEqual(composed["manifest_sha256"], manifest["sha256"])
             self.assertEqual(manifest["files"]["train"]["path"], "dense/train.parquet")
             self.assertEqual(manifest["files"]["dev"]["path"], "dev/dev.parquet")
-            config = json.loads((Path(__file__).parents[1] / "configs/runs/qwen38-96k-debug-v1.json").read_text())
+            config = json.loads((Path(__file__).parents[1] / "configs/runs/qwen38-96k-full-v1.json").read_text())
             config["name"] = "synthetic-dense-ce"
+            config["output_root"] = "/mnt/sfs/jobs/synthetic-dense-ce"
             config["data"] = {"manifest": "../data/corpus.json", "root": "/mnt/sfs/jobs/synthetic-dense-ce"}
-            config["recipe"].update(eval_interval=1, checkpoint_interval=1)
+            config["recipe"].update(eval_interval=1, checkpoint_interval=1, keep_checkpoints=1)
             compiled = launch._legacy("compile", {"config": {**config,
                 "model": {"root": config["model"]["root"],
                           "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
