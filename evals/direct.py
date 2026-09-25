@@ -373,12 +373,14 @@ def run_once(plan: dict, arm: str, version: str, attempt: int, journal_dir: Path
         direct = shadow.get("direct_verifier") or {}
         ctf = (result.get("components") or {}).get("ctf") or {}
         value = ctf.get("score")
+        reward = score.get("reward")
         if (score.get("task_key") != task["task_key"] or score.get("task_version_id") != version
                 or score.get("instance_id") != instance_id or result.get("schema_version") != "cyber_verification_result_v3"
                 or (result.get("bindings") or {}).get("task_version_id") != version
                 or not score.get("verifier_execution_id") or isinstance(value, bool)
                 or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 1
-                or result.get("reward") != score.get("reward")
+                or isinstance(reward, bool) or not isinstance(reward, (int, float))
+                or not math.isfinite(reward) or not 0 <= reward <= 1 or result.get("reward") != reward
                 or shadow.get("mode") != "authoritative" or shadow.get("status") != "authoritative"
                 or shadow.get("match") is not True
                 or shadow.get("production_execution_id") != score["verifier_execution_id"]
