@@ -31,6 +31,11 @@ holdout. Registry/Lanes supplied no exact positive record. A sealed,
 DEV-family-first 16-cell roster is frozen. Its manifest authorizes no bulk
 launch; the runtime checker permits only its first cell as a bounded,
 model-free diagnostic after exact live preflight.
+That first DEV cell passed startup, both task-tool probes, negative grading,
+and exact cleanup on September 25 (terminal SHA-256
+`2f79d4bbf13d1a13b08490d0d9fd58860607f69dabe98522b9bc91d35e7b9e2b`;
+independent instance readback `stopped`). It is **not** a positive solve or a
+qualified holdout task.
 
 A census found 257 full-credit leads on 68 keys. Private exact-version checks
 proved **20 historical positive versions/18 families** (six DEV, 12 final;
