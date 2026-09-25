@@ -1,13 +1,10 @@
 """One-shot CPU staging of a sealed private teacher-source cache to SFS."""
-
 import json
 import os
 import sys
 import time
 from pathlib import Path
-
 from training.source import SourceError, digest, verify_hydration_cache
-
 DEST = Path("/mnt/sfs/jobs/chris-q38-goal-teacher-source-v1")
 NAME = "chris-q38-goal-teacher-source-stage-v2"
 IMAGE = ("661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
@@ -16,7 +13,6 @@ SELECTION_SHA = "sha256:441f489c11e2f775bca81d98b7f578e0993a459375bf07f9e1828532
 RECEIPT_FILE_SHA = "sha256:be6620b6dbf5f544b4df5b1017075299108849cc27eee0274708c7e5e572b365"
 RECEIPT_SHA = "sha256:9bf8e76340a87ffa936571d8e24fb68e24e1764862e7937766454039a8fb68a2"
 SESSIONS_SHA = "sha256:899cebe82457009c0747329b2a2b636ce7e5e5a7d9b449396f1f3ab1c99ccd8a"
-
 
 def verify(root: Path, *, seal: bool = False) -> dict:
     root = Path(root)
@@ -54,14 +50,11 @@ def verify(root: Path, *, seal: bool = False) -> dict:
         os.replace(temporary, marker)
     return result
 
-
 def job() -> dict:
-    # Suspended until reviewed. After admission, the Pod creates DEST once and
-    # waits for the verifier to publish STAGED.json after full copied-byte check.
     waiter = """import hashlib,json,os,time
 from pathlib import Path
-os.umask(0o077)
-p=Path('/mnt/sfs/jobs/chris-q38-goal-teacher-source-v1'); p.mkdir(mode=0o700)
+p=Path('/mnt/sfs/jobs/chris-q38-goal-teacher-source-v1'); s=p.stat()
+if not p.is_dir() or s.st_uid!=1000 or s.st_gid!=100 or s.st_mode&0o077: raise SystemExit(2)
 for _ in range(1650):
  q=p/'STAGED.json'
  if q.exists():
@@ -84,17 +77,21 @@ raise SystemExit(2)
                  "ttlSecondsAfterFinished": 7200, "template": {"spec": {
                      "restartPolicy": "Never", "automountServiceAccountToken": False,
                      "securityContext": {"supplementalGroups": [2000]},
+                     "initContainers": [{"name": "sfs-init", "image": IMAGE,
+                                         "command": ["python", "-c", "import os; from pathlib import Path; p=Path('/mnt/sfs/jobs/chris-q38-goal-teacher-source-v1'); p.mkdir(mode=0o700); os.chown(p,1000,100)"],
+                                         "securityContext": {"runAsUser": 0},
+                                         "volumeMounts": [{"name": "sfs", "mountPath": "/mnt/sfs"}]}],
                      "nodeSelector": {"kubernetes.io/arch": "amd64", "workload": "fleetai-training-ng-cpu"},
                      "priorityClassName": "c1", "priority": 10000,
                      "tolerations": [{"key": "workload", "operator": "Equal",
                                       "value": "fleetai-training-ng-cpu", "effect": "NoSchedule"}],
                      "containers": [{"name": "staging", "image": IMAGE,
                                      "command": ["python", "-u", "-c", waiter],
+                                     "securityContext": {"runAsUser": 1000, "runAsGroup": 100},
                                      "resources": {"requests": {"cpu": "2", "memory": "4Gi"},
                                                    "limits": {"cpu": "4", "memory": "8Gi"}},
                                      "volumeMounts": [{"name": "sfs", "mountPath": "/mnt/sfs"}]}],
                      "volumes": [{"name": "sfs", "persistentVolumeClaim": {"claimName": "sfs-shared"}}]}}}}
-
 
 if __name__ == "__main__":
     try:

@@ -36,6 +36,9 @@ class StageTests(unittest.TestCase):
         pod = job["spec"]["template"]["spec"]
         self.assertEqual((pod["priorityClassName"], pod["priority"]), ("c1", 10000))
         self.assertEqual(pod["securityContext"]["supplementalGroups"], [2000])
+        self.assertEqual(pod["initContainers"][0]["securityContext"]["runAsUser"], 0)
+        self.assertIn("p.mkdir(mode=0o700); os.chown(p,1000,100)", pod["initContainers"][0]["command"][2])
+        self.assertEqual(pod["containers"][0]["securityContext"], {"runAsUser": 1000, "runAsGroup": 100})
         self.assertEqual(pod["volumes"][0]["persistentVolumeClaim"]["claimName"], "sfs-shared")
         self.assertTrue(job["spec"]["suspend"])
         self.assertNotIn("nvidia.com/gpu", json.dumps(job))
