@@ -1,8 +1,5 @@
 """One-shot CPU staging of a sealed private teacher-source cache to SFS."""
-import json
-import os
-import sys
-import time
+import json, os, sys, time
 from pathlib import Path
 from training.source import SourceError, digest, verify_hydration_cache
 DEST = Path("/mnt/sfs/jobs/chris-q38-goal-teacher-source-v1")
@@ -13,12 +10,14 @@ SELECTION_SHA = "sha256:441f489c11e2f775bca81d98b7f578e0993a459375bf07f9e1828532
 RECEIPT_FILE_SHA = "sha256:be6620b6dbf5f544b4df5b1017075299108849cc27eee0274708c7e5e572b365"
 RECEIPT_SHA = "sha256:9bf8e76340a87ffa936571d8e24fb68e24e1764862e7937766454039a8fb68a2"
 SESSIONS_SHA = "sha256:899cebe82457009c0747329b2a2b636ce7e5e5a7d9b449396f1f3ab1c99ccd8a"
-
 def verify(root: Path, *, seal: bool = False) -> dict:
     root = Path(root)
     raw = root / "raw"
+    contents = {p.name for p in root.iterdir()}
+    sealed = "STAGED.json" in contents
     if (root.is_symlink() or not root.is_dir() or root.stat().st_mode & 0o077
-            or {p.name for p in root.iterdir()} != {"raw", "source-selection.private.jsonl"}
+            or contents - {"STAGED.json"} != {"raw", "source-selection.private.jsonl"}
+            or (seal and sealed)
             or (root / "source-selection.private.jsonl").is_symlink()
             or (root / "source-selection.private.jsonl").stat().st_mode & 0o077
             or {p.name for p in raw.iterdir()} != {"sessions", "HYDRATE_REQUEST.json", "HYDRATED.json"}):
@@ -33,6 +32,16 @@ def verify(root: Path, *, seal: bool = False) -> dict:
               "selection_sha256": SELECTION_SHA, "hydrated_file_sha256": RECEIPT_FILE_SHA,
               "hydration_receipt_sha256": RECEIPT_SHA, "session_count": 2886,
               "sessions_sha256": SESSIONS_SHA}
+    if sealed:
+        marker = root / "STAGED.json"
+        if marker.is_symlink() or marker.stat().st_mode & 0o077:
+            raise SourceError("stage marker mode differs")
+        saved = json.loads(marker.read_text())
+        if (set(saved) != set(result) | {"verified_at_unix", "sha256"}
+                or any(saved[k] != v for k, v in result.items())
+                or saved["sha256"] != digest({k: v for k, v in saved.items() if k != "sha256"})):
+            raise SourceError("stage marker identity differs")
+        return saved
     if seal:
         if root != DEST:
             raise SourceError("seal destination differs")

@@ -1,14 +1,9 @@
-"""Synthetic staging safety checks; never load private source bytes in tests."""
-
 import json
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-
 from training import stage_source as stage
-
-
 class StageTests(unittest.TestCase):
     def test_verify_seals_once_after_bound_source_check(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -24,8 +19,9 @@ class StageTests(unittest.TestCase):
             with patch.object(stage, "DEST", root), patch.object(stage, "verify_hydration_cache", return_value=expected) as checked:
                 result = stage.verify(root, seal=True)
                 self.assertEqual(json.loads((root / "STAGED.json").read_text()), result)
+                self.assertEqual(stage.verify(root), result)
                 self.assertEqual(result["sha256"], stage.digest({k: v for k, v in result.items() if k != "sha256"}))
-                checked.assert_called_once_with(root / "raw", root / "source-selection.private.jsonl", stage.RECEIPT_FILE_SHA)
+                checked.assert_called_with(root / "raw", root / "source-selection.private.jsonl", stage.RECEIPT_FILE_SHA)
                 with self.assertRaises(stage.SourceError):
                     stage.verify(root, seal=True)
 
@@ -42,7 +38,3 @@ class StageTests(unittest.TestCase):
         self.assertEqual(pod["volumes"][0]["persistentVolumeClaim"]["claimName"], "sfs-shared")
         self.assertTrue(job["spec"]["suspend"])
         self.assertNotIn("nvidia.com/gpu", json.dumps(job))
-
-
-if __name__ == "__main__":
-    unittest.main()
