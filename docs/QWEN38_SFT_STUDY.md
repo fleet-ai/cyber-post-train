@@ -82,6 +82,9 @@ collect fresh successes with exact target tools.
   near-262k finite update, peak memory, sealed native checkpoint, prompt GPU
   release and a *separate* zero-optimizer native reload. Neither the earlier
   eight-node step nor a zero-GPU preflight qualifies four-node training.
+  Two earlier CPU-only preflights failed without GPU allocation: v2 reported
+  only `ValueError`; v3 showed the generic receipt used the base runtime digest
+  instead of the candidate request builder's digest. The pinned v4 receipt passed.
 - **262k corrected scientific lane (nonlaunchable draft):** keep run name,
   create-once output, train/dev file digests and step count **unset** until the
   source and capacity gates pass. Use the reviewed task-key/shared-atom

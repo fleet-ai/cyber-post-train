@@ -1,46 +1,28 @@
 # Cyber post-training
 
-This repository was reset on 2026-09-24. It now holds a small, dated research
-record and one reusable data-splitting module. The previous training launchers,
-evaluation campaigns, dashboard, generated job configurations, and local model
-copies were retired. This checkout does not submit jobs or serve models.
+Compact Qwen cyber-training and evaluation research code. The repository was
+reset on 2026-09-24; [RESET.md](docs/RESET.md) records what was retired.
+Read [AGENTS.md](AGENTS.md) before any cluster or paid operation.
 
-## What remains
+The current study and its unpassed launch gates are in
+[QWEN38_SFT_STUDY.md](docs/QWEN38_SFT_STUDY.md). Task-family roles, source
+quality, and held-out limitations are in [HOLDOUT.md](docs/HOLDOUT.md).
+The files in [configs/data/](configs/data/) and [docs/evidence/](docs/evidence/)
+are dated observations, not current proof that a task works or a model is
+available. Keep training and evaluation inputs separate by task family; a
+checkpoint or falling training loss alone does not establish capability lift.
 
-- [`training/splits.py`](training/splits.py) assigns all versions and attempts
-  from the same application/task family to the same train, development, or test
-  split. The assignment is deterministic. Callers must provide reviewed family
-  identity; the code cannot decide whether two different names describe the
-  same underlying challenge.
-- [`configs/data/`](configs/data/) contains dated, read-only task coverage,
-  qualification, split, and teacher-corpus records. Their counts are explained
-  in [`docs/RESEARCH_SNAPSHOT.md`](docs/RESEARCH_SNAPSHOT.md).
-- [`docs/evidence/qwen38-sft-checkpoint-inventory-20260924.json`](docs/evidence/qwen38-sft-checkpoint-inventory-20260924.json)
-  records checkpoint and model-export identities as observed on 2026-09-24.
-  It is a historical inventory, not a current availability check.
-- [`docs/RESET.md`](docs/RESET.md) explains what was removed and where the old
-  code can be found in Git history.
+`training/` contains the bounded data, preflight, and SFT tools; `evals/`
+contains matched Fleet evaluation tools. A passing local test does not
+authorize a job: use the exact live identity, resource, preview, and failure-
+alert checks in [AGENTS.md](AGENTS.md). No job starts by reading this repo.
 
-Run the checks with Python 3; no packages need to be installed:
+Run the checks with Python 3:
 
 ```sh
 python3 -m unittest discover -s tests
 python3 scripts/check_size.py
 ```
 
-The repository limit is fewer than 10,000 physical lines across **all tracked
-text files**, including records, tests, and documentation. The check runs on
-every push and pull request.
-
-## Working from this starting point
-
-Treat the retained JSON files as dated evidence. Confirm current task quality,
-model availability, and evaluation validity from their original systems before
-using them in a new study. A new training or evaluation tool should start with
-one clear use case, a small test, and the exact job/evaluation record needed to
-interpret its result. Do not copy old launchers forward just because they exist
-in Git history.
-
-Never commit credentials, raw task prompts, private traces, flags, answers,
-model weights, or generated runtime folders. Store large artifacts in their
-designated external stores and keep only verified references here.
+Keep fewer than 10,000 tracked text lines. Do not commit credentials, raw
+prompts or traces, flags, answers, weights, or generated runtime folders.
