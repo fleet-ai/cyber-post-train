@@ -262,7 +262,8 @@ def run(directory: Path, step: int, stage: str) -> dict:
                          "cpu_check_receipt_sha256": cpu["receipt_sha256"],
                          "gpu_check_receipt_sha256": gpu["receipt_sha256"],
                          "serving_qualified": False, "task_evaluated": False}
-                if plan.get("validation_mode") == "teacher_cross_entropy":
+                if (plan.get("validation_mode") == "teacher_cross_entropy"
+                    and step % plan["recipe"]["eval_interval"] == 0):
                     dev_path = Path(plan["output_root"]) / "validation" / f"step-{step:06d}.json"
                     dev = _receipt(dev_path)
                     if (dev.get("optimizer_step") != step

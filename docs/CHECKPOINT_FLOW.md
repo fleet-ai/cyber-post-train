@@ -25,8 +25,8 @@ space and any project cap before admission; do not delete another run's data.
 For each saved step `S`, bind the exact run ID/UID, image, plan and corpus
 digests, then require all of these distinct gates:
 
-1. Digest-valid `checkpoint_receipts/step-<S:06>.json` and, when teacher CE is
-   enabled, `validation/step-<S:06>.json`, both matching the plan and step.
+1. Digest-valid `checkpoint_receipts/step-<S:06>.json` and, at scheduled teacher
+   CE steps, `validation/step-<S:06>.json`, both matching the plan and step.
    The CPU sealer must inventory and hash all native rank files, verify the
    trainer/sampler cursor, and reject files changing during its read.
 2. CPU-only seal and BF16 export to *new* step-specific paths; export must
