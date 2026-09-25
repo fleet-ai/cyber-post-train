@@ -444,7 +444,7 @@ class FullLaunchTests(unittest.TestCase):
         manifest["files"]["dev"].update(rows=27, supervised_tokens=5128)
         manifest["composition"].update(
             corpus_root=launch.FAST_DATA_ROOT,
-            dev_manifest_sha256="sha256:23ea22e051a6c84a145c7e8bc33a91dea0d94880370f811d4d38b1b1df4dab8e",
+            dev_manifest_sha256="sha256:d71f9f41569c4990b34ce5ba0a7a9766bd1a8c95f8bd148774cd44deb03a7c6d",
             dev_source_receipt_sha256="sha256:e59970d3f7a8d47edfa026c2618a6978a0260b9ef591d82aa3360aedfb2b2713")
         manifest.update(diagnostic_only=True, training_ready=False, source_limitations=[
             "historical_tool_result_target_parity_unverified", "teacher_DEV_small_nine_family_panel"])

@@ -1,7 +1,7 @@
 # Qwen3.8 cyber SFT study — live gates (2026-09-25)
 
 Goal: measured lift on new Fleet blackbox tasks. Historical 96k run `chris-q38-t3k96-b8-v3-e7d5c0f8` proves mechanics, **not** this independent corrected-data study. See [HOLDOUT.md](HOLDOUT.md) for source and split evidence. Its checkpoints cannot satisfy this study: a new 96k arm needs separate data, name, output, saves, and matched held-out evaluations.
-Kueue auto-unsuspends admitted CPU Jobs. For SFS staging, `/mnt/sfs/jobs` is root-owned (0755): preview a zero-GPU, alert-off root container, transfer only sealed data, verify remote digests, then release the exact staging Job.
+Kueue auto-unsuspends admitted CPU Jobs. For SFS staging, `/mnt/sfs/jobs` is root-owned (0755): preview a zero-GPU, alert-off root container, transfer only sealed data, verify remote digests, then release the exact staging Job. Native teacher DEV needs a unique `window_id`; the first image preflight failed at pinned `sft_runtime.py:1282`, and corrected data v2 has remote SHA-256 `9ea52340b56daba3b2a7b2afd091d078e759bdac45bcab4a29f5a10bbaa0e252`.
 
 ## Why the old run cannot answer the question
 

@@ -32,7 +32,7 @@ FULL_OUTPUT = f"/mnt/sfs/jobs/{FULL_NAME}"
 FULL_DATA_ROOT = "/mnt/sfs/jobs/chris-q38-corrected-corpus-v1/full96-data"
 FAST_NAME = "chris-q38-fast96-strict-v1"
 FAST_OUTPUT = f"/mnt/sfs/jobs/{FAST_NAME}"
-FAST_DATA_ROOT = "/mnt/sfs/jobs/chris-q38-fast96-strict-data-v1"
+FAST_DATA_ROOT = "/mnt/sfs/jobs/chris-q38-fast96-strict-data-v2"
 MECHANICS_NAME = "chris-q38-prov96-step1-v1"
 MECHANICS_OUTPUT = f"/mnt/sfs/jobs/{MECHANICS_NAME}"
 MECHANICS_DATA_ROOT = "/mnt/sfs/jobs/chris-q38-provisional96-corpus-v1/step1-data"
@@ -279,7 +279,7 @@ def _require_full_manifest(manifest: dict, data_root: str, *, diagnostic: bool =
             or train.get("storage_layout") != dense_bridge.LAYOUT
             or train.get("source_sessions") != 933 or dev.get("rows") != 27
             or composition.get("dev_manifest_sha256") !=
-                "sha256:23ea22e051a6c84a145c7e8bc33a91dea0d94880370f811d4d38b1b1df4dab8e"
+                "sha256:d71f9f41569c4990b34ce5ba0a7a9766bd1a8c95f8bd148774cd44deb03a7c6d"
             or composition.get("dev_source_receipt_sha256") !=
                 "sha256:e59970d3f7a8d47edfa026c2618a6978a0260b9ef591d82aa3360aedfb2b2713"):
             raise ValueError("diagnostic fast96 source or limitation declaration differs")
