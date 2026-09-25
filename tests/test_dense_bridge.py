@@ -1,5 +1,6 @@
 """The frozen dense packer can be staged and its input gate rejects drift."""
 
+import ast
 import hashlib
 import json
 import os
@@ -17,6 +18,56 @@ from training.dense_bridge import (COMMIT, SOURCES, NATIVE_HELPER_SHA, _digest, 
 
 
 class DenseBridgeTest(unittest.TestCase):
+    def test_target_only_patch_groups_adjacent_tool_results(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stage_historical(root, target_names=True)
+            tree = ast.parse((root / "training/message_aligned_teacher_corpus.py").read_text())
+            function = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "encode_record")
+            scope = {"Excluded": ValueError}
+            exec(compile("from __future__ import annotations\n" + ast.unparse(function), "<target-only>", "exec"), scope)
+
+            class Tokenizer:
+                def apply_chat_template(self, messages, **_):
+                    rendered = ""
+                    for i, m in enumerate(messages):
+                        if m["role"] == "tool":
+                            rendered += ("U" if i == 0 or messages[i - 1]["role"] != "tool" else "")
+                            rendered += "T" + m["content"]
+                            rendered += ("E" if i == len(messages) - 1 or messages[i + 1]["role"] != "tool" else "")
+                        else:
+                            rendered += m["role"][0] + m["content"]
+                    return list(rendered.encode())
+
+            base = [{"role": "system", "content": "s"}, {"role": "user", "content": "u"}]
+            scope["encode_messages_subset"] = lambda ms, tok, tokenizer_kwargs: tok.apply_chat_template(
+                base + ms)[len(tok.apply_chat_template(base)):]
+            exec("def helper(ms, tok, tokenizer_kwargs):\n"
+                 " ids = encode_messages_subset(ms, tok, tokenizer_kwargs)\n"
+                 " return ids, [int(ms[0]['role']=='assistant')]*len(ids), None", scope)
+            messages = [{"role": role, "content": value} for role, value in
+                        [("system", "s"), ("user", "u"), ("assistant", "a"),
+                         ("tool", "x"), ("tool", "y"), ("assistant", "b")]]
+            tokenizer = Tokenizer()
+            anchor, chunks = scope["encode_record"](messages, tokenizer, scope["helper"], tools=[])
+            self.assertEqual(len(chunks), 3)
+            self.assertFalse(any(chunks[1]["mask"]))
+            self.assertEqual(anchor + [token for chunk in chunks for token in chunk["ids"]],
+                             tokenizer.apply_chat_template(messages))
+            dense = ast.parse((root / "training/dense.py").read_text())
+            segment = next(n for n in dense.body if isinstance(n, ast.FunctionDef) and n.name == "segment_record")
+            scope.update(MAX_TOKENS=1024, CONTEXT_BUDGET=1024, digest_json=_legacy_digest)
+            exec(compile("from __future__ import annotations\n" + ast.unparse(segment), "<pinned-segment>", "exec"), scope)
+            record = {"record_id": "synthetic", "lineage": {"task_key": "synthetic"},
+                      "source": {"model": "synthetic"}}
+            rows = scope["segment_record"](record, anchor, chunks, max_tokens=1024, context_budget=1024)
+            spans = [span for row in rows for span in row["target_spans"]]
+            self.assertEqual([span["assistant_index"] for span in spans], [0, 1])
+            for row in rows:
+                last = max(span["source_message_index"] for span in row["target_spans"])
+                selected = messages[:2] + messages[row["context_start_message_index"]:last + 1]
+                self.assertEqual(row["input_ids"], tokenizer.apply_chat_template(selected))
+
     def test_exact_frozen_directory_needs_no_git(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

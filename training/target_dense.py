@@ -9,9 +9,10 @@ from pathlib import Path
 
 from . import source
 from .dense_bridge import (_digest, _file_sha, _legacy_digest, build_dense, validate_request,
-                           ALGORITHM as MECHANICS, MANIFEST_SCHEMA, RECEIPT_SCHEMA, TARGET_BUILDER_SHA)
+                           ALGORITHM as MECHANICS, MANIFEST_SCHEMA, RECEIPT_SCHEMA, TARGET_BUILDER_SHA,
+                           TARGET_METHOD)
 
-METHOD = "opencode_1_18_27_target_anchor_visible_only_multi_target_v1"
+METHOD = TARGET_METHOD
 SCHEMA = "qwen38_target_anchor_visible_only_method_v1"
 FILES = {"raw_sources": "raw-sources.private.jsonl", "dense_target_normalized": "dense-target-anchored.jsonl",
          "dense_success_evidence": "dense-success-evidence.jsonl", "tools": "model-facing-tools.json",

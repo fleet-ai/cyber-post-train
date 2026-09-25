@@ -43,6 +43,7 @@ RECEIPT_SCHEMA = "cyber_message_aligned_teacher_corpus_receipt_v1"
 MODEL_LOCK_SHA = "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac"
 NATIVE_HELPER_SHA = "sha256:55c15b660067749febda00d4fb1c2110ff436717bbd4b73bf66055a73d0b87d5"
 ALGORITHM = "anchored_complete_message_rounds_with_exact_tool_contract_v1"
+TARGET_METHOD = "opencode_1_18_27_target_anchor_visible_only_multi_target_v2"
 TARGET_ALIAS_PATCH_FROM = 'SOURCE_TOOL_ALIASES = {\n    "bash": "bash",'
 TARGET_ALIAS_PATCH_TO = ('SOURCE_TOOL_ALIASES = {\n    "fleet_bash": "bash",\n'
                          '    "fleet_submit_report": "submit_report",\n    "bash": "bash",')
@@ -50,7 +51,21 @@ TARGET_ROOT_ID = "fleet-q38-teacher3k-transitive-roles-20260925-v1"
 TARGET_ANCHOR_SHA = "sha256:5b4d3d959d599a14235f0ecfdd8d8e699584424af4dd0b267440f388c0c2d224"
 TARGET_ROOT_PATCH_FROM = 'value["root_role_anchor_id"] != TRUSTED_FLEET_COLLECTION_ROOT_ID'
 TARGET_ROOT_PATCH_TO = f'value["root_role_anchor_id"] != "{TARGET_ROOT_ID}"'
-TARGET_BUILDER_SHA = "sha256:c18c1bf762e1bddcde8ec5cc83455f5f1f4d782cab727a37d34d91748ce2a8cd"
+TARGET_GROUP_PATCH_FROM = ('        for index, message in enumerate(messages[2:], 2):\n'
+                           '            ids, mask, _ = helper([message], tokenizer, tokenizer_kwargs={"tools": []})')
+TARGET_GROUP_PATCH_TO = '''        for index, message in enumerate(messages[2:], 2):
+            if message["role"] == "tool" and messages[index - 1]["role"] == "tool":
+                continue
+            if message["role"] == "tool" and index + 1 < len(messages) and messages[index + 1]["role"] == "tool":
+                end = index + 1
+                while end < len(messages) and messages[end]["role"] == "tool":
+                    end += 1
+                ids = helper.__globals__["encode_messages_subset"](
+                    messages[index:end], tokenizer, tokenizer_kwargs={"tools": []})
+                mask = [0] * len(ids)
+            else:
+                ids, mask, _ = helper([message], tokenizer, tokenizer_kwargs={"tools": []})'''
+TARGET_BUILDER_SHA = "sha256:178d2c4f2ed3d6ad98bd1915b434b61cc714fb157cc30314e9aaf076ab4ae02c"
 
 
 def _digest(value: object) -> str:
@@ -146,6 +161,10 @@ def stage_historical(root: Path, *, repository: Path | None = None,
             before, after = TARGET_ROOT_PATCH_FROM.encode(), TARGET_ROOT_PATCH_TO.encode()
             if payload.count(before) != 1:
                 raise ValueError("frozen source has no unique target-root patch point")
+            payload = payload.replace(before, after, 1)
+            before, after = TARGET_GROUP_PATCH_FROM.encode(), TARGET_GROUP_PATCH_TO.encode()
+            if payload.count(before) != 1:
+                raise ValueError("frozen source has no unique target-tool-group patch point")
             payload = payload.replace(before, after, 1)
             builder_sha = "sha256:" + hashlib.sha256(payload).hexdigest()
             if builder_sha != TARGET_BUILDER_SHA:
@@ -367,7 +386,7 @@ def compose_teacher_ce(dense_dir: Path, dev_dir: Path, dev_source_dir: Path,
             or _file_sha(train_file) != train["sha256"] or _file_sha(dev_file) != dev["sha256"]):
         raise ValueError("train/dev rows violate the frozen family roles")
 
-    result = {**dense, "algorithm": ("opencode_1_18_27_target_anchor_visible_only_multi_target_v1"
+    result = {**dense, "algorithm": (TARGET_METHOD
                                       if new_method else ALGORITHM),
               "validation_mode": "teacher_cross_entropy", "dev_windows": dev["rows"],
               "files": {"train": {**train, "path": train_relative},
