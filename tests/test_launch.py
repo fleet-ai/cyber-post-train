@@ -466,6 +466,32 @@ class FullLaunchTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "diagnostic fast96"):
             launch.prepare(path, self.root / "false-claim")
 
+    def test_safe96_profile_is_task_only_and_exactly_bound(self) -> None:
+        config = json.loads(FULL_CONFIG.read_text())
+        config.update(name=launch.SAFE_NAME, output_root=launch.SAFE_OUTPUT)
+        config["data"] = {"root": launch.SAFE_DATA_ROOT, "manifest": "manifest.json"}
+        config["recipe"].update(eval_interval=0, checkpoint_interval=25)
+        config["wandb"].update(group="qwen38-safe96-sft-v1", run_id=launch.SAFE_NAME,
+                               name=launch.SAFE_NAME)
+        launch._require_profile_config(config, True)
+        manifest = {"schema": "cyber_dense_sft_corpus_v1", "algorithm": dense_bridge.ALGORITHM,
+                    "validation_mode": "task_outcomes_only", "max_length": 98304,
+                    "split_sha256": dense_bridge.TARGET_ANCHOR_SHA,
+                    "materialization": {"target_tools_sha256":
+                        "sha256:585574ec1a459141a2e79f4945d140864876224ebef1260be65f06c6d237610f"},
+                    "subset_provenance": {"result_policy":
+                        "direct_native_tool_text_below_opencode_limits_v1"},
+                    "tokenizer": {"repo": MODEL[0], "revision": MODEL[1],
+                        "files": [{"path": p, "sha256": d} for p, d in TOKENIZER_FILES.items()]},
+                    "files": {"train": {"sha256": launch.SAFE_PARQUET_SHA,
+                        "rows": 369, "source_sessions": 319, "supervised_tokens": 3639296}}}
+        manifest["sha256"] = "sha256:" + launch.sha(launch.canonical(manifest))
+        with mock.patch.object(launch, "SAFE_MANIFEST_SHA", manifest["sha256"]):
+            launch._require_full_manifest(manifest, launch.SAFE_DATA_ROOT)
+            manifest["files"]["train"]["source_sessions"] -= 1
+            with self.assertRaisesRegex(ValueError, "safe96 source"):
+                launch._require_full_manifest(manifest, launch.SAFE_DATA_ROOT)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -30,6 +30,12 @@ LEASE = "chris-cpt-gpu-submit"
 FULL_NAME = "chris-q38-corr96-full-v1"
 FULL_OUTPUT = f"/mnt/sfs/jobs/{FULL_NAME}"
 FULL_DATA_ROOT = "/mnt/sfs/jobs/chris-q38-corrected-corpus-v1/full96-data"
+SAFE_NAME = "chris-q38-safe96-sft-v1"
+SAFE_OUTPUT = f"/mnt/sfs/jobs/{SAFE_NAME}"
+SAFE_DATA_ROOT = "/mnt/sfs/jobs/chris-q38-safe96-corpus-v1/full96-data"
+SAFE_MANIFEST_SHA = "sha256:317769bbe55b0911e45083cf05250c8ebcdc9079b5c971bfb0c204f285735110"
+SAFE_PARQUET_SHA = "sha256:33fc76c8c27526f539afb13e8d60b10b7c1c50fd36adb1be869779b4e2568bbb"
+SAFE_PROOF_SHA = "sha256:78b487a359256c8cab765258cae44be64f21cd1c5bc8d237e2a0e83945dc8e4a"
 FAST_NAME = "chris-q38-fast96-probe-v2"
 FAST_OUTPUT = f"/mnt/sfs/jobs/{FAST_NAME}"
 FAST_DATA_ROOT = "/mnt/sfs/jobs/chris-q38-fast96-dense-data-v3"
@@ -95,6 +101,12 @@ try:
         result={'request':job_request(v['plan'])}
     elif os.environ['SFT_BRIDGE_MODE']=='validate_preview':
         result=validate_preview(v['request'],v['preview'])
+    elif os.environ['SFT_BRIDGE_MODE']=='dense_validate':
+        import pyarrow.parquet as pq
+        from training.sft_runtime import dense_rows
+        rows=pq.read_table(v['parquet']).to_pylist()
+        checked=dense_rows(rows,v['spec'],max_length=v['max_length'],vocab_size=v['vocab_size'])
+        result={'rows':len(checked),'supervised_tokens':sum(sum(r['loss_mask']) for r in checked)}
     elif os.environ['SFT_BRIDGE_MODE']=='preview':
         token=os.environ.get('FLEET_API_KEY')
         if not token: raise ValueError('missing API credential')
@@ -162,13 +174,16 @@ def _require_profile_config(config: dict, full: bool) -> None:
     name, output, data_root, group, manifest = (
         (FAST_NAME, FAST_OUTPUT, FAST_DATA_ROOT, "qwen38-fast96-probe-v1", "manifest.json")
         if config.get("name") == FAST_NAME else
+        (SAFE_NAME, SAFE_OUTPUT, SAFE_DATA_ROOT, "qwen38-safe96-sft-v1", "manifest.json")
+        if config.get("name") == SAFE_NAME else
         (FULL_NAME, FULL_OUTPUT, FULL_DATA_ROOT, "qwen38-corrected-teacher96-full-v1", "qwen38-96k-full-v1.manifest.json")
         if full else (MECHANICS_NAME, MECHANICS_OUTPUT, MECHANICS_DATA_ROOT,
                       "qwen38-provisional96-mechanics-v1", "manifest.json"))
     recipe, data, wandb = (config.get(key, {}) for key in ("recipe", "data", "wandb"))
     diagnostic = config.get("name") == FAST_NAME
+    safe = config.get("name") == SAFE_NAME
     expected = {**COMMON_RECIPE, "epochs": 1, "lr": 3e-6, "seed": 20260925,
-                "eval_interval": 1 if diagnostic else 50 if full else 0, "checkpoint_interval": 1 if diagnostic or not full else 50,
+                "eval_interval": 1 if diagnostic else 0 if safe or not full else 50, "checkpoint_interval": 1 if diagnostic or not full else 25 if safe else 50,
                 "keep_checkpoints": "all" if full else 2}
     if (config.get("name") != name or config.get("output_root") != output
         or config.get("backend") != "skyrl" or config.get("cluster", {}).get("priority") != "c1"
@@ -239,6 +254,28 @@ def _require_full_manifest(manifest: dict, data_root: str, *, diagnostic: bool =
     composition = manifest.get("composition", {})
     from .runtime import MODEL, TOKENIZER_FILES
 
+    if data_root == SAFE_DATA_ROOT:
+        from . import dense_bridge
+        if (manifest.get("sha256") != SAFE_MANIFEST_SHA
+            or manifest.get("validation_mode") != "task_outcomes_only"
+            or manifest.get("algorithm") != dense_bridge.ALGORITHM
+            or set(manifest.get("files", {})) != {"train"}
+            or train.get("sha256") != SAFE_PARQUET_SHA
+            or train.get("rows") != 369 or train.get("source_sessions") != 319
+            or train.get("supervised_tokens") != 3639296
+            or manifest.get("max_length") != 98304
+            or manifest.get("split_sha256") != dense_bridge.TARGET_ANCHOR_SHA
+            or manifest.get("materialization", {}).get("target_tools_sha256") !=
+                "sha256:585574ec1a459141a2e79f4945d140864876224ebef1260be65f06c6d237610f"
+            or manifest.get("tokenizer", {}).get("repo") != MODEL[0]
+            or manifest.get("tokenizer", {}).get("revision") != MODEL[1]
+            or manifest.get("tokenizer", {}).get("files") !=
+                [{"path": p, "sha256": d} for p, d in TOKENIZER_FILES.items()]
+            or manifest.get("subset_provenance", {}).get("result_policy") !=
+                "direct_native_tool_text_below_opencode_limits_v1"):
+            raise ValueError("safe96 source or target binding differs")
+        return
+
     tokenizer = manifest.get("tokenizer", {})
     if (manifest.get("schema") != "cyber_dense_sft_corpus_v1"
         or manifest.get("sha256") != "sha256:" + sha(canonical(
@@ -294,7 +331,7 @@ def prepare(config_path: Path, destination: Path,
         raise ValueError("prepared destination already exists")
     config_bytes = config_path.read_bytes()
     config = json.loads(config_bytes)
-    full = config.get("name") in {FULL_NAME, FAST_NAME}
+    full = config.get("name") in {FULL_NAME, FAST_NAME, SAFE_NAME}
     _require_profile_config(config, full)
     source = Path(config["data"]["manifest"])
     manifest_path = source if source.is_absolute() else config_path.parent / source
@@ -310,6 +347,15 @@ def prepare(config_path: Path, destination: Path,
             raise ValueError("full run cannot use diagnostic proof")
         _require_full_manifest(manifest, config["data"]["root"],
                                diagnostic=config["name"] == FAST_NAME)
+        if config["name"] == SAFE_NAME:
+            proof = json.loads((manifest_path.parent / "SAFE_SUBSET.json").read_bytes())
+            if (proof.get("sha256") != SAFE_PROOF_SHA
+                or proof.get("sha256") != "sha256:" + sha(canonical(
+                    {k: v for k, v in proof.items() if k != "sha256"}))
+                or proof.get("manifest_file_sha256") != "sha256:" + sha(manifest_bytes)
+                or proof.get("train_file_sha256") != SAFE_PARQUET_SHA
+                or proof.get("capability_outcome") != "pending_matched_fleet_eval"):
+                raise ValueError("safe96 subset proof differs")
     else:
         if mechanics_proof is None or len(mechanics_proof) != 6:
             raise ValueError("independent whole-TRAIN-session proof paths required")
@@ -333,10 +379,10 @@ def prepare(config_path: Path, destination: Path,
                        lazy=manifest["files"]["train"].get("storage_layout") == "dense_single_row_group_v1")
     plan, request = compiled["plan"], compiled["request"]
     if (plan["model"]["revision"] != "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
-        or plan["validation_mode"] != ("teacher_cross_entropy" if full else "task_outcomes_only")
+        or plan["validation_mode"] != ("teacher_cross_entropy" if full and config["name"] != SAFE_NAME else "task_outcomes_only")
         or plan["datasets"]["train"].get("format") != "pretokenized_assistant_segments_v1"
-        or set(plan["datasets"]) != ({"train", "dev"} if full else {"train"})
-        or (full and plan["datasets"]["dev"].get("format") != "chat_messages_last_assistant_v2")
+        or set(plan["datasets"]) != ({"train", "dev"} if full and config["name"] != SAFE_NAME else {"train"})
+        or (full and config["name"] != SAFE_NAME and plan["datasets"]["dev"].get("format") != "chat_messages_last_assistant_v2")
         or plan["schema"] != "cyber_sft_runtime_dense_v1"
         or (not full and (plan.get("pause_after_step") != 1 or plan["recipe"]["max_steps"] <= 1
                           or plan["recipe"]["checkpoint_interval"] != 1
@@ -353,18 +399,20 @@ def prepare(config_path: Path, destination: Path,
                           or request["run_dir"] != MECHANICS_OUTPUT
                           or plan["corpus_manifest_sha256"] != manifest["sha256"]))
         or (full and (request["name"] != config["name"] or request["run_dir"] != config["output_root"]
-                      or plan["datasets"]["train"]["supervised_tokens"] < 20_000_000
+                      or plan["datasets"]["train"]["supervised_tokens"] < (3_000_000 if config["name"] == SAFE_NAME else 20_000_000)
                       or plan["corpus_manifest_sha256"] != manifest["sha256"]
                       or plan["recipe"]["keep_checkpoints"] != plan["recipe"]["max_steps"]))):
         raise ValueError("compiled 96k request failed an immutable safety/science gate")
     receipt = {
         "schema": ("qwen38_96k_fast_diagnostic_prepared_v1" if config["name"] == FAST_NAME else
+                   "qwen38_96k_safe_prepared_v1" if config["name"] == SAFE_NAME else
                    "qwen38_96k_full_prepared_v1" if full else "qwen38_96k_mechanics_prepared_v1"),
         "historical_commit": COMMIT,
         "config_sha256": sha(config_bytes), "manifest_file_sha256": sha(manifest_bytes),
         "plan_sha256": sha(canonical(plan)), "request_sha256": sha(canonical(request)),
         "status": "prepared_not_submitted", "purpose": (
             "diagnostic_fast_sft" if config["name"] == FAST_NAME else
+            "safe96_pilot_sft" if config["name"] == SAFE_NAME else
             "full_sft" if full else "one_step_mechanics_only"),
     }
     if not full:
@@ -375,11 +423,15 @@ def prepare(config_path: Path, destination: Path,
         receipt["projection_receipt_file_sha256"] = sha(projection_bytes)
     if full:
         receipt["supervised_tokens"] = plan["datasets"]["train"]["supervised_tokens"]
+        if config["name"] == SAFE_NAME:
+            receipt["subset_proof_file_sha256"] = sha((manifest_path.parent / "SAFE_SUBSET.json").read_bytes())
         interval = plan["recipe"]["checkpoint_interval"]
         receipt["planned_native_checkpoints"] = (1 if config["name"] == FAST_NAME else (plan["recipe"]["max_steps"] + interval - 1) // interval)
         receipt["checkpoint_retention_capacity"] = plan["recipe"]["keep_checkpoints"]
     destination.mkdir(parents=True, mode=0o700)
     _create_only(destination / "corpus.manifest.json", manifest_bytes)
+    if config["name"] == SAFE_NAME:
+        _create_only(destination / "SAFE_SUBSET.json", (manifest_path.parent / "SAFE_SUBSET.json").read_bytes())
     if not full:
         _create_only(destination / "corpus.RECEIPT.json", mechanics_receipt)
         _create_only(destination / "SUBSET.json", subset_bytes)
@@ -408,17 +460,25 @@ def prepared(directory: Path) -> tuple[dict, dict, dict]:
     if receipt.get("manifest_file_sha256") != sha(manifest_bytes):
         raise ValueError("corpus manifest bytes changed")
     manifest = json.loads(manifest_bytes)
-    if receipt.get("schema") in {"qwen38_96k_full_prepared_v1", "qwen38_96k_fast_diagnostic_prepared_v1"}:
+    if receipt.get("schema") in {"qwen38_96k_full_prepared_v1", "qwen38_96k_fast_diagnostic_prepared_v1", "qwen38_96k_safe_prepared_v1"}:
         diagnostic = receipt["schema"] == "qwen38_96k_fast_diagnostic_prepared_v1"
-        _require_full_manifest(manifest, FAST_DATA_ROOT if diagnostic else FULL_DATA_ROOT,
+        safe = receipt["schema"] == "qwen38_96k_safe_prepared_v1"
+        _require_full_manifest(manifest, FAST_DATA_ROOT if diagnostic else SAFE_DATA_ROOT if safe else FULL_DATA_ROOT,
                                diagnostic=diagnostic)
-        if request["name"] != (FAST_NAME if diagnostic else FULL_NAME) or receipt.get(
-                "purpose") != ("diagnostic_fast_sft" if diagnostic else "full_sft"):
+        if request["name"] != (FAST_NAME if diagnostic else SAFE_NAME if safe else FULL_NAME) or receipt.get(
+                "purpose") != ("diagnostic_fast_sft" if diagnostic else "safe96_pilot_sft" if safe else "full_sft"):
             raise ValueError("prepared full/diagnostic run identity differs")
+        if safe:
+            proof_bytes = (directory / "SAFE_SUBSET.json").read_bytes()
+            proof = json.loads(proof_bytes)
+            if (proof.get("sha256") != SAFE_PROOF_SHA
+                or "sha256:" + sha(canonical({k: v for k, v in proof.items() if k != "sha256"})) != SAFE_PROOF_SHA
+                or receipt.get("subset_proof_file_sha256") != sha(proof_bytes)):
+                raise ValueError("safe96 subset binding changed")
         interval = plan["recipe"]["checkpoint_interval"]
         if (plan.get("schema") != "cyber_sft_runtime_dense_v1"
             or plan.get("corpus_manifest_sha256") != manifest["sha256"]
-            or plan["recipe"]["eval_interval"] != interval
+            or plan["recipe"]["eval_interval"] != (0 if safe else interval)
             or plan["recipe"]["keep_checkpoints"] != plan["recipe"]["max_steps"]
             or plan.get("pause_after_step") != (1 if diagnostic else None)
             or receipt.get("planned_native_checkpoints") != (1 if diagnostic else (plan["recipe"]["max_steps"] + interval - 1) // interval)
