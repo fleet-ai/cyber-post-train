@@ -1,4 +1,4 @@
-"""Synthetic launch-boundary checks. These tests create no Fleet sessions or Jobs."""
+"""Native Fleet pass@4 launch-boundary tests; no paid sessions are created."""
 
 import copy
 import json
@@ -7,7 +7,10 @@ import unittest
 from pathlib import Path
 
 from evals.fleet import seal_protocol
-from evals.launch import LaunchError, _identity, digest, launch_once, preview, validate_plan
+from evals.launch import (
+    LaunchError, _identity, _readiness_expected, digest, job_payload,
+    launch_once, preview, validate_plan,
+)
 
 
 def sha(char):
@@ -22,7 +25,7 @@ def fixture():
         "verifier_sha256": sha("e"),
     }
     protocol = seal_protocol({
-        "schema": "fleet_paired_pass4_v1", "study_id": "synthetic",
+        "schema": "fleet_paired_pass4_v2", "study_id": "synthetic",
         "role": "dev", "final_selection_sha256": None, "tasks": [task],
         "common": {
             "model_repository": "Qwen/synthetic", "tokenizer_sha256": sha("a"),
@@ -32,8 +35,9 @@ def fixture():
             "tools": ["fleet_bash", "fleet_submit_report"],
             "tool_schema_sha256": sha("b"), "context_policy": "native_compaction",
             "context_window_tokens": 262144, "max_output_tokens": 32768,
-            "max_model_requests": 600, "timeout_seconds": 28800,
-            "temperature": 0.6, "top_p": 0.95, "seeds": [41, 42, 43, 44],
+            "max_steps": 600, "max_duration_minutes": 480,
+            "temperature": None, "top_p": None,
+            "seed_policy": {"mode": "server_assigned_unobserved"},
             "retry_limit": 0,
         },
         "arms": {
@@ -53,46 +57,9 @@ def fixture():
         "seed_config": {"non_private_test_seed": True},
         "task_lifecycle_status": "production",
     }
-    identity = _identity(protocol)
-    roots = {arm: f"/mnt/sfs/jobs/chris-synthetic-{arm}" for arm in ("base", "candidate")}
-    jobs = {}
-    for arm in ("base", "candidate"):
-        artifact = protocol["arms"][arm]
-        env_values = {
-            "EVAL_HARNESS": "opencode", "EVAL_PROTOCOL_SHA256": protocol["sha256"],
-            "EVAL_ARM": arm, "EVAL_MODEL_REVISION": artifact["model_revision"],
-            "EVAL_WEIGHTS_SHA256": artifact["weights_sha256"],
-            "EVAL_CHECKPOINT_SHA256": artifact.get("checkpoint_sha256", ""),
-            "EVAL_TASK_ROSTER_SHA256": digest(protocol["tasks"]),
-            "EVAL_OUTPUT": roots[arm], "EVAL_SERVED_ID": f"served-{arm}",
-        }
-        jobs[arm] = {
-            "apiVersion": "batch/v1", "kind": "Job",
-            "metadata": {
-                "name": f"chris-q38-fleet-{identity[7:19]}-{arm}",
-                "namespace": "fleet-train-jobs",
-                "labels": {"cyber-post-train.fleet.ai/identity": identity[7:55]},
-                "annotations": {
-                    "fleet.ai/failure-alerts": "off",
-                    "cyber-post-train.fleet.ai/protocol-sha256": protocol["sha256"],
-                    "cyber-post-train.fleet.ai/identity-sha256": identity,
-                    "cyber-post-train.fleet.ai/arm": arm,
-                },
-            },
-            "spec": {
-                "backoffLimit": 0, "activeDeadlineSeconds": 36000,
-                "template": {"spec": {
-                    "priorityClassName": "c1", "restartPolicy": "Never",
-                    "containers": [{"name": "evaluator", "image": "runner@" + sha("f"),
-                                    "command": ["python"], "args": ["-m", "evals.runner"],
-                                    "env": [{"name": k, "value": v} for k, v in env_values.items()],
-                                    "resources": {"requests": {"cpu": "2", "memory": "4Gi"}}}],
-                }},
-            },
-        }
     plan = {
-        "schema": "fleet_paired_launch_v1", "harness": "opencode",
-        "protocol": protocol,
+        "schema": "fleet_native_paired_launch_v1", "protocol": protocol,
+        "task_group_id": "11111111-1111-4111-8111-111111111111",
         "family_roles": {"train": [["app", "family-train"]],
                          "dev": [["app", "family-dev"]],
                          "final": [["app", "family-final"]]},
@@ -103,152 +70,180 @@ def fixture():
             "base_registration": sha("3"), "candidate_registration": sha("4"),
             "live_parity": sha("5"),
         },
-        "jobs": jobs, "output_roots": roots,
+        "routes": {
+            "base": "fleet-qwen/baseline-synthetic",
+            "candidate": "fleet-qwen/checkpoint-synthetic",
+        },
     }
-    return plan, live
+    group = {
+        "id": plan["task_group_id"],
+        "team_id": live["team_id"],
+        "members": [{"eval_task_version_id": task["task_version_id"]}],
+    }
+    return plan, live, group
 
 
-class FakeCluster:
-    def __init__(self):
-        self.jobs = []
-        self.creates = []
-        self.render_mutation = None
-
-    def jobs_for_identity(self, identity):
-        return copy.deepcopy(self.jobs)
-
-    def server_preview(self, job):
-        result = copy.deepcopy(job)
-        result["metadata"]["uid"] = "a" * 32
-        result["spec"]["template"]["spec"]["schedulerName"] = "default-scheduler"
-        for row in result["spec"]["template"]["spec"]["containers"][0]["env"]:
-            if row.get("value") == "":
-                row.pop("value")
-        if self.render_mutation:
-            self.render_mutation(result)
-        return result
-
-    def create_once(self, job):
-        self.creates.append(copy.deepcopy(job))
-        result = copy.deepcopy(job)
-        result["metadata"]["uid"] = "synthetic-uid"
-        self.jobs.append(result)
-        return result
-
-
-def gates(plan, live, cluster):
+def gates(plan, live, group):
     return {
-        "cluster": cluster,
-        "account_get": lambda: {"team_id": "a1025f0b-ad67-49fc-a023-51800ab43e84",
-                                "team_name": "fleet"},
+        "account_get": lambda: {"team_id": live["team_id"], "team_name": "fleet"},
+        "group_get": lambda group_id: copy.deepcopy(group),
         "task_get": lambda key, version: copy.deepcopy(live),
-        "readiness_check": lambda protocol, expected: expected,
-        "qualification_check": lambda protocol, expected: expected,
-        "output_exists": lambda root: False,
-        "capacity_check": lambda: True,
+        "qualification_get": lambda: copy.deepcopy(plan["task_qualification_sha256"]),
+        "readiness_get": lambda: copy.deepcopy(_readiness_expected(plan)),
+        "budget_check": lambda sessions: sessions <= 500,
     }
-
-
-def launch_gates(plan, live, cluster):
-    return {**gates(plan, live, cluster),
-            "capacity_reserve": lambda identity, arm: "synthetic-shared-lease",
-            "capacity_release": lambda lease: None}
 
 
 class LaunchTests(unittest.TestCase):
-    def test_preview_is_read_only_and_binds_both_arms(self):
-        plan, live = fixture()
-        cluster = FakeCluster()
+    def test_exact_native_payload_has_no_invented_sampling_or_local_bash(self):
+        plan, live, group = fixture()
         self.assertTrue(validate_plan(plan).startswith("sha256:"))
-        self.assertTrue(preview(plan, "base", **gates(plan, live, cluster)).startswith("sha256:"))
-        self.assertTrue(preview(plan, "candidate", **gates(plan, live, cluster)).startswith("sha256:"))
-        self.assertEqual(cluster.creates, [])
+        packet = preview(plan, "base", **gates(plan, live, group))
+        payload = packet["payload"]
+        self.assertEqual(set(payload), {
+            "name", "models", "pass_k", "task_group_id", "agent_runtime",
+            "harness", "mode", "tools", "max_steps", "max_duration_minutes",
+        })
+        self.assertEqual(payload["models"], [plan["routes"]["base"]])
+        self.assertEqual(payload["pass_k"], 4)
+        self.assertEqual(payload["tools"], [])
+        self.assertEqual(payload["max_steps"], 600)
+        self.assertEqual(payload["max_duration_minutes"], 480)
+        self.assertEqual(packet["preview_kind"], "local_read_only_no_server_preview")
+        self.assertIn("server defaults", packet["sampling"])
+        self.assertIn("not caller-configurable", packet["server_retry_policy"])
 
-    def test_fail_closed_on_family_leak_or_task_drift(self):
-        plan, live = fixture()
+    def test_matched_arms_and_renamed_study_are_same_scientific_identity(self):
+        plan, live, group = fixture()
+        base = job_payload(plan, "base")
+        candidate = job_payload(plan, "candidate")
+        self.assertEqual({k: v for k, v in base.items() if k not in {"name", "models"}},
+                         {k: v for k, v in candidate.items() if k not in {"name", "models"}})
+        renamed = copy.deepcopy(plan)
+        renamed["protocol"]["study_id"] = "renamed"
+        renamed["protocol"] = seal_protocol({k: v for k, v in renamed["protocol"].items() if k != "sha256"})
+        self.assertEqual(_identity(plan["protocol"]), _identity(renamed["protocol"]))
+        self.assertEqual(job_payload(plan, "base")["name"], job_payload(renamed, "base")["name"])
+
+    def test_no_fixed_seed_or_claimed_sampling_on_native_api(self):
+        for change in (
+            lambda p: p["protocol"]["common"].update(seed_policy={"mode": "fixed",
+                                                                    "seeds": [1, 2, 3, 4]}),
+            lambda p: p["protocol"]["common"].update(temperature=0.8, top_p=0.9),
+            lambda p: p["protocol"]["common"].update(retry_limit=1),
+        ):
+            plan, _, _ = fixture()
+            change(plan)
+            plan["protocol"] = seal_protocol({k: v for k, v in plan["protocol"].items() if k != "sha256"})
+            with self.assertRaisesRegex(LaunchError, "native"):
+                validate_plan(plan)
+
+    def test_family_leak_and_wrong_group_fail_before_submission(self):
+        plan, live, group = fixture()
         plan["family_roles"]["train"].append(["app", "family-dev"])
         with self.assertRaisesRegex(LaunchError, "overlap"):
             validate_plan(plan)
-        plan, live = fixture()
+        plan, live, group = fixture()
+        group["members"].append({"eval_task_version_id": "unplanned"})
+        with self.assertRaisesRegex(LaunchError, "task group differs"):
+            preview(plan, "base", **gates(plan, live, group))
+        plan, live, group = fixture()
+        group["team_id"] = "other"
+        with self.assertRaisesRegex(LaunchError, "task group differs"):
+            preview(plan, "base", **gates(plan, live, group))
+
+    def test_exact_live_task_and_qualification_are_required(self):
+        plan, live, group = fixture()
         live["verifier"]["sha256"] = "0" * 64
         with self.assertRaisesRegex(LaunchError, "binding changed"):
-            preview(plan, "base", **gates(plan, live, FakeCluster()))
-
-    def test_root_alert_priority_and_paired_runtime_are_mandatory(self):
-        for mutation, reason in (
-            (lambda p: p["jobs"]["base"]["metadata"]["annotations"].pop("fleet.ai/failure-alerts"), "root Job annotations"),
-            (lambda p: p["jobs"]["base"]["spec"]["template"]["spec"].update(priorityClassName="c0"), "c1"),
-            (lambda p: p["jobs"]["base"]["spec"]["template"]["spec"]["containers"][0].update(image="runner:latest"), "immutable"),
-            (lambda p: p["jobs"]["base"]["spec"]["template"]["spec"]["containers"][0]["resources"]["requests"].update({"nvidia.com/gpu": "1"}), "zero GPUs"),
-            (lambda p: p["jobs"]["base"]["spec"]["template"]["spec"]["containers"][0].update(command=["different"]), "differ beyond"),
-        ):
-            with self.subTest(reason=reason):
-                plan, _ = fixture()
-                mutation(plan)
-                with self.assertRaisesRegex(LaunchError, reason):
-                    validate_plan(plan)
-
-    def test_server_rendered_root_and_independent_gates(self):
-        plan, live = fixture()
-        cluster = FakeCluster()
-        cluster.render_mutation = lambda job: job["metadata"]["annotations"].update({"fleet.ai/failure-alerts": "on"})
-        with self.assertRaisesRegex(LaunchError, "server-rendered"):
-            preview(plan, "base", **gates(plan, live, cluster))
-        cluster.render_mutation = None
-        checks = gates(plan, live, cluster)
-        checks["readiness_check"] = lambda protocol, expected: {}
-        with self.assertRaisesRegex(LaunchError, "proof did not match"):
+            preview(plan, "base", **gates(plan, live, group))
+        plan, live, group = fixture()
+        checks = gates(plan, live, group)
+        checks["qualification_get"] = lambda: {}
+        with self.assertRaisesRegex(LaunchError, "qualification proof"):
             preview(plan, "base", **checks)
-        checks = gates(plan, live, cluster)
-        checks["qualification_check"] = lambda protocol, expected: {}
-        with self.assertRaisesRegex(LaunchError, "qualification proof did not match"):
-            preview(plan, "base", **checks)
-        checks = gates(plan, live, cluster)
+
+    def test_unproven_checkpoint_route_or_tools_cannot_pass(self):
+        plan, live, group = fixture()
+        checks = gates(plan, live, group)
+        proof = _readiness_expected(plan)
+        proof["routes"]["candidate"]["gateway_routed"] = False
+        checks["readiness_get"] = lambda: proof
+        with self.assertRaisesRegex(LaunchError, "checkpoint/route/harness proof"):
+            preview(plan, "candidate", **checks)
+        plan, live, group = fixture()
+        plan["routes"]["candidate"] = "fleet/unrouted-checkpoint"
+        with self.assertRaisesRegex(LaunchError, "Fleet Qwen routes"):
+            validate_plan(plan)
+
+    def test_wrong_account_and_budget_fail(self):
+        plan, live, group = fixture()
+        checks = gates(plan, live, group)
         checks["account_get"] = lambda: {"team_id": "other", "team_name": "fleet"}
         with self.assertRaisesRegex(LaunchError, "Fleet-team"):
             preview(plan, "base", **checks)
-
-    def test_duplicate_output_and_capacity_are_fail_closed(self):
-        plan, live = fixture()
-        cluster = FakeCluster()
-        cluster.jobs.append(copy.deepcopy(plan["jobs"]["base"]))
-        with self.assertRaisesRegex(LaunchError, "already exists"):
-            preview(plan, "base", **gates(plan, live, cluster))
-        cluster.jobs.clear()
-        checks = gates(plan, live, cluster)
-        checks["output_exists"] = lambda root: True
-        with self.assertRaisesRegex(LaunchError, "output already exists"):
-            preview(plan, "base", **checks)
-        checks = gates(plan, live, cluster)
-        checks["capacity_check"] = lambda: False
-        with self.assertRaisesRegex(LaunchError, "capacity gate"):
+        checks = gates(plan, live, group)
+        checks["budget_check"] = lambda sessions: False
+        with self.assertRaisesRegex(LaunchError, "budget gate"):
             preview(plan, "base", **checks)
 
-    def test_single_create_intent_never_replays(self):
-        plan, live = fixture()
-        cluster = FakeCluster()
+    def test_create_once_journal_prevents_duplicate_post(self):
+        plan, live, group = fixture()
+        calls = []
+
+        def post(payload):
+            calls.append(copy.deepcopy(payload))
+            return {"job_id": "synthetic-id", "name": payload["name"], "status": "pending"}
+
         with tempfile.TemporaryDirectory() as directory:
-            result = launch_once(plan, "base", **launch_gates(plan, live, cluster),
-                                 journal_dir=Path(directory))
-            self.assertEqual(result["job_uid"], "synthetic-uid")
-            self.assertEqual(len(cluster.creates), 1)
+            result = launch_once(plan, "base", post_job=post,
+                                 journal_dir=Path(directory), **gates(plan, live, group))
+            self.assertEqual(result["job_id"], "synthetic-id")
+            self.assertEqual(len(calls), 1)
             journal = next(Path(directory).glob("*.jsonl"))
-            self.assertEqual([json.loads(x)["state"] for x in journal.read_text().splitlines()],
-                             ["CREATE_INTENT_DO_NOT_RETRY", "CREATED"])
+            self.assertEqual([json.loads(line)["state"] for line in journal.read_text().splitlines()],
+                             ["POST_INTENT_DO_NOT_RETRY", "CREATED"])
             with self.assertRaisesRegex(LaunchError, "create intent already exists"):
-                launch_once(plan, "base", **launch_gates(plan, live, cluster),
-                            journal_dir=Path(directory))
-            self.assertEqual(len(cluster.creates), 1)
+                launch_once(plan, "base", post_job=post,
+                            journal_dir=Path(directory), **gates(plan, live, group))
+            self.assertEqual(len(calls), 1)
 
-    def test_atomic_capacity_reservation_is_required_before_create(self):
-        plan, live = fixture()
-        cluster = FakeCluster()
+    def test_uncertain_post_must_be_reconciled_not_retried(self):
+        plan, live, group = fixture()
+        calls = []
+
+        def post(payload):
+            calls.append(payload)
+            raise TimeoutError("response lost")
+
         with tempfile.TemporaryDirectory() as directory:
-            checks = launch_gates(plan, live, cluster)
-            checks["capacity_reserve"] = lambda identity, arm: ""
-            with self.assertRaisesRegex(LaunchError, "reservation was not acquired"):
-                launch_once(plan, "base", **checks, journal_dir=Path(directory))
-            self.assertEqual(cluster.creates, [])
+            with self.assertRaisesRegex(LaunchError, "outcome uncertain"):
+                launch_once(plan, "candidate", post_job=post,
+                            journal_dir=Path(directory), **gates(plan, live, group))
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(json.loads(next(Path(directory).glob("*.jsonl")).read_text().splitlines()[0])["state"],
+                             "POST_INTENT_DO_NOT_RETRY")
+            with self.assertRaisesRegex(LaunchError, "create intent already exists"):
+                launch_once(plan, "candidate", post_job=post,
+                            journal_dir=Path(directory), **gates(plan, live, group))
+
+    def test_preflight_drift_never_posts(self):
+        plan, live, group = fixture()
+        checks = gates(plan, live, group)
+        counter = {"n": 0}
+
+        def varying():
+            counter["n"] += 1
+            proof = _readiness_expected(plan)
+            if counter["n"] == 2:
+                proof["routes"]["base"]["gateway_routed"] = False
+            return proof
+
+        checks["readiness_get"] = varying
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(LaunchError):
+                launch_once(plan, "base", post_job=lambda payload: self.fail("POST must not run"),
+                            journal_dir=Path(directory), **checks)
             self.assertEqual(list(Path(directory).iterdir()), [])
 
 
