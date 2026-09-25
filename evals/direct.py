@@ -226,7 +226,8 @@ def _opencode(prompt: str, image: str, served_id: str, mcp_url: str, auth_header
                 "-v", f"{root / 'prompt.txt'}:/input/prompt.txt:ro", image, "bash", "-lc", command]
         env = {**os.environ, "FLEET_MCP_TOKEN": token}
         deadline = time.monotonic() + max_minutes * 60
-        process = subprocess.Popen(args, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        process = subprocess.Popen(args, env=env, stdin=subprocess.DEVNULL,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
             next_lease = time.monotonic() + 300
             while process.poll() is None:
