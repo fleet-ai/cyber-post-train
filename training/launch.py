@@ -255,8 +255,7 @@ def prepare(config_path: Path, destination: Path) -> dict:
     if full:
         rows, batch = manifest["files"]["train"]["rows"], config["recipe"]["batch_size"]
         steps = (rows + batch - 1) // batch
-        interval = config["recipe"]["checkpoint_interval"]
-        staged["recipe"]["keep_checkpoints"] = (steps + interval - 1) // interval
+        staged["recipe"]["keep_checkpoints"] = steps
     staged["model"]["lock"] = "../models/qwen38-27b-1d4bf0f2.lock.json"
     staged["model"]["weights"] = "../models/qwen38-27b-1d4bf0f2.weights.json"
     staged["data"]["manifest"] = "../data/corpus.json"
@@ -280,9 +279,7 @@ def prepare(config_path: Path, destination: Path) -> dict:
         or (full and (request["name"] != FULL_NAME or request["run_dir"] != FULL_OUTPUT
                       or plan["datasets"]["train"]["supervised_tokens"] < 20_000_000
                       or plan["corpus_manifest_sha256"] != manifest["sha256"]
-                      or plan["recipe"]["keep_checkpoints"] != (
-                          plan["recipe"]["max_steps"] + plan["recipe"]["checkpoint_interval"] - 1)
-                          // plan["recipe"]["checkpoint_interval"]))):
+                      or plan["recipe"]["keep_checkpoints"] != plan["recipe"]["max_steps"]))):
         raise ValueError("compiled 96k request failed an immutable safety/science gate")
     receipt = {
         "schema": "qwen38_96k_full_prepared_v1" if full else "qwen38_96k_debug_prepared_v1",
@@ -293,7 +290,9 @@ def prepare(config_path: Path, destination: Path) -> dict:
     }
     if full:
         receipt["supervised_tokens"] = plan["datasets"]["train"]["supervised_tokens"]
-        receipt["planned_native_checkpoints"] = plan["recipe"]["keep_checkpoints"]
+        interval = plan["recipe"]["checkpoint_interval"]
+        receipt["planned_native_checkpoints"] = (plan["recipe"]["max_steps"] + interval - 1) // interval
+        receipt["checkpoint_retention_capacity"] = plan["recipe"]["keep_checkpoints"]
     destination.mkdir(parents=True)
     if full:
         (destination / "corpus.manifest.json").write_bytes(manifest_bytes)
@@ -320,8 +319,9 @@ def prepared(directory: Path) -> tuple[dict, dict, dict]:
         if (plan.get("schema") != "cyber_sft_runtime_dense_v1"
             or plan.get("corpus_manifest_sha256") != json.loads(manifest_bytes)["sha256"]
             or plan["recipe"]["eval_interval"] != interval
-            or plan["recipe"]["keep_checkpoints"] != (plan["recipe"]["max_steps"] + interval - 1) // interval
-            or receipt.get("planned_native_checkpoints") != plan["recipe"]["keep_checkpoints"]
+            or plan["recipe"]["keep_checkpoints"] != plan["recipe"]["max_steps"]
+            or receipt.get("planned_native_checkpoints") != (plan["recipe"]["max_steps"] + interval - 1) // interval
+            or receipt.get("checkpoint_retention_capacity") != plan["recipe"]["keep_checkpoints"]
             or receipt.get("supervised_tokens") != plan["datasets"]["train"]["supervised_tokens"]):
             raise ValueError("full run evidence/retention binding changed")
     elif receipt.get("schema") != "qwen38_96k_debug_prepared_v1":

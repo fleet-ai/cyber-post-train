@@ -394,7 +394,9 @@ class FullLaunchTests(unittest.TestCase):
         self.assertEqual(plan["datasets"]["dev"]["format"],
                          "chat_messages_last_assistant_v2")
         self.assertEqual(plan["recipe"]["max_steps"], 102)
-        self.assertEqual(plan["recipe"]["keep_checkpoints"], 3)
+        self.assertEqual(plan["recipe"]["keep_checkpoints"], 102)
+        self.assertEqual(receipt["planned_native_checkpoints"], 3)
+        self.assertEqual(receipt["checkpoint_retention_capacity"], 102)
         self.assertEqual((plan["recipe"]["eval_interval"], plan["recipe"]["checkpoint_interval"]),
                          (50, 50))
         self.assertGreaterEqual(receipt["supervised_tokens"], 20_000_000)

@@ -8,8 +8,8 @@ receipt alone cannot be evaluated or used to reconstruct the weights.
 ## Simple first-study policy
 
 Freeze a finite `max_steps = N` and checkpoint interval `I`. Set
-`keep_checkpoints >= ceil(N/I)` in the immutable plan, including the final
-tail checkpoint. Set `eval_interval = I` when using a separate teacher-text
+`keep_checkpoints = N`: this prevents pruning even if the trainer saves at
+extra positive steps; it does not create extra checkpoints. Set `eval_interval = I` when using a separate teacher-text
 development set. This makes retention independent of export/evaluation speed;
 an exporter failure cannot erase an unevaluated checkpoint. Training can
 continue while CPU export and task evaluation run on separate allocations.
@@ -29,6 +29,9 @@ digests, then require all of these distinct gates:
    CE steps, `validation/step-<S:06>.json`, both matching the plan and step.
    The CPU sealer must inventory and hash all native rank files, verify the
    trainer/sampler cursor, and reject files changing during its read.
+   A final tail step is forcibly saved, but the current runtime does not
+   explicitly force teacher CE there; require its receipt or qualify a separate
+   CE job before claiming every checkpoint has teacher-loss evidence.
 2. CPU-only seal and BF16 export to *new* step-specific paths; export must
    reopen every tensor, match exact key/shape/dtype and base sidecars, preserve
    source hashes, and publish atomically with `EXPORT.json`.
