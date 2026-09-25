@@ -104,11 +104,11 @@ def test_step_flow_is_create_once_and_digest_bound(tmp_path, monkeypatch, step, 
           {"optimizer_step": step, "plan_sha256": prepared["plan_sha256"],
            "checkpoint_path": str(root / "checkpoints" / f"global_step_{step}")})
     uid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-    live = {"name": request["name"], "uid": uid, "namespace": "fleet-train-jobs",
+    live = {"name": request["name"] + "-deadbeef", "uid": uid, "namespace": "fleet-train-jobs",
             "status": "SUCCEEDED", "run_dir": str(root), "image": image}
     def no_stage(*_):
         pytest.fail("ready checkpoint must await route parity, not dispatch")
-    state = dispatch.tick(prepared_dir, uid, live_get=lambda _: live, lease=no_stage,
+    state = dispatch.tick(prepared_dir, uid, live_get=lambda *_: live, lease=no_stage,
                           duplicate_get=no_stage, capacity_get=no_stage,
                           preview_get=no_stage, submit=no_stage)
     assert state["status"] == "pending_served_route_parity_and_fleet_pass4"
@@ -180,11 +180,11 @@ def test_stage_specs_require_c1_root_alert_opt_out(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="drifted"):
         flow.validate_stage_preview(gpu, {**preview, "manifest_yaml": json.dumps(manifest)})
     uid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-    live = {"name": request["name"], "uid": uid, "namespace": "fleet-train-jobs",
+    live = {"name": request["name"] + "-deadbeef", "uid": uid, "namespace": "fleet-train-jobs",
             "status": "RUNNING", "run_dir": request["run_dir"], "image": request["image"]}
     def uncertain(*_):
         raise TimeoutError("synthetic uncertain create")
-    args = {"live_get": lambda _: live, "lease": lambda: nullcontext(),
+    args = {"live_get": lambda *_: live, "lease": lambda: nullcontext(),
             "duplicate_get": lambda *_: None,
             "capacity_get": lambda: {"active_nodes": 1, "active_gpus": 8, "queued_jobs": 0},
             "preview_get": lambda spec: spec["job"], "submit": uncertain}

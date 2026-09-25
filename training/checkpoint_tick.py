@@ -27,9 +27,9 @@ def tick(directory: Path, run_uid: str, *, live_get, lease, duplicate_get,
          capacity_get, preview_get, submit) -> dict:
     """Submit at most one stage. `submit` must create/unsuspend and return name/id."""
     plan, request, prepared = flow._prepared(directory)
-    live = live_get(request["name"])
+    live = live_get(request["name"], run_uid)
     if (not isinstance(live, dict) or not re.fullmatch(r"[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}", run_uid)
-        or live.get("name") != request["name"] or live.get("uid") != run_uid
+        or not re.fullmatch(re.escape(request["name"]) + r"-[a-f0-9]{8}", live.get("name", "")) or live.get("uid") != run_uid
         or live.get("namespace") != "fleet-train-jobs"
         or live.get("run_dir") != request["run_dir"] or live.get("image") != request["image"]):
         raise ValueError("live trainer identity differs from exact prepared run")
@@ -119,10 +119,11 @@ def tick(directory: Path, run_uid: str, *, live_get, lease, duplicate_get,
                 claim["receipt_sha256"] = flow._sha(flow._canonical(claim))
                 _once(intent, claim)
                 created = submit(spec, preview)
-                if not isinstance(created, dict) or created.get("name") != name or not created.get("id"):
+                actual = created.get("name", "") if isinstance(created, dict) else ""
+                if not re.fullmatch(re.escape(name) + (r"-[a-f0-9]{8}" if kind == "RayJob" else ""), actual) or not created.get("id"):
                     raise ValueError("stage create outcome uncertain; reconcile exact intent")
                 _once(paths["slot"] / f"{stage.upper()}-CREATED.json",
-                      {"name": name, "id": created["id"], "intent_sha256": claim["receipt_sha256"]})
+                      {"name": actual, "id": created["id"], "intent_sha256": claim["receipt_sha256"]})
             return {"status": "stage_submitted_once", "step": step, "stage": stage,
-                    "name": name, "id": created["id"]}
+                    "name": actual, "id": created["id"]}
     return pending
