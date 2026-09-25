@@ -1,0 +1,16 @@
+{
+  "schema": "qwen38_262k_capacity_length_observation_v1",
+  "observed_at_utc": "2026-09-25T07:34:10Z",
+  "source_dir": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher3k-262k-v1/capacity-v5",
+  "train_parquet_sha256": "2359c54e5c5cd756761a0f6e8c250ec8b32b87c8f84f0888252ddac932cfc5ec",
+  "manifest_file_sha256": "ace04dc552ccc3db01f66bbc4454498a5f6efef6fd6d8eb651ee3c6d86c7174a",
+  "read_only_observer_pod_uid": "eacead90-fb9f-4227-93c4-7cd176a0587a",
+  "rows": 112,
+  "max_input_tokens": 262144,
+  "rows_with_at_least_250000_input_tokens": 61,
+  "min_input_tokens_among_those_rows": 250656,
+  "input_length_equals_mask_length_equals_token_count": true,
+  "loss_mask_sum_equals_target_token_count": true,
+  "supervised_target_tokens": 3022959,
+  "limits": "Read-only data-length evidence only; no four-node optimizer step, memory fit, checkpoint reload, or corrected-corpus acceptance is claimed."
+}
