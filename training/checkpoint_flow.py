@@ -21,6 +21,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from . import lazy_overlay
+
 COMMIT = "c908d3a828d070c6b27611fc388b1e7e3b4049dd"
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = {
@@ -75,12 +77,16 @@ def _prepared(directory: Path) -> tuple[dict, dict, dict]:
     receipt = json.loads((directory / "PREPARED.json").read_text())
     plan = json.loads((directory / "plan.json").read_text())
     request = json.loads((directory / "request.json").read_text())
+    lazy = bool(plan.get("lazy_overlay_sha256"))
+    if lazy:
+        lazy_overlay.require_pin(plan)
     if (receipt.get("schema") not in {"qwen38_96k_mechanics_prepared_v1",
-                                           "qwen38_96k_full_prepared_v1"}
+                                           "qwen38_96k_full_prepared_v1", "qwen38_96k_fast_diagnostic_prepared_v1"}
+        or (receipt.get("schema") == "qwen38_96k_fast_diagnostic_prepared_v1" and not lazy)
         or receipt.get("historical_commit") != COMMIT
         or receipt.get("plan_sha256") != _sha(_canonical(plan))
         or receipt.get("request_sha256") != _sha(_canonical(request))
-        or plan.get("runtime_sha256") != SOURCES["training/sft_runtime.py"]
+        or plan.get("runtime_sha256") != (lazy_overlay.PATCHED["training/sft_runtime.py"] if lazy else SOURCES["training/sft_runtime.py"])
         or request.get("image") != plan.get("execution", {}).get("image")):
         raise ValueError("prepared run digest/source binding changed")
     return plan, request, receipt
@@ -320,6 +326,7 @@ def stage_spec(directory: Path, step: int, stage: str) -> dict:
                 if plan.get("validation_mode") == "teacher_cross_entropy":
                     _teacher_ce(plan, receipt, step)
     files = {**{name: raw.decode() for name, raw in _sources().items()},
+             **({"training/lazy_overlay.py": Path(lazy_overlay.__file__).read_text()} if plan.get("lazy_overlay_sha256") else {}),
              "training/checkpoint_flow.py": Path(__file__).read_text(),
              "prepared/plan.json": (directory / "plan.json").read_text(),
              "prepared/request.json": (directory / "request.json").read_text(),

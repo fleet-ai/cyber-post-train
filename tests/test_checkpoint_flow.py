@@ -128,11 +128,16 @@ def test_tampered_cpu_gate_rejects_ready(tmp_path):
         flow._receipt(path)
 
 
-def test_mechanics_checkpoint_profile_is_accepted_without_teacher_ce(tmp_path):
+@pytest.mark.parametrize("lazy", [False, True])
+def test_mechanics_checkpoint_profile_is_accepted_without_teacher_ce(tmp_path, lazy):
     plan = {"runtime_sha256": flow.SOURCES["training/sft_runtime.py"],
             "execution": {"image": "image@sha256:" + "a" * 64}}
+    if lazy:
+        plan.update({"runtime_sha256": flow.lazy_overlay.PATCHED["training/sft_runtime.py"],
+                     "lazy_overlay_sha256": flow._sha(Path(flow.lazy_overlay.__file__).read_bytes()),
+                     "datasets": {"train": {"storage_layout": flow.lazy_overlay.LAYOUT}}})
     request = {"image": plan["execution"]["image"]}
-    prepared = {"schema": "qwen38_96k_mechanics_prepared_v1",
+    prepared = {"schema": "qwen38_96k_fast_diagnostic_prepared_v1" if lazy else "qwen38_96k_mechanics_prepared_v1",
                 "historical_commit": flow.COMMIT,
                 "plan_sha256": flow._sha(flow._canonical(plan)),
                 "request_sha256": flow._sha(flow._canonical(request))}
@@ -140,6 +145,11 @@ def test_mechanics_checkpoint_profile_is_accepted_without_teacher_ce(tmp_path):
                         ("PREPARED.json", prepared)):
         (tmp_path / name).write_text(json.dumps(value))
     assert flow._prepared(tmp_path) == (plan, request, prepared)
+    if lazy:
+        plan["lazy_overlay_sha256"] = "0" * 64
+        (tmp_path / "plan.json").write_text(json.dumps(plan))
+        with pytest.raises(ValueError, match="lazy runtime"):
+            flow._prepared(tmp_path)
 
 
 def test_stage_specs_require_c1_root_alert_opt_out(tmp_path, monkeypatch):

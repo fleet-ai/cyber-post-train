@@ -1,32 +1,15 @@
 # Qwen3.8 cyber SFT study — live gates (2026-09-25)
 
-Goal: measured lift on new Fleet blackbox tasks. Historical 96k run
-`chris-q38-t3k96-b8-v3-e7d5c0f8` proves mechanics, **not** this independent
-corrected-data study. See [HOLDOUT.md](HOLDOUT.md) for source and split evidence.
-Its checkpoints cannot satisfy this study: a new 96k arm needs separate data,
-name, output, saves, and matched held-out evaluations.
-Kueue auto-unsuspends admitted CPU Jobs. For SFS staging, `/mnt/sfs/jobs`
-is root-owned (0755): preview a zero-GPU, alert-off root container, transfer
-only sealed data, verify remote digests, then release the exact staging Job.
+Goal: measured lift on new Fleet blackbox tasks. Historical 96k run `chris-q38-t3k96-b8-v3-e7d5c0f8` proves mechanics, **not** this independent corrected-data study. See [HOLDOUT.md](HOLDOUT.md) for source and split evidence. Its checkpoints cannot satisfy this study: a new 96k arm needs separate data, name, output, saves, and matched held-out evaluations.
+Kueue auto-unsuspends admitted CPU Jobs. For SFS staging, `/mnt/sfs/jobs` is root-owned (0755): preview a zero-GPU, alert-off root container, transfer only sealed data, verify remote digests, then release the exact staging Job.
 
 ## Why the old run cannot answer the question
 
-Old packing clipped **11,794/14,693** rows, often losing task/tool anchors;
-tools differed from OpenCode eval. Of 149 prefix-salvaged sessions, 148 lost
-the final report. Step-1000 mixed output-limit failures and leaked families:
-**not defensible lift evidence**. New data must retain private originals,
-match target anchors/tools, preserve complete early/middle/late rounds without
-duplicate targets or submit bias, freeze roles, and verify native masks.
+Old packing clipped **11,794/14,693** rows, often losing task/tool anchors; tools differed from OpenCode eval. Of 149 prefix-salvaged sessions, 148 lost the final report. Step-1000 mixed output-limit failures and leaked families: **not defensible lift evidence**. New data must retain private originals, match target anchors/tools, preserve complete early/middle/late rounds without duplicate targets or submit bias, freeze roles, and verify native masks.
 
 ## Two held-out measurements
 
-Teacher cross-entropy on unseen successes diagnoses optimization, **not** exploit
-ability. Matched base/checkpoint Fleet pass@4 on runnable versions measures
-ability: select on DEV, confirm once on final, exclude infrastructure failures.
-The old paired structured-window DEV converter was unused and incompatible with
-the corrected dense TRAIN path. `training/teacher_dev.py` now builds a disjoint,
-target-compatible DEV panel offline, but deliberately rejects provisional
-source evidence; no trusted teacher cross-entropy panel exists yet.
+Teacher cross-entropy on unseen successes diagnoses optimization, **not** exploit ability. Matched base/checkpoint Fleet pass@4 on runnable versions measures ability: select on DEV, confirm once on final, exclude infrastructure failures. The old paired structured-window DEV converter was unused and incompatible with the corrected dense TRAIN path. `training/teacher_dev.py` now builds a disjoint, target-compatible DEV panel offline, but deliberately rejects provisional source evidence; no trusted teacher cross-entropy panel exists yet.
 
 ## Source-to-OpenCode compatibility
 
