@@ -22,16 +22,10 @@ Excluding Teacher3K overlaps and protected families left **408 candidate
 versions / 311 families / 14 apps**. Metadata is not runnability;
 the frozen roster was a read-only census, not an environment check.
 
-Production now exposes durable create-request claims. One rank-ordered,
-model-free production check passed startup, tools, negative grading and exact
-cleanup on September 25. The second stopped cleanly after an operational
-error before tool verification; its cause is not yet attributable to the task.
-Neither proves positive solvability, so no task was promoted to a runnable
-holdout. Registry/Lanes supplied no exact positive record. A sealed,
-DEV-family-first 16-cell roster is frozen. Its manifest authorizes no bulk
-launch; after the first two cells' exact cleanup audits, the runtime checker
-permits the 16 frozen DEV representatives one at a time as bounded, model-free
-diagnostics after fresh live preflight.
+Production now exposes durable create-request claims. An initial model-free
+check passed startup/tools/negative grading/cleanup; another stopped after an
+operational error. Neither proved positive solvability. A sealed 16-cell DEV
+roster permits one-at-a-time diagnostics, not a bulk launch.
 A read-only Registry search found no exact positive binding: 28 matching
 atom-solvability runs (none positive), 29 atom-QA runs (12 green but not
 solvability), and 54 positive-labelled mATG runs (zero candidate IDs).
