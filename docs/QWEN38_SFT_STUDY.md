@@ -51,6 +51,24 @@ cannot reliably resolve a modest 10-point lift. Expand the runnable,
 lineage-clean roster from the unreviewed pool before a final significance
 claim; verify startup, tools, verifier, outcome, and cleanup on exact versions.
 
+The 2026-09-25 read-only discovery found 671 current, not-yet-analyzed
+versions on task keys absent from Teacher3K. Exact-version metadata checks
+passed for all 671; shared-atom lineage removes 238, leaving 433 candidate
+versions in 327 independent components across 13 apps. **These are candidates,
+not 327 qualified runnable tasks.** Model-free startup, tool, verifier,
+negative-control, and cleanup checks must still be completed before assigning
+any to the outcome holdout.
+
+An additional source-compatibility gate is open. In a stratified sample of
+198 selected teacher sessions, 193 task/user messages explicitly referenced
+older bare tool names, while none of the system messages did. All 198 full
+transcript digests matched their selection records. A blanket exclusion would
+discard nearly the whole corpus; treating those prompts as identical to the
+target OpenCode model request would be equally unjustified. Preserve the
+original transcript, capture the actual target model-facing request without
+private content, compare exact task/version prompt identities, and admit only
+a reviewed lossless transform or a demonstrated equivalent target contract.
+
 ## Parallel execution lanes
 
 - **96k fast lane:** use the proven one-node/eight-GPU full-weight recipe as a
