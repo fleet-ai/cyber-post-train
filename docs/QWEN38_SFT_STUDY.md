@@ -51,6 +51,16 @@ Private sealed diagnostic: `/private/tmp/cpt-q38-live-qwen-wire.YKisC9/LIVE_WIRE
 This proves current target first-request wire only, **not** the historical
 teacher tool-result renderer or corpus acceptance; `training_ready` stays false.
 
+A read-only check of one exact strict TRAIN session found 53 stored tool-result
+strings but neither raw MCP response blocks nor a separately captured next
+model-facing tool message. Its harness metadata lacks a renderer binary/image
+digest, and its instance lacks environment-version/image pins; exact session
+and instance detail readbacks returned 404. A result string alone cannot prove
+Grok-to-OpenCode rendering equivalence. The 943 strict TRAIN/27 DEV historical
+sessions and one-block salvage remain provisional. Admit none as scientific
+training data without immutable renderer and same-call wire evidence; otherwise
+collect fresh verifier-backed OpenCode teacher successes on TRAIN families.
+
 ## Parallel execution lanes
 
 - **96k independent fast lane:** one node/eight GPUs; corrected family-disjoint
