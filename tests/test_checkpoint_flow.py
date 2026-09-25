@@ -186,6 +186,9 @@ def test_stage_specs_require_c1_root_alert_opt_out(tmp_path, monkeypatch):
         flow.stage_spec(tmp_path, 16, "export")
     monkeypatch.setattr(flow, "_seal", lambda *_: ({"receipt_sha256": "0" * 64}, "1" * 64))
     monkeypatch.setattr(flow, "_export", lambda *_: ({"receipt_sha256": "2" * 64}, "3" * 64))
+    export = flow.stage_spec(tmp_path, 16, "export")["job"]
+    assert export["spec"]["template"]["spec"]["containers"][0]["resources"]["requests"] == {"cpu": "8", "memory": "40Gi"}
+    assert flow.validate_stage_preview({"job": export}, export)["kind"] == "Job"
     gpu = flow.stage_spec(tmp_path, 16, "gpu")
     assert gpu["requires_rendered_root_annotation"] == {"fleet.ai/failure-alerts": "off"}
     assert gpu["request"]["gpus_per_worker"] == 1
