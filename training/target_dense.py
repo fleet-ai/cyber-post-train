@@ -41,6 +41,62 @@ def audit(source_dir: Path) -> dict:
     if any(p.is_symlink() or not p.is_file() or _file_sha(p) != receipt.get("files", {}).get(key)
            for key, p in paths.items()):
         raise ValueError("bound private source file differs")
+    request_path = source_dir / "REQUEST.json"
+    if (request_path.is_symlink() or not request_path.is_file()
+            or _file_sha(request_path) != receipt.get("files", {}).get("request")):
+        raise ValueError("bound source request differs")
+    request = json.loads(request_path.read_text())
+    live_binding = request.get("live_model_request_attestation")
+    if (request.get("sha256") != source.digest({k: v for k, v in request.items() if k != "sha256"})
+            or request["sha256"] != receipt.get("request_sha256")
+            or receipt.get("input_sha256", {}).get("live_model_request_attestation")
+            != receipt.get("files", {}).get("live_model_request_attestation")
+            or not isinstance(live_binding, dict)
+            or live_binding.get("sha256") != receipt.get("files", {}).get("live_model_request_attestation")):
+        raise ValueError("live served-request binding differs")
+    live = source._bound_file(live_binding)
+    source._sealed(live, "cyber_qwen_live_model_request_attestation_v1")
+    calls, bindings = live.get("requests"), request.get("target_anchors")
+    model, proof = live.get("model"), live.get("serving_proof")
+    roster_path = source_dir / "family-roster.json"
+    if (roster_path.is_symlink() or not roster_path.is_file()
+            or _file_sha(roster_path) != receipt.get("files", {}).get("roster")):
+        raise ValueError("bound family roster differs")
+    roster = json.loads(roster_path.read_text())
+    capture = json.loads(paths["capture"].read_text())
+    if (not isinstance(calls, list) or not isinstance(bindings, list) or len(calls) != len(bindings)
+            or len(calls) < source.MIN_ANCHOR_PROBES or live.get("harness") != source.HARNESS
+            or not isinstance(model, dict) or model.get("repo") != "Qwen/Qwen3.8-27B"
+            or model.get("revision") != request.get("model_revision")
+            or not source._sha(model.get("image_digest"))
+            or any(not model.get(key) for key in ("served_alias", "inference_model_uid", "pod_uid"))
+            or live.get("fleet", {}).get("team_id") != source.TEAM
+            or live.get("tool_capture_file_sha256") != receipt["input_sha256"]["tool_capture"]
+            or live.get("fleet", {}).get("model_facing_tools_sha256") != source.TOOL_DIGEST
+            or not isinstance(proof, dict) or proof.get("kind") != "post_fixed_proxy_live_served_request"
+            or proof.get("runner_cwd") != "/workspace"
+            or proof.get("served_alias") != model["served_alias"]
+            or not source._sha(proof.get("fixed_proxy_image_sha256"))
+            or len(proof.get("request_ids", [])) != len(calls)
+            or len(set(proof["request_ids"])) != len(calls)
+            or receipt.get("live_attested_train_versions") != [call.get("task_version_id") for call in calls]
+            or receipt.get("live_wire_review") != "pending_independent_readback"
+            or receipt.get("tool_result_equivalence") != "unverified"):
+        raise ValueError("live served-request evidence differs")
+    for call, binding in zip(calls, bindings):
+        anchor = source._bound_file(binding)
+        source._sealed(anchor, "cyber_opencode_private_target_anchor_v1")
+        if (call.get("target_anchor_file_sha256") != binding["sha256"]
+                or call.get("task_version_id") != anchor.get("task_version_id")
+                or roster.get(call["task_version_id"], {}).get("split") != "train"
+                or call.get("request_envelope_sha256") != anchor.get("request_envelope_sha256")
+                or call.get("system_sha256") != source.text_digest(anchor["messages"][0]["content"])
+                or call.get("user_sha256") != source.text_digest(anchor["messages"][1]["content"])
+                or call.get("model_facing_tools_sha256") != source.TOOL_DIGEST
+                or not source._sha(call.get("response_sha256"))):
+            raise ValueError("live TRAIN-version anchor differs")
+    if calls[0]["request_envelope_sha256"] != capture.get("request_envelope_sha256"):
+        raise ValueError("live first-request capture differs")
     raw_rows, target, proof_rows = (_rows(paths[key]) for key in
                                     ("raw_sources", "dense_target_normalized", "dense_success_evidence"))
     raw = {row["selection"]["session_id"]: row for row in raw_rows}

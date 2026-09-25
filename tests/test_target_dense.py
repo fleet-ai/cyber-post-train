@@ -111,8 +111,18 @@ def test_new_dense_wrapper_retains_old_mechanics_but_is_not_train_ready():
         assert published["trainer_ready"] is False
         assert checked["method_sha256"] == published["method_sha256"]
         assert checked["trainer_ready"] is False
+        live_path = Path(json.loads((private / "REQUEST.json").read_text())["live_model_request_attestation"]["path"])
+        live_bytes = live_path.read_bytes()
+        live_path.write_bytes(live_bytes + b"\n")
         with (patch.object(source, "TOOL_DIGEST", source.digest(fixture.tools, ascii=True)),
               patch.object(source, "TARGET_SYSTEM_DIGEST", source.text_digest("Target system.")),
+              patch.object(source, "MIN_ANCHOR_PROBES", 1),
+              pytest.raises(source.SourceError, match="bound input is absent or changed")):
+            audit(private)
+        live_path.write_bytes(live_bytes)
+        with (patch.object(source, "TOOL_DIGEST", source.digest(fixture.tools, ascii=True)),
+              patch.object(source, "TARGET_SYSTEM_DIGEST", source.text_digest("Target system.")),
+              patch.object(source, "MIN_ANCHOR_PROBES", 1),
               pytest.raises(FileExistsError, match="immutable output already exists")):
             build(request_file, private, destination)
         original = private / "raw-sources.private.jsonl"
