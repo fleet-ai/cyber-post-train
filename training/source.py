@@ -341,7 +341,7 @@ def _validate_envelope(row: dict, summary: dict, envelope: dict) -> None:
             or harness.get("mode") != row.get("harness_mode")
             or digest(harness) != row["harness_sha256"]
             or summary.get("verifier_execution") != verifier
-            or summary.get("status") not in {"completed", "succeeded", "success"}
+            or summary.get("status") != "completed"
             or not isinstance(verifier.get("id"), str) or not verifier["id"]
             or verifier.get("success") is not True or type(score) not in {int, float}
             or not math.isfinite(score) or score < 1):
@@ -617,7 +617,7 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
                     or envelope.get("harness", {}).get("mode") != item.get("harness_mode")
                     or digest(envelope.get("harness")) != item.get("harness_sha256")
                     or summary.get("verifier_execution") != verifier
-                    or summary.get("status") not in {"completed", "succeeded", "success"}
+                    or summary.get("status") != "completed"
                     or not isinstance(verifier.get("id"), str) or not verifier["id"]
                     or verifier.get("success") is not True or type(score) not in {int, float}
                     or not math.isfinite(score) or score < 1):
