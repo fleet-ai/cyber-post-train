@@ -670,6 +670,7 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
         raise SourceError("output must be a new absolute private directory")
     output.mkdir(mode=0o700, parents=False, exist_ok=False)
     os.chmod(output, 0o700)
+    request_file_sha256 = _write(output / "REQUEST.json", request)
     records, proofs, target_records, target_proofs, raw_sources = [], {}, [], [], []
     quarantine, exclusions, summaries = [], Counter(), {}
     probe_versions, old_anchor_mentions = set(), 0
@@ -823,7 +824,8 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
             target_proofs.append(old_proof)
         if len(probe_versions) < MIN_ANCHOR_PROBES:
             raise SourceError("exact-version target-anchor probes were not bound to source")
-        files = {"records": _write(output / "records.jsonl", records, lines=True),
+        files = {"request": request_file_sha256,
+                 "records": _write(output / "records.jsonl", records, lines=True),
                  "quarantine": _write(output / "quarantine.private.jsonl", quarantine, lines=True),
                  "raw_sources": _write(output / "raw-sources.private.jsonl", raw_sources, lines=True),
                  "evidence": _write(output / "success-evidence.json", proofs),
