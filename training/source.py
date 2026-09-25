@@ -597,19 +597,11 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
             raise SourceError("live served-Qwen request does not bind exact TRAIN anchors")
     if calls[0]["request_envelope_sha256"] != capture["request_envelope_sha256"]:
         raise SourceError("live outbound request and tool capture differ")
-    selected, seen = [], set()
-    for item in selection:
-        if not isinstance(item, dict):
-            raise SourceError("source selection row is malformed")
-        sid, key, version = (item.get(name) for name in ("session_id", "task_key", "task_version_id"))
-        if (not all(isinstance(x, str) and x for x in (sid, key, version, item.get("model_id")))
-                or not _sha(item.get("trace_sha256")) or not _sha(item.get("acceptance_sha256"))
-                or not isinstance(item.get("group_id"), str) or not item["group_id"]
-                or sid in seen or
-                roster.get(version, {}).get("task_key") != key):
+    selected = selection  # _source_rows already checked identity, digests, and uniqueness.
+    for item in selected:
+        if (not isinstance(item.get("group_id"), str) or not item["group_id"]
+                or roster.get(item["task_version_id"], {}).get("task_key") != item["task_key"]):
             raise SourceError("source selection lacks exact reviewed identity")
-        seen.add(sid)
-        selected.append(item)
     account = get("/v1/account")
     if account.get("team_id") != TEAM or account.get("team_name") != "fleet":
         raise SourceError("Fleet account is not the authorized team")
