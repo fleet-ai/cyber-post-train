@@ -5,6 +5,7 @@ import os
 import stat
 import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
@@ -63,6 +64,13 @@ class SourceTests(unittest.TestCase):
                                          {"role": "user", "content": '"Find the issue."'}]})
         self.get_calls = []
 
+    def patched_source(self):
+        stack = ExitStack()
+        stack.enter_context(patch.object(source, "TOOL_DIGEST", source.digest(self.tools, ascii=True)))
+        stack.enter_context(patch.object(source, "TARGET_SYSTEM_DIGEST", source.text_digest("Target system.")))
+        stack.enter_context(patch.object(source, "MIN_ANCHOR_PROBES", 1))
+        return stack
+
     def _file(self, name, value, *, jsonl=False):
         path = self.root / name
         path.write_text(("\n".join(json.dumps(row) for row in value) + "\n") if jsonl else json.dumps(value))
@@ -120,9 +128,7 @@ class SourceTests(unittest.TestCase):
         self.selection["trace_sha256"] = source.digest(self.envelope)
         request = self.request()
         self.get_calls.clear()
-        with (patch.object(source, "TOOL_DIGEST", source.digest(self.tools, ascii=True)),
-              patch.object(source, "TARGET_SYSTEM_DIGEST", source.text_digest("Target system.")),
-              patch.object(source, "MIN_ANCHOR_PROBES", 1)):
+        with self.patched_source():
             receipt = source.fetch(request, get=self.get)
         self.assertFalse(any(path.endswith("/transcript") for path in self.get_calls))
         directory = self.root / "private-output"
@@ -172,9 +178,7 @@ class SourceTests(unittest.TestCase):
         self.anchor = seal({**{k: v for k, v in self.anchor.items() if k != "sha256"},
                             "messages": [{"role": "system", "content": "Target system."},
                                          {"role": "user", "content": '"Call the bash tool."'}]})
-        with (patch.object(source, "TOOL_DIGEST", source.digest(self.tools, ascii=True)),
-              patch.object(source, "TARGET_SYSTEM_DIGEST", source.text_digest("Target system.")),
-              patch.object(source, "MIN_ANCHOR_PROBES", 1)):
+        with self.patched_source():
             receipt = source.fetch(self.request(), get=self.get)
         self.assertEqual(receipt["retained_sessions"], 1)
         self.assertFalse(receipt["training_ready"])
@@ -187,9 +191,7 @@ class SourceTests(unittest.TestCase):
         self.capture = seal({k: v for k, v in self.capture.items() if k != "sha256"})
         request = self.request()
         self.get_calls.clear()
-        with (patch.object(source, "TOOL_DIGEST", source.digest(self.tools, ascii=True)),
-              patch.object(source, "TARGET_SYSTEM_DIGEST", source.text_digest("Target system.")),
-              patch.object(source, "MIN_ANCHOR_PROBES", 1)):
+        with self.patched_source():
             with self.assertRaises(source.SourceError):
                 source.fetch(request, get=self.get)
         self.assertFalse(self.get_calls)
@@ -204,9 +206,7 @@ class SourceTests(unittest.TestCase):
         request["live_model_request_attestation"]["sha256"] = source.file_digest(live_path)
         request = seal({k: v for k, v in request.items() if k != "sha256"})
         self.get_calls.clear()
-        with (patch.object(source, "TOOL_DIGEST", source.digest(self.tools, ascii=True)),
-              patch.object(source, "TARGET_SYSTEM_DIGEST", source.text_digest("Target system.")),
-              patch.object(source, "MIN_ANCHOR_PROBES", 1)):
+        with self.patched_source():
             with self.assertRaises(source.SourceError):
                 source.fetch(request, get=self.get)
         self.assertFalse(self.get_calls)
@@ -219,9 +219,7 @@ class SourceTests(unittest.TestCase):
             {"role": "tool", "tool_call_id": "discovery-1", "content": "metadata"},
         ]
         self.selection["trace_sha256"] = source.digest(self.envelope)
-        with (patch.object(source, "TOOL_DIGEST", source.digest(self.tools, ascii=True)),
-              patch.object(source, "TARGET_SYSTEM_DIGEST", source.text_digest("Target system.")),
-              patch.object(source, "MIN_ANCHOR_PROBES", 1)):
+        with self.patched_source():
             receipt = source.fetch(self.request(), get=self.get)
         self.assertEqual(receipt["retained_sessions"], 0)
         self.assertEqual(receipt["exact_discovery_elided_sessions"], 0)
@@ -230,9 +228,7 @@ class SourceTests(unittest.TestCase):
 
     def test_changed_authoritative_verifier_has_no_completion_receipt(self):
         self.summary["verifier_execution"] = {**self.verifier, "score": 0}
-        with (patch.object(source, "TOOL_DIGEST", source.digest(self.tools, ascii=True)),
-              patch.object(source, "TARGET_SYSTEM_DIGEST", source.text_digest("Target system.")),
-              patch.object(source, "MIN_ANCHOR_PROBES", 1)):
+        with self.patched_source():
             with self.assertRaises(source.SourceError):
                 source.fetch(self.request(), get=self.get)
         self.assertFalse((self.root / "private-output" / "RECEIPT.json").exists())
@@ -280,9 +276,7 @@ class SourceTests(unittest.TestCase):
     def test_unproven_tool_result_order_is_quarantined(self):
         self.messages[3], self.messages[2] = self.messages[2], self.messages[3]
         self.selection["trace_sha256"] = source.digest(self.envelope)
-        with (patch.object(source, "TOOL_DIGEST", source.digest(self.tools, ascii=True)),
-              patch.object(source, "TARGET_SYSTEM_DIGEST", source.text_digest("Target system.")),
-              patch.object(source, "MIN_ANCHOR_PROBES", 1)):
+        with self.patched_source():
             receipt = source.fetch(self.request(), get=self.get)
         self.assertEqual(receipt["retained_sessions"], 0)
         self.assertEqual(receipt["excluded_sessions"],
@@ -291,9 +285,7 @@ class SourceTests(unittest.TestCase):
     def test_non_text_tool_result_is_not_laundered_into_target(self):
         self.messages[3]["content"] = {"stdout": "ok"}
         self.selection["trace_sha256"] = source.digest(self.envelope)
-        with (patch.object(source, "TOOL_DIGEST", source.digest(self.tools, ascii=True)),
-              patch.object(source, "TARGET_SYSTEM_DIGEST", source.text_digest("Target system.")),
-              patch.object(source, "MIN_ANCHOR_PROBES", 1)):
+        with self.patched_source():
             receipt = source.fetch(self.request(), get=self.get)
         self.assertEqual(receipt["retained_sessions"], 0)
         self.assertEqual(receipt["excluded_sessions"],
@@ -303,9 +295,7 @@ class SourceTests(unittest.TestCase):
         self.messages[3]["content"] = {"_meta": None, "content": [{"type": "text", "text": "ok"}],
                                        "structuredContent": None}
         self.selection["trace_sha256"] = source.digest(self.envelope)
-        with (patch.object(source, "TOOL_DIGEST", source.digest(self.tools, ascii=True)),
-              patch.object(source, "TARGET_SYSTEM_DIGEST", source.text_digest("Target system.")),
-              patch.object(source, "MIN_ANCHOR_PROBES", 1)):
+        with self.patched_source():
             receipt = source.fetch(self.request(), get=self.get)
         row = json.loads((self.root / "private-output" / "dense-target-anchored.jsonl").read_text())
         operation = row["tool_transform"]["operations"][0]
@@ -326,9 +316,7 @@ class SourceTests(unittest.TestCase):
                                              "tool_input": {"script": "true"}}}
         self.messages[3]["content"] = json.dumps({"OkayOutput": "ok"})
         self.selection["trace_sha256"] = source.digest(self.envelope)
-        with (patch.object(source, "TOOL_DIGEST", source.digest(self.tools, ascii=True)),
-              patch.object(source, "TARGET_SYSTEM_DIGEST", source.text_digest("Target system.")),
-              patch.object(source, "MIN_ANCHOR_PROBES", 1)):
+        with self.patched_source():
             receipt = source.fetch(self.request(), get=self.get)
         self.assertEqual(receipt["retained_sessions"], 0)
         self.assertEqual(receipt["excluded_sessions"],
@@ -338,9 +326,7 @@ class SourceTests(unittest.TestCase):
         self.messages[2]["tool_calls"][0]["function"]["name"] = "fleet_bash"
         self.messages[4]["tool_calls"][0]["function"]["name"] = "fleet_submit_report"
         self.selection["trace_sha256"] = source.digest(self.envelope)
-        with (patch.object(source, "TOOL_DIGEST", source.digest(self.tools, ascii=True)),
-              patch.object(source, "TARGET_SYSTEM_DIGEST", source.text_digest("Target system.")),
-              patch.object(source, "MIN_ANCHOR_PROBES", 1)):
+        with self.patched_source():
             receipt = source.fetch(self.request(), get=self.get)
         self.assertEqual(receipt["retained_sessions"], 1)
 

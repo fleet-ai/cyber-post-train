@@ -18,6 +18,24 @@ from training.dense_bridge import (COMMIT, SOURCES, NATIVE_HELPER_SHA, _digest, 
 
 
 class DenseBridgeTest(unittest.TestCase):
+    def stage_fixture(self, root, *, target_names=False):
+        builder_sha = stage_historical(root, target_names=target_names)
+        repository = Path(__file__).resolve().parents[1]
+        assets = {
+            "tests/test_message_aligned_teacher_corpus.py":
+                "62d1e7e384361296b837c63665b8e7a2dcedb10320b8256a528d2143a38cebbe",
+            "configs/data/qwen38-rl-filtered-canary-tool-catalog-v1.json":
+                "e4a3c4fb5b5c34cdaf64ec568eb31fcc0d55a63cc0a134808db348c65d7b6858",
+        }
+        for relative, expected in assets.items():
+            payload = subprocess.run(["git", "-C", str(repository), "show", f"{COMMIT}:{relative}"],
+                                     capture_output=True, check=True).stdout
+            self.assertEqual(hashlib.sha256(payload).hexdigest(), expected)
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(payload)
+        return builder_sha
+
     def test_target_only_patch_groups_adjacent_tool_results(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -92,25 +110,9 @@ class DenseBridgeTest(unittest.TestCase):
     def test_frozen_builder_creates_synthetic_dense_parquet(self):
         # Re-run the historical packer's own end-to-end synthetic fixture from
         # the same pinned Git object, with no private data or tokenizer access.
-        assets = {
-            "tests/test_message_aligned_teacher_corpus.py":
-                "62d1e7e384361296b837c63665b8e7a2dcedb10320b8256a528d2143a38cebbe",
-            "configs/data/qwen38-rl-filtered-canary-tool-catalog-v1.json":
-                "e4a3c4fb5b5c34cdaf64ec568eb31fcc0d55a63cc0a134808db348c65d7b6858",
-        }
-        repository = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            stage_historical(root)
-            for relative, expected in assets.items():
-                source = subprocess.run(
-                    ["git", "-C", str(repository), "show", f"{COMMIT}:{relative}"],
-                    capture_output=True, check=True,
-                ).stdout
-                self.assertEqual(hashlib.sha256(source).hexdigest(), expected)
-                destination = root / relative
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                destination.write_bytes(source)
+            self.stage_fixture(root)
             result = subprocess.run(
                 [sys.executable, "-m", "pytest", "-q",
                  "tests/test_message_aligned_teacher_corpus.py::test_create_once_builder_emits_new_algorithm_and_preserves_dense_format"],
@@ -119,17 +121,9 @@ class DenseBridgeTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout.decode(errors="replace")[-1000:])
 
     def test_new_method_mechanics_patch_accepts_exact_target_tool_names(self):
-        repository = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            self.assertEqual(stage_historical(root, target_names=True), TARGET_BUILDER_SHA)
-            for relative in ("tests/test_message_aligned_teacher_corpus.py",
-                             "configs/data/qwen38-rl-filtered-canary-tool-catalog-v1.json"):
-                payload = subprocess.run(["git", "-C", str(repository), "show", f"{COMMIT}:{relative}"],
-                                         capture_output=True, check=True).stdout
-                path = root / relative
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(payload)
+            self.assertEqual(self.stage_fixture(root, target_names=True), TARGET_BUILDER_SHA)
             script = ("import runpy; from pathlib import Path; "
                       "x=runpy.run_path('tests/test_message_aligned_teacher_corpus.py'); "
                       "r=x['_record'](); "
