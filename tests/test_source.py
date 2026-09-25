@@ -96,6 +96,7 @@ class SourceTests(unittest.TestCase):
 
     def test_private_success_and_corpus_interface(self):
         self.messages[2]["thinking"] = "HIDDEN_REASONING_SENTINEL"
+        self.messages[2]["analysis"] = "HIDDEN_ANALYSIS_SENTINEL"
         self.selection["trace_sha256"] = source.digest(self.envelope)
         request = self.request()
         self.get_calls.clear()
@@ -127,9 +128,10 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(record["anchor_transform"]["target_user_sha256"],
                          source.text_digest('"Find the issue."'))
         self.assertNotIn("HIDDEN_REASONING_SENTINEL", json.dumps(record))
+        self.assertNotIn("HIDDEN_ANALYSIS_SENTINEL", json.dumps(record))
         raw = json.loads((directory / "raw-sources.private.jsonl").read_text())
         self.assertEqual(raw["transcript_envelope"], self.envelope)
-        self.assertEqual(record["visibility_transform"]["hidden_reasoning_fields_removed"], 1)
+        self.assertEqual(record["visibility_transform"]["hidden_reasoning_fields_removed"], 2)
         self.assertEqual(proof["source_sha256"], corpus_sha256(record))
         self.assertEqual(proof["report_call_id"], "call-2")
         self.assertEqual(receipt["files"]["records"], source.file_digest(directory / "records.jsonl"))
@@ -281,6 +283,16 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(receipt["retained_sessions"], 0)
         self.assertEqual(receipt["excluded_sessions"],
                          {"tool_argument_or_result_contract_mismatch": 1})
+
+    def test_exact_target_tool_names_are_accepted_without_alias_guess(self):
+        self.messages[2]["tool_calls"][0]["function"]["name"] = "fleet_bash"
+        self.messages[4]["tool_calls"][0]["function"]["name"] = "fleet_submit_report"
+        self.selection["trace_sha256"] = source.digest(self.envelope)
+        with (patch.object(source, "TOOL_DIGEST", source.digest(self.tools, ascii=True)),
+              patch.object(source, "TARGET_SYSTEM_DIGEST", source.text_digest("Target system.")),
+              patch.object(source, "MIN_ANCHOR_PROBES", 1)):
+            receipt = source.fetch(self.request(), get=self.get)
+        self.assertEqual(receipt["retained_sessions"], 1)
 
 
 if __name__ == "__main__":

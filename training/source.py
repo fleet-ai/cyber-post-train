@@ -34,6 +34,7 @@ HARNESS = {"name": "opencode", "version": "1.18.27", "release_asset_sha256":
            "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
            "mcp_server": "fleet"}
 ALIASES = {"bash": "fleet_bash", "submit_report": "fleet_submit_report",
+           "fleet_bash": "fleet_bash", "fleet_submit_report": "fleet_submit_report",
            "fleet_environment__bash": "fleet_bash",
            "fleet_environment__fleet_environment__bash": "fleet_bash",
            "mcp__fleet_environment__bash": "fleet_bash",
@@ -372,7 +373,7 @@ def _training_messages(messages: list[dict]) -> list[dict] | None:
         if not isinstance(message, dict) or message.get("role") not in {"system", "user", "assistant", "tool"}:
             return None
         converted = {key: value for key, value in message.items()
-                     if key not in {"thinking", "reasoning", "reasoning_content"}}
+                     if key not in {"thinking", "reasoning", "reasoning_content", "analysis"}}
         if index < 2:
             text = _text_content(message.get("content"))
             if not text:
@@ -778,7 +779,7 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
                           "visible_messages_sha256": digest(visible_messages),
                           "hidden_reasoning_fields_removed": sum(
                               field in message for message in messages if isinstance(message, dict)
-                              for field in ("thinking", "reasoning", "reasoning_content"))}
+                              for field in ("thinking", "reasoning", "reasoning_content", "analysis"))}
             visibility["sha256"] = digest(visibility)
             target_messages[0] = {**target_messages[0], "content": target_system}
             target_messages[1] = {**target_messages[1], "content": target_user}
