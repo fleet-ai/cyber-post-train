@@ -289,6 +289,17 @@ def stage_spec(directory: Path, step: int, stage: str) -> dict:
         or request.get("priority_class") != "c1"
         or request.get("failureAlerts") is not False):
         raise ValueError("prepared run binding/cluster policy differs")
+    destination = paths["model" if stage == "export" else stage]
+    if destination.exists() or destination.is_symlink():
+        raise ValueError("create-once checkpoint output already exists")
+    if stage == "seal":
+        source = _receipt(Path(plan["output_root"]) / "checkpoint_receipts" /
+                          f"step-{step:06d}.json")
+        if (source.get("plan_sha256") != receipt["plan_sha256"]
+            or source.get("optimizer_step") != step
+            or source.get("checkpoint_path") != str(Path(plan["output_root"]) /
+                                                    "checkpoints" / f"global_step_{step}")):
+            raise ValueError("saved source checkpoint receipt differs from prepared run")
     if stage != "seal":
         sealed, seal_sha = _seal(paths, plan, step)
         if stage != "export":
@@ -369,16 +380,76 @@ runpy.run_module('training.checkpoint_flow',run_name='__main__')
 
 def validate_stage_preview(spec: dict, server_preview: dict) -> dict:
     """Fail closed on the server-rendered root alert, c1/q1 and resources."""
-    from training import launch
-
     if "job" in spec:
-        launch._check_cpu_render(spec["job"], server_preview)
+        expected = spec["job"]
+        meta, actual = server_preview.get("metadata", {}), server_preview.get("spec", {})
+        pod = actual.get("template", {}).get("spec", {})
+        wanted = expected["spec"]["template"]["spec"]
+        if (server_preview.get("kind") != "Job"
+            or meta.get("name") != expected["metadata"]["name"]
+            or meta.get("namespace") != "fleet-train-jobs"
+            or meta.get("annotations", {}).get("fleet.ai/failure-alerts") != "off"
+            or any(meta.get("annotations", {}).get(k) != v
+                   for k, v in expected["metadata"]["annotations"].items())
+            or meta.get("labels", {}).get("kueue.x-k8s.io/queue-name") != "training-lq"
+            or meta.get("labels", {}).get("kueue.x-k8s.io/priority-class") != "q1"
+            or actual.get("suspend") is not True or actual.get("backoffLimit") != 0
+            or pod.get("priorityClassName") != "c1" or pod.get("priority") != 10000
+            or pod.get("nodeSelector") != wanted["nodeSelector"]
+            or pod.get("automountServiceAccountToken") is not False
+            or pod.get("volumes") != wanted["volumes"]
+            or len(pod.get("containers", [])) != 1
+            or pod["containers"][0].get("image") != wanted["containers"][0]["image"]
+            or pod["containers"][0].get("command") != wanted["containers"][0]["command"]
+            or pod["containers"][0].get("env") != wanted["containers"][0]["env"]
+            or pod["containers"][0].get("resources") != wanted["containers"][0]["resources"]
+            or pod["containers"][0].get("securityContext") != wanted["containers"][0]["securityContext"]
+            or pod["containers"][0].get("envFrom")
+            or pod["containers"][0].get("volumeMounts") != wanted["containers"][0]["volumeMounts"]
+            or "nvidia.com/gpu" in str(pod["containers"][0].get("resources", {}))):
+            raise ValueError("server-rendered CPU checkpoint Job drifted")
         return {"status": "previewed_not_created", "kind": "Job",
                 "job_sha256": _sha(_canonical(spec["job"]))}
     if "request" in spec:
-        proof = launch._legacy("validate_preview", {"request": spec["request"],
-                                                     "preview": server_preview})
-        return {"status": "previewed_not_created", "kind": "RayJob", **proof}
+        import yaml
+
+        request = spec["request"]
+        if server_preview.get("errors") or server_preview.get("warnings"):
+            raise ValueError("GPU checkpoint preview reported errors/warnings")
+        obj = yaml.safe_load(server_preview["manifest_yaml"])
+        meta, actual = obj.get("metadata", {}), obj.get("spec", {})
+        if (obj.get("kind") != "RayJob"
+            or meta.get("namespace") != "fleet-train-jobs"
+            or meta.get("annotations", {}).get("fleet.ai/failure-alerts") != "off"
+            or meta.get("annotations", {}).get("fleet.ai/run-dir") != request["run_dir"]
+            or meta.get("labels", {}).get("kueue.x-k8s.io/queue-name") != "training-lq"
+            or meta.get("labels", {}).get("kueue.x-k8s.io/priority-class") != "q1"
+            or actual.get("suspend") is not True
+            or actual.get("shutdownAfterJobFinishes") is not True
+            or actual.get("entrypoint") != request["command"]):
+            raise ValueError("server-rendered GPU checkpoint RayJob drifted")
+        cluster = actual.get("rayClusterSpec", {})
+        groups = [(1, cluster.get("headGroupSpec", {}).get("template", {}))] + [
+            (group.get("replicas", 0), group.get("template", {}))
+            for group in cluster.get("workerGroupSpecs", [])]
+        count = 0
+        for replicas, template in groups:
+            if type(replicas) is not int or replicas < 0:
+                raise ValueError("invalid GPU checkpoint replica count")
+            pod = template.get("spec", {})
+            if replicas and (pod.get("priorityClassName") != "c1" or pod.get("nodeName")):
+                raise ValueError("GPU checkpoint pod priority/node drifted")
+            for container in pod.get("containers", []):
+                gpu = container.get("resources", {}).get("limits", {}).get("nvidia.com/gpu", 0)
+                if gpu:
+                    if container.get("image") != request["image"]:
+                        raise ValueError("GPU checkpoint image drifted")
+                    count += replicas * int(gpu)
+        if count != 1:
+            raise ValueError("GPU checkpoint must allocate exactly one GPU")
+        return {"status": "previewed_not_created", "kind": "RayJob",
+                "request_sha256": _sha(_canonical(request)),
+                "manifest_sha256": _sha(server_preview["manifest_yaml"].encode())}
     raise ValueError("checkpoint stage spec is missing")
 
 

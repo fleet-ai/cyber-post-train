@@ -93,7 +93,7 @@ def test_tampered_cpu_gate_rejects_ready(tmp_path):
 
 
 def test_stage_specs_require_c1_root_alert_opt_out(tmp_path, monkeypatch):
-    plan = {"run_name": "q38-corrected", "output_root": "/mnt/sfs/jobs/q38-corrected",
+    plan = {"run_name": "q38-corrected", "output_root": str(tmp_path / "run"),
             "recipe": {"max_steps": 32, "checkpoint_interval": 16},
             "execution": {"image": "example@sha256:" + "a" * 64},
             "runtime_sha256": flow.SOURCES["training/sft_runtime.py"]}
@@ -107,6 +107,9 @@ def test_stage_specs_require_c1_root_alert_opt_out(tmp_path, monkeypatch):
         (tmp_path / name).write_text(json.dumps(value))
     monkeypatch.setattr(flow, "_prepared", lambda _: (plan, request, receipt))
     monkeypatch.setattr(flow, "_sources", lambda: {})
+    write(Path(plan["output_root"]) / "checkpoint_receipts/step-000016.json",
+          {"plan_sha256": receipt["plan_sha256"], "optimizer_step": 16,
+           "checkpoint_path": str(Path(plan["output_root"]) / "checkpoints/global_step_16")})
     cpu = flow.stage_spec(tmp_path, 16, "seal")["job"]
     assert cpu["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
     assert cpu["spec"]["suspend"] is True
@@ -122,6 +125,23 @@ def test_stage_specs_require_c1_root_alert_opt_out(tmp_path, monkeypatch):
     assert gpu["request"]["gpus_per_worker"] == 1
     assert gpu["request"]["priority_class"] == "c1"
     assert gpu["request"]["failureAlerts"] is False
+    manifest = {"kind": "RayJob", "metadata": {
+        "namespace": "fleet-train-jobs",
+        "annotations": {"fleet.ai/failure-alerts": "off",
+                        "fleet.ai/run-dir": gpu["request"]["run_dir"]},
+        "labels": {"kueue.x-k8s.io/queue-name": "training-lq",
+                   "kueue.x-k8s.io/priority-class": "q1"}},
+        "spec": {"suspend": True, "shutdownAfterJobFinishes": True,
+                 "entrypoint": gpu["request"]["command"],
+                 "rayClusterSpec": {"headGroupSpec": {"template": {"spec": {
+                     "priorityClassName": "c1", "containers": [{
+                         "image": gpu["request"]["image"],
+                         "resources": {"limits": {"nvidia.com/gpu": 1}}}]}}}}}}
+    preview = {"manifest_yaml": json.dumps(manifest), "errors": [], "warnings": []}
+    assert flow.validate_stage_preview(gpu, preview)["kind"] == "RayJob"
+    manifest["metadata"]["annotations"]["fleet.ai/failure-alerts"] = "on"
+    with pytest.raises(ValueError, match="drifted"):
+        flow.validate_stage_preview(gpu, {**preview, "manifest_yaml": json.dumps(manifest)})
 
 
 def test_all_historical_checkpoint_sources_match_pinned_bytes():
