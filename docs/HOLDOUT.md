@@ -36,10 +36,23 @@ The September 25 API canary created/deleted one environment but could not
 reconcile its create-request ID: version-scoped provisioning ignored that ID.
 Theseus PR #35155 repaired source; staging advertised it, production returned
 404. `training/runtime_qualify.py` remains create-disabled pending production
-readback. No later wave cell ran. The first 16 candidates have no Pipeline
+readback. No production wave cell ran. The first 16 candidates have no Pipeline
 Lanes or solvability Registry run; neither they nor the 311-family pool have
-accepted positive grading, negative-control and cleanup evidence. A baseline
-model failure cannot invalidate a task; baseline success cannot select it.
+complete intended-path positive grading, negative-control, and cleanup proof.
+A baseline model failure cannot invalidate a task; baseline success cannot
+select it.
+
+A single staging-only, exact-version rehearsal later proved startup, the two
+tools, a zero-credit negative verifier, and cleanup; it did **not** qualify the
+task. Private inspection of that task's published source found a static
+intended-request sketch and source-level tests, not an executable witness that
+captures a flag through the intended path and earns live verifier credit. The
+older 75 accepted-execution receipts likewise do not establish positive
+grading; zero of them have been independently positive-qualified here. Ask
+the task authoring/solvability owners for exact-version, sealed intended-path
+witnesses or prior solvability receipts, and keep unknown cases `unproven`, not
+`broken`. Do not select holdout tasks by whether a baseline or candidate model
+solved them.
 
 ## Teacher3K family roles
 
