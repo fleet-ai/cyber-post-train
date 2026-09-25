@@ -69,9 +69,12 @@ instance was created; its durable claim was independently absent. Fresh teacher
 collection through Fleet OpenCode was also rejected before job creation with
 `sales_product_required`. The live OTS Cyber project has no default billing
 selection; the active catalog offers both OTS Dataminer and Platform General.
-Do not guess which group pays. A new one-task probe is prepared privately
-against current production TRAIN version `43dc2c52-f283-4454-8987-69c6cbbd4160`
-but awaits that choice; the rejected request used a retired version.
+An exact one-task TRAIN-only probe against current production version
+`43dc2c52-f283-4454-8987-69c6cbbd4160` then used Platform General (general
+research, not OTS Dataminer). The public Jobs API rejected `harness=opencode`
+with HTTP 400 before job creation; no rollout or instance started. Its accepted
+harness names are Claude Code, Codex, Grok and Grok-bot. Do not retry this route:
+fresh OpenCode teacher collection needs the direct Fleet-instance runner.
 Another current TRAIN version returned one successful MCP text block but differed
 from its stored result by one character (2,251 versus 2,252); line-ending
 equivalence was **not** established. A bounded follow-up timed out during
