@@ -23,6 +23,10 @@ from training.qualify_live import PRIVATE, PROJECT, PUBLIC, TEAM
 
 CONTRACT = {"evidence_schema": "1.0.0", "submission_protocol": "2.0.0",
             "verifier_contract": "3.0.0"}
+# As deployed on 2026-09-25, version-scoped provisioning silently ignores
+# X-Request-ID and creates a random run ID. Keep recovery usable, but do not
+# create another environment until the server supplies a durable exact claim.
+VERSION_SCOPED_DURABLE_CREATE_VERIFIED = False
 PROBES = {"bash": {"script": "printf task-quality-runtime-ok"},
           "submit_report": {"verdict": "no_flag", "explanation":
                             "Automated runtime check; exploitability was not tested."}}
@@ -96,8 +100,9 @@ def preview(wave_path: Path, index: int, root: Path) -> dict:
                  "cell_index": index, "task_version_id": row["task_version_id"],
                  "request_id": request_id, "binding_sha256": binding["sha256"],
                  "exact_binding": True, "claim_unclaimed": True,
+                 "create_authorized": VERSION_SCOPED_DURABLE_CREATE_VERIFIED,
                  "root_alert_annotation_required": False,
-                 "reason": "direct API; creates no Job or RayJob"})
+                 "reason": "version-scoped provision does not honor durable create claim"})
 
 
 def preflight(client: httpx.Client, row: dict, request_id: str) -> dict:
@@ -271,6 +276,8 @@ def cleanup(client: httpx.Client, intent: dict, binding: dict,
 
 
 def run_cell(wave_path: Path, index: int, root: Path) -> dict:
+    if not VERSION_SCOPED_DURABLE_CREATE_VERIFIED:
+        raise ValueError("version-scoped durable create is not deployed; no new provision")
     _, row, sha, request_id = load_cell(wave_path, index)
     key = os.environ.get("FLEET_API_KEY", "")
     if not key:
@@ -382,13 +389,20 @@ def run_cell(wave_path: Path, index: int, root: Path) -> dict:
 
 def recover_cell(root: Path, index: int) -> dict:
     cell = root / f"cell-{index:02d}"
+    if (cell / "CLEANUP.json").exists():
+        receipt = load(cell / "CLEANUP.json")
+        sha = receipt.pop("sha256", None)
+        if sha != seal(receipt)["sha256"] or receipt.get("cleanup_complete") is not True:
+            raise ValueError("stored cleanup receipt is invalid")
+        return {**receipt, "sha256": sha}
     intent = load(cell / "INTENT.json")
     binding = load(cell / "BINDING.json")
+    started = load(cell / "STARTED.json") if (cell / "STARTED.json").exists() else {}
     key = os.environ.get("FLEET_API_KEY", "")
     if not key:
         raise ValueError("Fleet key unavailable")
     with httpx.Client(headers={"Authorization": f"Bearer {key}"}, timeout=180) as client:
-        receipt = cleanup(client, intent, binding)
+        receipt = cleanup(client, intent, binding, started.get("instance_id"))
     if not (cell / "CLEANUP.json").exists():
         write_once(cell / "CLEANUP.json", receipt)
     return receipt

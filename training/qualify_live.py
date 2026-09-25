@@ -70,8 +70,10 @@ def candidates(qa: list[dict], teacher: dict, coverage: dict,
         if not atoms or not row["environment_version_id"]:
             continue
         valid.append(row)
-    unexposed = [row for row in valid if not (set(row["atom_artifact_keys"])
-                                             & (teacher_atoms | protected))]
+    teacher_unexposed = [row for row in valid
+                         if not set(row["atom_artifact_keys"]) & teacher_atoms]
+    unexposed = [row for row in teacher_unexposed
+                 if not set(row["atom_artifact_keys"]) & protected]
     # Transitive components, not one task per graph or one task per atom.
     parent = list(range(len(unexposed)))
 
@@ -113,7 +115,12 @@ def candidates(qa: list[dict], teacher: dict, coverage: dict,
             "not_analyzed_without_prior_receipt": len(pool),
             "unseen_task_keys": len(unseen),
             "exact_metadata_valid": len(valid),
+            "teacher_unexposed_versions": len(teacher_unexposed),
+            "teacher_unexposed_apps": len({app for row in teacher_unexposed
+                                           for app in row["applications"]}),
             "teacher_and_protected_unexposed_versions": len(unexposed),
+            "teacher_and_protected_unexposed_apps": len({app for row in unexposed
+                                                         for app in row["applications"]}),
             "independent_candidate_families": len(groups),
         },
         "wave": wave,
@@ -160,6 +167,7 @@ def main() -> None:
         parser.add_argument(f"--{name}", required=True)
     parser.add_argument("--limit", type=int, default=16)
     parser.add_argument("--output", help="write one immutable local JSON plan")
+    parser.add_argument("--counts-only", action="store_true")
     args = parser.parse_args()
     if not 1 <= args.limit <= 100:
         parser.error("limit must be 1..100")
@@ -187,7 +195,9 @@ def main() -> None:
     body = json.dumps(result, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     result["sha256"] = "sha256:" + hashlib.sha256(body.encode()).hexdigest()
     text = json.dumps(result, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    if args.output:
+    if args.counts_only:
+        print(json.dumps(result["counts"], sort_keys=True))
+    elif args.output:
         with Path(args.output).open("x", encoding="utf-8") as stream:
             stream.write(text + "\n")
     else:

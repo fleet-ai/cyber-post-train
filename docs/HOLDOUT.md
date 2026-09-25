@@ -59,11 +59,19 @@ one more. Excluding the same 75 prior exact receipts leaves 1,034 unreviewed.
 Of those, 363 share a Teacher3K task key; 671 have new keys. Exact-version
 metadata GETs succeeded for all 671, including production status, verifier,
 environment version, and atom-source locators. After excluding Teacher3K atom
-keys, 433 versions in 327 independent atom-key families remain as **possible**
+keys, 433 versions across 14 apps in 327 independent atom-key families remain as **possible**
 new heldout candidates. That is a discovery count, not a runtime-qualified
 count. The 20 existing live-heldout and 16 conditional candidate families must
 also be excluded before fixing a new wave. `training/qualify_live.py` performs
 this current metadata-only selection; it never creates environments.
+After protected-family exclusion, 408 versions across the same 14 apps and
+311 independent families remain. The frozen 16-family first wave is metadata
+only. A direct API canary on September 25 created one exact environment and
+proved its deletion, but did **not** qualify the task: version-scoped rollout
+provisioning ignores the caller's create-request ID, so the durable claim could
+not be reconciled. `training/runtime_qualify.py` now refuses new provisions
+until that server contract is repaired. Neither the 16-wave nor the broader
+311-family pool is yet a runnable heldout set.
 
 Teacher3K had 2,886 accepted whole-session successes, but its old packing
 clipped most windows inside messages, used tool names that differed from the

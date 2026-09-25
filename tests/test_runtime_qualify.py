@@ -1,6 +1,5 @@
 """The model-free Fleet probe must bind exact identities and always clean up."""
 
-import hashlib
 import json
 import tempfile
 import unittest
@@ -23,6 +22,10 @@ def response(code, value=None, *, headers=None):
 
 
 class RuntimeQualificationTests(unittest.TestCase):
+    def test_create_is_disabled_until_version_scoped_claim_exists(self):
+        with self.assertRaisesRegex(ValueError, "durable create is not deployed"):
+            q.run_cell(Path("not-read"), 0, Path("not-created"))
+
     def test_preflight_reads_only_and_binds_exact_version(self):
         methods = []
 
