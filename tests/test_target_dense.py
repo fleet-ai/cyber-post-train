@@ -20,6 +20,7 @@ def _source_fixture():
     fixture = fixture_type("test_private_success_and_corpus_interface")
     fixture.setUp()
     fixture.messages[2]["thinking"] = "PRIVATE_REASONING_SENTINEL"
+    fixture.messages[2]["analysis"] = "PRIVATE_ANALYSIS_SENTINEL"
     fixture.selection["trace_sha256"] = source.digest(fixture.envelope)
     return fixture
 
@@ -37,9 +38,10 @@ def test_new_dense_wrapper_retains_old_mechanics_but_is_not_train_ready():
             private = fixture.root / "private-output"
             checked_source = audit(private)
             assert checked_source["method"] == ALGORITHM
-            assert checked_source["hidden_reasoning_fields_removed"] == 1
+            assert checked_source["hidden_reasoning_fields_removed"] == 2
             assert checked_source["trainer_ready"] is False
             assert "PRIVATE_REASONING_SENTINEL" not in json.dumps(checked_source)
+            assert "PRIVATE_ANALYSIS_SENTINEL" not in json.dumps(checked_source)
             bindings = {}
             for name in INPUTS:
                 if name in {"normalized", "evidence", "model_request_capture"}:

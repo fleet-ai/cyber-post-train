@@ -96,7 +96,7 @@ def audit(source_dir: Path) -> dict:
                   "target_user_sha256": source.text_digest(actual[1]["content"]),
                   "probe_file_sha256": receipt["target_anchor_probe_file_sha256"]}
         anchor["sha256"] = source.digest(anchor)
-        hidden = sum(key in msg for msg in original for key in ("thinking", "reasoning", "reasoning_content"))
+        hidden = sum(key in msg for msg in original for key in ("thinking", "reasoning", "reasoning_content", "analysis"))
         visibility = {"schema": "fleet_visible_only_assistant_transform_v1",
                       "original_messages_sha256": source.digest(original),
                       "visible_messages_sha256": source.digest(visible),
