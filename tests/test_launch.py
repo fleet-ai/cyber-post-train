@@ -10,9 +10,11 @@ from pathlib import Path
 from unittest import mock
 
 from training import launch
+from training.runtime import MODEL, TOKENIZER_FILES
 
 
 CONFIG = Path(__file__).resolve().parents[1] / "configs/runs/qwen38-96k-debug-v1.json"
+FULL_CONFIG = Path(__file__).resolve().parents[1] / "configs/runs/qwen38-96k-full-v1.json"
 
 
 def fake_manifest() -> dict:
@@ -42,6 +44,34 @@ def fake_manifest() -> dict:
         },
         "files": {"train": train, "dev": dev},
     }
+    value["sha256"] = "sha256:" + launch.sha(launch.canonical(value))
+    return value
+
+
+def fake_full_manifest(*, tokens: int = 20_000_001) -> dict:
+    value = fake_manifest()
+    value.update({
+        "schema": "cyber_dense_sft_corpus_v1",
+        "algorithm": "old_original_anchor_not_goal_corrected",
+        "materialization": {"request_sha256": "sha256:" + "1" * 64,
+                            "family_roster_sha256": "sha256:" + "2" * 64},
+        "tokenizer": {"repo": MODEL[0], "revision": MODEL[1],
+                      "files": [{"path": p, "sha256": d} for p, d in TOKENIZER_FILES.items()]},
+        "composition": {"schema": "qwen38_dense_train_contiguous_dev_v1",
+                        "corpus_root": launch.FULL_DATA_ROOT,
+                        "dense_manifest_sha256": "sha256:" + "3" * 64,
+                        "dense_receipt_sha256": "sha256:" + "4" * 64,
+                        "dev_manifest_sha256": "sha256:" + "5" * 64,
+                        "dev_source_receipt_sha256": "sha256:" + "6" * 64,
+                        "family_roster_sha256": "sha256:" + "2" * 64},
+    })
+    value["files"]["train"].update({
+        "format": "pretokenized_assistant_segments_v1", "rows": 813,
+        "supervised_tokens": tokens, "source_sessions": 400,
+        "assistant_responses": 1600, "source_total_assistant_responses": 1625,
+        "excluded_assistant_responses": 25,
+    })
+    value.pop("sha256")
     value["sha256"] = "sha256:" + launch.sha(launch.canonical(value))
     return value
 
@@ -326,6 +356,79 @@ class LaunchTests(unittest.TestCase):
                 launch.submit(dest, "a" * 64)
         self.assertEqual(lease.call_count, 2)  # acquire and release, no POST intent
         self.assertFalse((dest / "GPU-POST-INTENT.jsonl").exists())
+
+
+class FullLaunchTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.config = json.loads(FULL_CONFIG.read_text())
+        self.config["data"]["manifest"] = "qwen38-96k-full-v1.manifest.json"
+        self.manifest = fake_full_manifest()
+        self.manifest_path = self.root / self.config["data"]["manifest"]
+        self.manifest_path.write_text(json.dumps(self.manifest))
+        self.config_path = self.root / "run.json"
+
+    def prepare(self) -> Path:
+        self.config_path.write_text(json.dumps(self.config))
+        destination = self.root / "prepared"
+        launch.prepare(self.config_path, destination)
+        return destination
+
+    def test_full_profile_is_not_submittable_with_old_anchor_method(self) -> None:
+        with self.assertRaisesRegex(ValueError, "target-anchor producer/attestation"):
+            self.prepare()
+        self.assertFalse((self.root / "prepared").exists())
+
+    def test_full_profile_compiles_mixed_data_and_keeps_every_checkpoint_after_gate(self) -> None:
+        # Only a synthetic test bypass: production's method gate always rejects
+        # until the corrected source/attestation implementation is reviewed.
+        with mock.patch.object(launch, "_require_goal_anchor"):
+            destination = self.prepare()
+            plan, request, receipt = launch.prepared(destination)
+        self.assertEqual(receipt["schema"], "qwen38_96k_full_prepared_v1")
+        self.assertEqual(plan["schema"], "cyber_sft_runtime_dense_v1")
+        self.assertEqual(plan["datasets"]["train"]["format"],
+                         "pretokenized_assistant_segments_v1")
+        self.assertEqual(plan["datasets"]["dev"]["format"],
+                         "chat_messages_last_assistant_v2")
+        self.assertEqual(plan["recipe"]["max_steps"], 102)
+        self.assertEqual(plan["recipe"]["keep_checkpoints"], 3)
+        self.assertEqual((plan["recipe"]["eval_interval"], plan["recipe"]["checkpoint_interval"]),
+                         (50, 50))
+        self.assertGreaterEqual(receipt["supervised_tokens"], 20_000_000)
+        self.assertEqual(request["run_dir"], launch.FULL_OUTPUT)
+        self.assertEqual(request["priority_class"], "c1")
+        self.assertIs(request["failureAlerts"], False)
+        self.assertEqual(launch._legacy(
+            "validate_preview", {"request": request, "preview": fake_preview(request)}
+        )["gpus"], 8)
+        with self.assertRaisesRegex(ValueError, "target-anchor producer/attestation"):
+            launch.prepared(destination)
+
+    def test_full_profile_rejects_small_corpus_and_unsafe_priority(self) -> None:
+        self.manifest = fake_full_manifest(tokens=19_999_999)
+        self.manifest_path.write_text(json.dumps(self.manifest))
+        with self.assertRaisesRegex(ValueError, "20|sealed dense"):
+            self.prepare()
+        self.config["cluster"]["priority"] = "c0"
+        self.config_path.write_text(json.dumps(self.config))
+        with self.assertRaisesRegex(ValueError, "c1 recipe"):
+            launch.prepare(self.config_path, self.root / "unsafe")
+
+    def test_full_profile_rejects_manifest_drift_and_family_overlap(self) -> None:
+        self.manifest["files"]["train"]["rows"] += 1
+        self.manifest_path.write_text(json.dumps(self.manifest))
+        with self.assertRaisesRegex(ValueError, "sealed dense"):
+            self.prepare()
+        self.manifest = fake_full_manifest()
+        self.manifest["files"]["dev"]["task_keys"] = ["train-family"]
+        self.manifest.pop("sha256")
+        self.manifest["sha256"] = "sha256:" + launch.sha(launch.canonical(self.manifest))
+        self.manifest_path.write_text(json.dumps(self.manifest))
+        with self.assertRaisesRegex(ValueError, "disjoint teacher-CE dev"):
+            self.prepare()
 
 
 if __name__ == "__main__":

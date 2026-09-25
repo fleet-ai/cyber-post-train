@@ -30,6 +30,9 @@ PROD_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 DEV_CONTEXT = "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb"
 NAMESPACE = "fleet-train-jobs"
 LEASE = "chris-cpt-gpu-submit"
+FULL_NAME = "chris-q38-corr96-full-v1"
+FULL_OUTPUT = f"/mnt/sfs/jobs/{FULL_NAME}"
+FULL_DATA_ROOT = "/mnt/sfs/jobs/chris-q38-corrected-corpus-v1/full96-data"
 SOURCES = {
     "training/__init__.py": "ecf358039bbb9b6cbab6546c9b1e61b9bc06c5b2d5b19907ff303a9277d77e27",
     "training/io.py": "7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
@@ -171,17 +174,89 @@ def _require_converted_manifest(manifest: dict) -> None:
         raise ValueError("tool-aware converter receipt/readback is missing")
 
 
+def _require_full_config(config: dict) -> None:
+    recipe, data, wandb = (config.get(key, {}) for key in ("recipe", "data", "wandb"))
+    expected = {"epochs": 1, "batch_size": 8, "microbatch_per_gpu": 1,
+                "nodes": 1, "gpus_per_node": 8, "max_length": 98304,
+                "eval_interval": 50, "checkpoint_interval": 50,
+                "keep_checkpoints": "all", "lr": 3e-6, "seed": 20260925}
+    if (config.get("name") != FULL_NAME or config.get("output_root") != FULL_OUTPUT
+        or config.get("backend") != "skyrl" or config.get("cluster", {}).get("priority") != "c1"
+        or config.get("model", {}).get("root") != "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2"
+        or data.get("root") != FULL_DATA_ROOT
+        or not str(data.get("manifest", "")).endswith("qwen38-96k-full-v1.manifest.json")
+        or any(recipe.get(key) != value for key, value in expected.items())
+        or wandb.get("entity") != "thefleet" or wandb.get("project") != "cyber-post-train"
+        or wandb.get("group") != "qwen38-corrected-teacher96-full-v1"
+        or wandb.get("run_id") != FULL_NAME or wandb.get("name") != FULL_NAME):
+        raise ValueError("full 96k identity, science, or c1 recipe differs")
+
+
+def _require_goal_anchor(_manifest: dict) -> None:
+    # The historical dense packer still uses the original instruction anchor.
+    # Its replacement must first publish a reviewed per-session substitution
+    # attestation; do not admit a merely re-labeled self-sealed manifest.
+    raise ValueError("corrected target-anchor producer/attestation is not yet qualified")
+
+
+def _require_full_manifest(manifest: dict, data_root: str) -> None:
+    train, dev = (manifest.get("files", {}).get(key, {}) for key in ("train", "dev"))
+    composition = manifest.get("composition", {})
+    from .runtime import MODEL, TOKENIZER_FILES
+
+    tokenizer = manifest.get("tokenizer", {})
+    if (manifest.get("schema") != "cyber_dense_sft_corpus_v1"
+        or manifest.get("sha256") != "sha256:" + sha(canonical(
+            {key: value for key, value in manifest.items() if key != "sha256"}))
+        or manifest.get("validation_mode") != "teacher_cross_entropy"
+        or set(manifest.get("files", {})) != {"train", "dev"}
+        or train.get("format") != "pretokenized_assistant_segments_v1"
+        or dev.get("format") != "chat_messages_last_assistant_v2"
+        or type(train.get("supervised_tokens")) is not int
+        or train["supervised_tokens"] < 20_000_000
+        or type(train.get("rows")) is not int or train["rows"] < 1
+        or type(dev.get("rows")) is not int or dev["rows"] < 1
+        or type(train.get("source_sessions")) is not int or train["source_sessions"] < 1
+        or tokenizer.get("repo") != MODEL[0] or tokenizer.get("revision") != MODEL[1]
+        or tokenizer.get("files") != [{"path": p, "sha256": d}
+                                       for p, d in TOKENIZER_FILES.items()]
+        or composition.get("schema") != "qwen38_dense_train_contiguous_dev_v1"
+        or composition.get("corpus_root") != data_root
+        or any(not re.fullmatch(r"sha256:[a-f0-9]{64}", composition.get(key, ""))
+               for key in ("dense_manifest_sha256", "dense_receipt_sha256",
+                           "dev_manifest_sha256", "dev_source_receipt_sha256",
+                           "family_roster_sha256"))
+        or composition.get("family_roster_sha256") != manifest.get("materialization", {}).get(
+            "family_roster_sha256")
+        or not re.fullmatch(r"sha256:[a-f0-9]{64}", manifest.get("split_sha256", ""))
+        or not re.fullmatch(r"sha256:[a-f0-9]{64}",
+                            manifest.get("materialization", {}).get("request_sha256", ""))
+        or set(train.get("task_keys", [])) & set(dev.get("task_keys", []))):
+        raise ValueError("full corpus lacks sealed dense train and disjoint teacher-CE dev")
+    _require_goal_anchor(manifest)
+
+
 def prepare(config_path: Path, destination: Path) -> dict:
     if destination.exists() or destination.is_symlink():
         raise ValueError("prepared destination already exists")
     config_bytes = config_path.read_bytes()
     config = json.loads(config_bytes)
-    _require_debug_config(config)
+    full = config.get("name") == FULL_NAME
+    (_require_full_config if full else _require_debug_config)(config)
     source = Path(config["data"]["manifest"])
     manifest_path = source if source.is_absolute() else config_path.parent / source
     manifest_bytes = manifest_path.read_bytes()
-    _require_converted_manifest(json.loads(manifest_bytes))
+    manifest = json.loads(manifest_bytes)
+    if full:
+        _require_full_manifest(manifest, config["data"]["root"])
+    else:
+        _require_converted_manifest(manifest)
     staged = json.loads(json.dumps(config))
+    if full:
+        rows, batch = manifest["files"]["train"]["rows"], config["recipe"]["batch_size"]
+        steps = (rows + batch - 1) // batch
+        interval = config["recipe"]["checkpoint_interval"]
+        staged["recipe"]["keep_checkpoints"] = (steps + interval - 1) // interval
     staged["model"]["lock"] = "../models/qwen38-27b-1d4bf0f2.lock.json"
     staged["model"]["weights"] = "../models/qwen38-27b-1d4bf0f2.weights.json"
     staged["data"]["manifest"] = "../data/corpus.json"
@@ -189,9 +264,11 @@ def prepare(config_path: Path, destination: Path) -> dict:
     plan, request = compiled["plan"], compiled["request"]
     if (plan["model"]["revision"] != "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
         or plan["validation_mode"] != "teacher_cross_entropy"
-        or plan["datasets"]["train"].get("format") != "chat_messages_last_assistant_v2"
+        or plan["datasets"]["train"].get("format") != (
+            "pretokenized_assistant_segments_v1" if full else "chat_messages_last_assistant_v2")
         or plan["datasets"]["dev"].get("format") != "chat_messages_last_assistant_v2"
-        or plan["recipe"]["max_steps"] > 32
+        or plan["schema"] != ("cyber_sft_runtime_dense_v1" if full else "cyber_sft_runtime_v2")
+        or (not full and plan["recipe"]["max_steps"] > 32)
         or plan["recipe"]["keep_checkpoints"] <
             (plan["recipe"]["max_steps"] + plan["recipe"]["checkpoint_interval"] - 1)
             // plan["recipe"]["checkpoint_interval"]
@@ -199,15 +276,27 @@ def prepare(config_path: Path, destination: Path) -> dict:
         or request["priority_class"] != "c1"
         or request["workers"] != 1
         or request["gpus_per_worker"] != 8
-        or Path(request["run_dir"]).name != request["name"]):
-        raise ValueError("compiled debug request failed an immutable safety/science gate")
+        or Path(request["run_dir"]).name != request["name"]
+        or (full and (request["name"] != FULL_NAME or request["run_dir"] != FULL_OUTPUT
+                      or plan["datasets"]["train"]["supervised_tokens"] < 20_000_000
+                      or plan["corpus_manifest_sha256"] != manifest["sha256"]
+                      or plan["recipe"]["keep_checkpoints"] != (
+                          plan["recipe"]["max_steps"] + plan["recipe"]["checkpoint_interval"] - 1)
+                          // plan["recipe"]["checkpoint_interval"]))):
+        raise ValueError("compiled 96k request failed an immutable safety/science gate")
     receipt = {
-        "schema": "qwen38_96k_debug_prepared_v1", "historical_commit": COMMIT,
+        "schema": "qwen38_96k_full_prepared_v1" if full else "qwen38_96k_debug_prepared_v1",
+        "historical_commit": COMMIT,
         "config_sha256": sha(config_bytes), "manifest_file_sha256": sha(manifest_bytes),
         "plan_sha256": sha(canonical(plan)), "request_sha256": sha(canonical(request)),
         "status": "prepared_not_submitted",
     }
+    if full:
+        receipt["supervised_tokens"] = plan["datasets"]["train"]["supervised_tokens"]
+        receipt["planned_native_checkpoints"] = plan["recipe"]["keep_checkpoints"]
     destination.mkdir(parents=True)
+    if full:
+        (destination / "corpus.manifest.json").write_bytes(manifest_bytes)
     for name, value in (("plan.json", plan), ("request.json", request), ("PREPARED.json", receipt)):
         (destination / name).write_bytes(canonical(value) + b"\n")
     return receipt
@@ -222,6 +311,21 @@ def prepared(directory: Path) -> tuple[dict, dict, dict]:
         or receipt.get("request_sha256") != sha(canonical(request))
         or _legacy("request", {"plan": plan})["request"] != request):
         raise ValueError("prepared binding changed")
+    if receipt.get("schema") == "qwen38_96k_full_prepared_v1":
+        manifest_bytes = (directory / "corpus.manifest.json").read_bytes()
+        if receipt.get("manifest_file_sha256") != sha(manifest_bytes):
+            raise ValueError("full corpus manifest bytes changed")
+        _require_full_manifest(json.loads(manifest_bytes), FULL_DATA_ROOT)
+        interval = plan["recipe"]["checkpoint_interval"]
+        if (plan.get("schema") != "cyber_sft_runtime_dense_v1"
+            or plan.get("corpus_manifest_sha256") != json.loads(manifest_bytes)["sha256"]
+            or plan["recipe"]["eval_interval"] != interval
+            or plan["recipe"]["keep_checkpoints"] != (plan["recipe"]["max_steps"] + interval - 1) // interval
+            or receipt.get("planned_native_checkpoints") != plan["recipe"]["keep_checkpoints"]
+            or receipt.get("supervised_tokens") != plan["datasets"]["train"]["supervised_tokens"]):
+            raise ValueError("full run evidence/retention binding changed")
+    elif receipt.get("schema") != "qwen38_96k_debug_prepared_v1":
+        raise ValueError("unsupported prepared run profile")
     return plan, request, receipt
 
 
