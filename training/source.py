@@ -326,28 +326,6 @@ def _source_rows(binding: dict) -> list[dict]:
     return sorted(rows, key=lambda row: row["session_id"])
 
 
-def _validate_envelope(row: dict, summary: dict, envelope: dict) -> None:
-    if not isinstance(envelope, dict):
-        raise SourceError("selected transcript envelope is malformed")
-    sid, key, version = (row[name] for name in ("session_id", "task_key", "task_version_id"))
-    verifier = envelope.get("verifier_execution")
-    score = verifier.get("score") if isinstance(verifier, dict) else None
-    harness, task, instance = (envelope.get(name) for name in ("harness", "task", "instance"))
-    if (not all(isinstance(x, dict) for x in (verifier, harness, task, instance, summary))
-            or digest(envelope) != row["trace_sha256"]
-            or summary.get("session_id") != sid or summary.get("model") != row["model_id"]
-            or summary.get("task_key") != key or task.get("key") != key
-            or task.get("eval_task_version_id") != version or instance.get("team_id") != TEAM
-            or harness.get("mode") != row.get("harness_mode")
-            or digest(harness) != row["harness_sha256"]
-            or summary.get("verifier_execution") != verifier
-            or summary.get("status") != "completed"
-            or not isinstance(verifier.get("id"), str) or not verifier["id"]
-            or verifier.get("success") is not True or type(score) not in {int, float}
-            or not math.isfinite(score) or score < 1):
-        raise SourceError("selected source changed or lacks authoritative success")
-
-
 def _validate_raw(row: dict, envelope: dict) -> None:
     if not isinstance(envelope, dict):
         raise SourceError("selected transcript envelope is malformed")
@@ -365,6 +343,16 @@ def _validate_raw(row: dict, envelope: dict) -> None:
             or verifier.get("success") is not True or type(score) not in {int, float}
             or not math.isfinite(score) or score < 1):
         raise SourceError("selected transcript changed or lacks successful verifier")
+
+
+def _validate_envelope(row: dict, summary: dict, envelope: dict) -> None:
+    _validate_raw(row, envelope)
+    if (not isinstance(summary, dict) or summary.get("session_id") != row["session_id"]
+            or summary.get("model") != row["model_id"]
+            or summary.get("task_key") != row["task_key"]
+            or summary.get("verifier_execution") != envelope["verifier_execution"]
+            or summary.get("status") != "completed"):
+        raise SourceError("selected source changed or lacks authoritative success")
 
 
 def hydrate(request: dict, *, get: Callable[[str], dict] = _request,
@@ -412,7 +400,7 @@ def hydrate(request: dict, *, get: Callable[[str], dict] = _request,
                 raise SourceError("existing hydrated source identity differs")
             _validate_raw(row, saved.get("transcript_envelope"))
             if saved.get("summary") is not None:
-                _validate_envelope(row, saved["summary"], saved["transcript_envelope"])
+                raise SourceError("cached summaries must be authenticated independently")
             existing += 1
             continue
         missing.append((row, path))
@@ -495,7 +483,7 @@ def verify_hydration_cache(root: Path, selection_path: Path,
         except (OSError, ValueError):
             raise SourceError("private hydrated session has invalid JSON") from None
         if (not isinstance(saved, dict) or saved.get("schema") != "fleet_teacher_hydrated_session_v1"
-                or saved.get("selection") != row):
+                or saved.get("selection") != row or saved.get("summary") is not None):
             raise SourceError("private hydrated session identity differs")
         _validate_raw(row, saved.get("transcript_envelope"))
     return {"selected_sessions": len(rows), "selection_sha256": receipt["selection_sha256"],
@@ -507,7 +495,7 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
     """Download only digest-bound, verified successes; receipt contains no content."""
     _sealed(request, "fleet_teacher_source_fetch_v1")
     required = {"schema", "selection", "hydration", "roles", "tool_capture", "target_anchors",
-                "model_revision", "output", "sha256"}
+                "live_model_request_attestation", "model_revision", "output", "sha256"}
     if (set(request) != required or not isinstance(request["model_revision"], str)
             or not re.fullmatch(r"[0-9a-f]{40}", request["model_revision"])):
         raise SourceError("source request fields or model revision differ")
@@ -564,6 +552,51 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
             raise SourceError("reviewed family roles conflict")
         roster[version] = {"task_key": item["task_key"], "family_id": family,
                            "split": "test" if split == "final_test" else split}
+    live = _bound_file(request["live_model_request_attestation"])
+    _sealed(live, "cyber_qwen_live_model_request_attestation_v1")
+    model, fleet, proof, calls = (live.get(name) for name in
+                                  ("model", "fleet", "serving_proof", "requests"))
+    if (set(live) != {"schema", "model", "harness", "fleet", "tool_capture_file_sha256",
+                     "requests", "serving_proof", "sha256"}
+            or not isinstance(model, dict) or not isinstance(fleet, dict)
+            or not isinstance(proof, dict) or not isinstance(calls, list)
+            or len(calls) != len(bindings)
+            or live["harness"] != HARNESS
+            or model.get("repo") != "Qwen/Qwen3.8-27B"
+            or model.get("revision") != request["model_revision"]
+            or any(not isinstance(model.get(key), str) or not model[key]
+                   for key in ("served_alias", "inference_model_uid", "pod_uid"))
+            or not _sha(model.get("image_digest"))
+            or fleet.get("team_id") != TEAM
+            or not _sha(fleet.get("mcp_catalog_sha256"))
+            or fleet.get("model_facing_tools_sha256") != TOOL_DIGEST
+            or live["tool_capture_file_sha256"] != request["tool_capture"]["sha256"]
+            or proof.get("kind") != "post_fixed_proxy_live_served_request"
+            or proof.get("served_alias") != model["served_alias"]
+            or proof.get("runner_cwd") != "/workspace"
+            or not isinstance(proof.get("endpoint_identity"), str) or not proof["endpoint_identity"]
+            or not _sha(proof.get("fixed_proxy_image_sha256"))
+            or not isinstance(proof.get("request_ids"), list)
+            or len(proof["request_ids"]) != len(calls)
+            or len(set(proof["request_ids"])) != len(calls)
+            or any(not isinstance(value, str) or not value for value in proof["request_ids"])):
+        raise SourceError("live served-Qwen request attestation is absent or incompatible")
+    for call, binding, anchor in zip(calls, bindings, anchors):
+        version = anchor["task_version_id"]
+        if (not isinstance(call, dict) or set(call) != {"task_version_id", "target_anchor_file_sha256",
+                "request_envelope_sha256", "system_sha256", "user_sha256",
+                "model_facing_tools_sha256", "response_sha256"}
+                or roster.get(version, {}).get("split") != "train"
+                or call["task_version_id"] != version
+                or call["target_anchor_file_sha256"] != binding["sha256"]
+                or call["request_envelope_sha256"] != anchor["request_envelope_sha256"]
+                or call["system_sha256"] != text_digest(anchor["messages"][0]["content"])
+                or call["user_sha256"] != text_digest(anchor["messages"][1]["content"])
+                or call["model_facing_tools_sha256"] != TOOL_DIGEST
+                or not _sha(call["response_sha256"])):
+            raise SourceError("live served-Qwen request does not bind exact TRAIN anchors")
+    if calls[0]["request_envelope_sha256"] != capture["request_envelope_sha256"]:
+        raise SourceError("live outbound request and tool capture differ")
     selected, seen = [], set()
     for item in selection:
         if not isinstance(item, dict):
@@ -602,26 +635,13 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
             if saved.get("schema") != "fleet_teacher_hydrated_session_v1" or saved.get("selection") != item:
                 raise SourceError("hydrated session identity differs")
             envelope = saved.get("transcript_envelope")
-            _validate_raw(item, envelope)
-            summary = saved.get("summary") or _summary(get, key, sid, summaries)
-            verifier = envelope.get("verifier_execution")
-            score = verifier.get("score") if isinstance(verifier, dict) else None
+            if saved.get("summary") is not None:
+                raise SourceError("cached summaries must be authenticated independently")
+            summary = _summary(get, key, sid, summaries)
+            _validate_envelope(item, summary, envelope)
+            verifier = envelope["verifier_execution"]
+            score = verifier["score"]
             messages = envelope.get("transcript")
-            if (not isinstance(verifier, dict) or not isinstance(envelope.get("task"), dict)
-                    or not isinstance(envelope.get("instance"), dict)
-                    or digest(envelope) != item["trace_sha256"] or summary.get("session_id") != sid
-                    or summary.get("model") != item["model_id"] or summary.get("task_key") != key
-                    or envelope.get("task", {}).get("key") != key
-                    or envelope.get("task", {}).get("eval_task_version_id") != version
-                    or envelope.get("instance", {}).get("team_id") != TEAM
-                    or envelope.get("harness", {}).get("mode") != item.get("harness_mode")
-                    or digest(envelope.get("harness")) != item.get("harness_sha256")
-                    or summary.get("verifier_execution") != verifier
-                    or summary.get("status") != "completed"
-                    or not isinstance(verifier.get("id"), str) or not verifier["id"]
-                    or verifier.get("success") is not True or type(score) not in {int, float}
-                    or not math.isfinite(score) or score < 1):
-                raise SourceError("selected source changed or lacks authoritative success")
             raw_sources.append({"selection": item, "summary": summary, "transcript_envelope": envelope})
             if (not isinstance(messages, list) or len(messages) < 4 or
                     [m.get("role") for m in messages[:2] if isinstance(m, dict)] != ["system", "user"] or
@@ -708,6 +728,7 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
         if len(probe_versions) < MIN_ANCHOR_PROBES:
             raise SourceError("exact-version target-anchor probes were not bound to source")
         files = {"request": request_file_sha256,
+                 "live_model_request_attestation": request["live_model_request_attestation"]["sha256"],
                  "raw_sources": _write(output / "raw-sources.private.jsonl", raw_sources, lines=True),
                  "dense_target_normalized": _write(output / "dense-target-anchored.jsonl", target_records, lines=True),
                  "dense_success_evidence": _write(output / "dense-success-evidence.jsonl", target_proofs, lines=True),
@@ -717,11 +738,17 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
                  "capture": _write(output / "model-request-capture.json", capture)}
         if any(file_digest(Path(binding["path"])) != binding["sha256"]
                for binding in [request[name] for name in
-                               ("selection", "hydration", "roles", "tool_capture")] + bindings):
+                               ("selection", "hydration", "roles", "tool_capture",
+                                "live_model_request_attestation")] + bindings):
             raise SourceError("source binding changed during download")
         receipt = {"schema": "fleet_teacher_source_receipt_v1", "request_sha256": request["sha256"],
                    "input_sha256": {name: request[name]["sha256"] for name in
-                                    ("selection", "hydration", "roles", "tool_capture")},
+                                    ("selection", "hydration", "roles", "tool_capture",
+                                     "live_model_request_attestation")},
+                   "live_attestation_schema": live["schema"],
+                   "live_attested_train_versions": [call["task_version_id"] for call in calls],
+                   "live_wire_review": "pending_independent_readback",
+                   "tool_result_equivalence": "unverified",
                    "target_anchor_probe_file_sha256": [binding["sha256"] for binding in bindings],
                    "files": files, "selected_sessions": len(selected), "retained_sessions": len(target_records),
                    "retained_by_split": dict(sorted(Counter(
@@ -735,7 +762,7 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
                    "model_facing_tools_sha256": TOOL_DIGEST,
                    "download_complete": len(target_records) + sum(exclusions.values()) == len(selected),
                    "training_ready": False,
-                   "training_blocker": "live_fleet_mcp_and_served_model_request_attestation_required"}
+                   "training_blocker": "independent_live_wire_and_tool_result_parity_plus_native_count_required"}
         receipt["sha256"] = digest(receipt)
         _write(output / "RECEIPT.json", receipt)  # Written last: absence means partial output.
         return receipt

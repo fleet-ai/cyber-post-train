@@ -58,7 +58,7 @@ class SourceTests(unittest.TestCase):
                              "request_envelope_sha256": "sha256:" + "4" * 64,
                              "captured_tools": self.tools})
         self.anchor = seal({"schema": "cyber_opencode_private_target_anchor_v1",
-                            "task_version_id": "version-a", "request_envelope_sha256": "sha256:" + "5" * 64,
+                            "task_version_id": "version-a", "request_envelope_sha256": "sha256:" + "4" * 64,
                             "messages": [{"role": "system", "content": "Target system."},
                                          {"role": "user", "content": '"Find the issue."'}]})
         self.get_calls = []
@@ -74,13 +74,34 @@ class SourceTests(unittest.TestCase):
                                   "selection": selection,
                                   "output": str(self.root / "source-hydration")})
         source.hydrate(hydration_request, get=self.get)
+        capture = self._file("capture.json", self.capture)
+        anchor = self._file("anchor.json", self.anchor)
+        live = seal({"schema": "cyber_qwen_live_model_request_attestation_v1",
+                     "model": {"repo": "Qwen/Qwen3.8-27B", "revision": "a" * 40,
+                               "served_alias": "synthetic-qwen", "inference_model_uid": "synthetic-model",
+                               "pod_uid": "synthetic-pod", "image_digest": "sha256:" + "6" * 64},
+                     "harness": source.HARNESS,
+                     "fleet": {"team_id": source.TEAM, "mcp_catalog_sha256": "sha256:" + "7" * 64,
+                               "model_facing_tools_sha256": source.digest(self.tools, ascii=True)},
+                     "tool_capture_file_sha256": capture["sha256"],
+                     "requests": [{"task_version_id": "version-a", "target_anchor_file_sha256": anchor["sha256"],
+                                   "request_envelope_sha256": self.anchor["request_envelope_sha256"],
+                                   "system_sha256": source.text_digest(self.anchor["messages"][0]["content"]),
+                                   "user_sha256": source.text_digest(self.anchor["messages"][1]["content"]),
+                                   "model_facing_tools_sha256": source.digest(self.tools, ascii=True),
+                                   "response_sha256": "sha256:" + "8" * 64}],
+                     "serving_proof": {"kind": "post_fixed_proxy_live_served_request",
+                                       "served_alias": "synthetic-qwen", "endpoint_identity": "synthetic",
+                                       "runner_cwd": "/workspace",
+                                       "fixed_proxy_image_sha256": "sha256:" + "9" * 64,
+                                       "request_ids": ["synthetic-request"]}})
         return seal({"schema": "fleet_teacher_source_fetch_v1",
                      "selection": selection,
                      "hydration": {"path": str(self.root / "source-hydration" / "HYDRATED.json"),
                                    "sha256": source.file_digest(self.root / "source-hydration" / "HYDRATED.json")},
                      "roles": self._file("roles.json", self.roles),
-                     "tool_capture": self._file("capture.json", self.capture),
-                     "target_anchors": [self._file("anchor.json", self.anchor)],
+                     "tool_capture": capture, "target_anchors": [anchor],
+                     "live_model_request_attestation": self._file("live.json", live),
                      "model_revision": "a" * 40, "output": str(self.root / "private-output")})
 
     def get(self, path):
@@ -109,6 +130,9 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(stat.S_IMODE((directory / "dense-target-anchored.jsonl").stat().st_mode), 0o600)
         self.assertEqual(receipt["retained_sessions"], 1)
         self.assertFalse(receipt["training_ready"])
+        self.assertEqual(receipt["live_attested_train_versions"], ["version-a"])
+        self.assertEqual(receipt["files"]["live_model_request_attestation"],
+                         request["live_model_request_attestation"]["sha256"])
         self.assertEqual(receipt["model_facing_tools_sha256"], source.digest(self.tools, ascii=True))
         record = json.loads((directory / "dense-target-anchored.jsonl").read_text())
         proof = json.loads((directory / "dense-success-evidence.jsonl").read_text())
@@ -171,6 +195,23 @@ class SourceTests(unittest.TestCase):
         self.assertFalse(self.get_calls)
         self.assertFalse((self.root / "private-output").exists())
 
+    def test_local_mock_kind_is_not_live_attestation(self):
+        request = self.request()
+        live_path = Path(request["live_model_request_attestation"]["path"])
+        live = json.loads(live_path.read_text())
+        live["serving_proof"]["kind"] = "local_mock"
+        live_path.write_text(json.dumps(seal({k: v for k, v in live.items() if k != "sha256"})))
+        request["live_model_request_attestation"]["sha256"] = source.file_digest(live_path)
+        request = seal({k: v for k, v in request.items() if k != "sha256"})
+        self.get_calls.clear()
+        with (patch.object(source, "TOOL_DIGEST", source.digest(self.tools, ascii=True)),
+              patch.object(source, "TARGET_SYSTEM_DIGEST", source.text_digest("Target system.")),
+              patch.object(source, "MIN_ANCHOR_PROBES", 1)):
+            with self.assertRaises(source.SourceError):
+                source.fetch(request, get=self.get)
+        self.assertFalse(self.get_calls)
+        self.assertFalse((self.root / "private-output").exists())
+
     def test_source_tool_discovery_is_not_silently_deleted(self):
         self.messages[2:2] = [
             {"role": "assistant", "content": "", "tool_calls": [
@@ -195,6 +236,11 @@ class SourceTests(unittest.TestCase):
             with self.assertRaises(source.SourceError):
                 source.fetch(self.request(), get=self.get)
         self.assertFalse((self.root / "private-output" / "RECEIPT.json").exists())
+
+    def test_dense_auditor_summary_adapter_rechecks_authority(self):
+        source._validate_envelope(self.selection, self.summary, self.envelope)
+        with self.assertRaises(source.SourceError):
+            source._validate_envelope(self.selection, {**self.summary, "status": "failed"}, self.envelope)
 
     def test_hydration_resumes_without_refetching_existing_private_source(self):
         selection = self._file("hydration-selection.jsonl", [self.selection], jsonl=True)
