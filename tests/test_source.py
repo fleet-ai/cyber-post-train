@@ -9,7 +9,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 from training import source
-from training.runtime import sha256 as corpus_sha256
 
 
 def seal(value):
@@ -107,12 +106,12 @@ class SourceTests(unittest.TestCase):
         self.assertFalse(any(path.endswith("/transcript") for path in self.get_calls))
         directory = self.root / "private-output"
         self.assertEqual(stat.S_IMODE(directory.stat().st_mode), 0o700)
-        self.assertEqual(stat.S_IMODE((directory / "records.jsonl").stat().st_mode), 0o600)
+        self.assertEqual(stat.S_IMODE((directory / "dense-target-anchored.jsonl").stat().st_mode), 0o600)
         self.assertEqual(receipt["retained_sessions"], 1)
         self.assertFalse(receipt["training_ready"])
         self.assertEqual(receipt["model_facing_tools_sha256"], source.digest(self.tools, ascii=True))
-        record = json.loads((directory / "records.jsonl").read_text().splitlines()[0])
-        proof = json.loads((directory / "success-evidence.json").read_text())["session-a"]
+        record = json.loads((directory / "dense-target-anchored.jsonl").read_text())
+        proof = json.loads((directory / "dense-success-evidence.jsonl").read_text())
         self.assertEqual(record["messages"][0]["content"], "Target system.")
         self.assertEqual(record["messages"][1]["content"], '"Find the issue."')
         self.assertEqual([call["function"]["name"] for message in record["messages"]
@@ -132,20 +131,14 @@ class SourceTests(unittest.TestCase):
         raw = json.loads((directory / "raw-sources.private.jsonl").read_text())
         self.assertEqual(raw["transcript_envelope"], self.envelope)
         self.assertEqual(record["visibility_transform"]["hidden_reasoning_fields_removed"], 2)
-        self.assertEqual(proof["source_sha256"], corpus_sha256(record))
-        self.assertEqual(proof["report_call_id"], "call-2")
-        self.assertEqual(receipt["files"]["records"], source.file_digest(directory / "records.jsonl"))
-        dense = json.loads((directory / "dense-target-anchored.jsonl").read_text())
-        dense_proof = json.loads((directory / "dense-success-evidence.jsonl").read_text())
-        self.assertEqual(dense["schema"], "fleet_cyber_trajectory_v1")
-        self.assertEqual(dense["content_digest"], source.digest({k: v for k, v in dense.items()
+        self.assertEqual(proof["successful_report_call_id"], "call-2")
+        self.assertEqual(receipt["files"]["dense_target_normalized"],
+                         source.file_digest(directory / "dense-target-anchored.jsonl"))
+        self.assertEqual(record["schema"], "fleet_cyber_trajectory_v1")
+        self.assertEqual(record["content_digest"], source.digest({k: v for k, v in record.items()
                                                                  if k != "content_digest"}))
-        self.assertEqual(dense_proof["normalized_record_sha256"], source.digest(dense))
-        self.assertEqual(dense_proof["successful_report_call_id"], "call-2")
-        self.assertEqual([call["function"]["name"] for message in dense["messages"]
-                          for call in message.get("tool_calls", [])],
-                         ["fleet_bash", "fleet_submit_report"])
-        self.assertEqual(dense_proof["sha256"], source.digest({k: v for k, v in dense_proof.items()
+        self.assertEqual(proof["normalized_record_sha256"], source.digest(record))
+        self.assertEqual(proof["sha256"], source.digest({k: v for k, v in proof.items()
                                                                if k != "sha256"}))
 
     def test_legacy_anchor_retained_only_with_explicit_target_transform(self):
@@ -162,7 +155,6 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(receipt["retained_sessions"], 1)
         self.assertFalse(receipt["training_ready"])
         self.assertEqual(receipt["original_anchor_legacy_tool_name_sessions"], 1)
-        record = json.loads((self.root / "private-output" / "records.jsonl").read_text())
         raw = json.loads((self.root / "private-output" / "raw-sources.private.jsonl").read_text())
         self.assertEqual(raw["transcript_envelope"], self.envelope)
 

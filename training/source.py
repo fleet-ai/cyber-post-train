@@ -586,7 +586,7 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
     output.mkdir(mode=0o700, parents=False, exist_ok=False)
     os.chmod(output, 0o700)
     request_file_sha256 = _write(output / "REQUEST.json", request)
-    records, proofs, target_records, target_proofs, raw_sources = [], {}, [], [], []
+    target_records, target_proofs, raw_sources = [], [], []
     quarantine, exclusions, summaries = [], Counter(), {}
     probe_versions, old_anchor_mentions = set(), 0
     try:
@@ -691,18 +691,6 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
             target_messages[1] = {**target_messages[1], "content": target_user}
             tool_transform["target_messages_sha256"] = digest(target_messages)
             tool_transform["sha256"] = digest(tool_transform)
-            record = {"session_id": sid, "task_key": key, "task_version_id": version,
-                      "model_id": item["model_id"], "family_id": roster[version]["family_id"],
-                      "source_group_id": item["group_id"],
-                      "split": roster[version]["split"], "trace_sha256": item["trace_sha256"],
-                      "summary_sha256": digest(summary), "messages": target_messages,
-                      "anchor_transform": transform, "tool_transform": tool_transform,
-                      "visibility_transform": visibility, "discovery_transform": None}
-            records.append(record)
-            proofs[sid] = {"verified_success": True, "source_sha256": digest(record, ascii=True),
-                           "report_call_id": report_id, "verifier_execution_id": verifier["id"],
-                           "trace_sha256": item["trace_sha256"],
-                           "legacy_selection_acceptance_sha256_unverified": item["acceptance_sha256"]}
             # New target-anchored method; the historical original-anchor algorithm must not claim it.
             old = {"schema": "fleet_cyber_trajectory_v1", "record_id": sid,
                    "source": {"session_id": sid, "model": item["model_id"],
@@ -732,10 +720,8 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
         if len(probe_versions) < MIN_ANCHOR_PROBES:
             raise SourceError("exact-version target-anchor probes were not bound to source")
         files = {"request": request_file_sha256,
-                 "records": _write(output / "records.jsonl", records, lines=True),
                  "quarantine": _write(output / "quarantine.private.jsonl", quarantine, lines=True),
                  "raw_sources": _write(output / "raw-sources.private.jsonl", raw_sources, lines=True),
-                 "evidence": _write(output / "success-evidence.json", proofs),
                  "dense_target_normalized": _write(output / "dense-target-anchored.jsonl", target_records, lines=True),
                  "dense_success_evidence": _write(output / "dense-success-evidence.jsonl", target_proofs, lines=True),
                  "roster": _write(output / "family-roster.json", roster),
@@ -750,15 +736,18 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
                    "input_sha256": {name: request[name]["sha256"] for name in
                                     ("selection", "hydration", "roles", "tool_capture")},
                    "target_anchor_probe_file_sha256": [binding["sha256"] for binding in bindings],
-                   "files": files, "selected_sessions": len(selected), "retained_sessions": len(records),
-                   "retained_by_split": dict(sorted(Counter(row["split"] for row in records).items())),
+                   "files": files, "selected_sessions": len(selected), "retained_sessions": len(target_records),
+                   "retained_by_split": dict(sorted(Counter(
+                       roster[row["lineage"]["eval_task_version_id"]]["split"]
+                       for row in target_records).items())),
                    "excluded_sessions": dict(sorted(exclusions.items())),
                    "original_anchor_legacy_tool_name_sessions": old_anchor_mentions,
                    "exact_discovery_elided_sessions": 0,
                    "anchor_method": ANCHOR_METHOD,
                    "visibility_method": "visible_only_assistant_content_v1",
                    "model_facing_tools_sha256": TOOL_DIGEST,
-                   "download_complete": len(records) + len(quarantine) + exclusions["final_test"] == len(selected),
+                   "download_complete": len(target_records) + len(quarantine)
+                   + exclusions["final_test"] == len(selected),
                    "training_ready": False,
                    "training_blocker": "live_fleet_mcp_and_served_model_request_attestation_required"}
         receipt["sha256"] = digest(receipt)
