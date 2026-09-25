@@ -14,18 +14,20 @@ import json
 import os
 import time
 import uuid
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
 import httpx
 
 from training.qualify_live import PRIVATE, PROJECT, PUBLIC, TEAM
+from training.qualification_order import checked
 
 CONTRACT = {"evidence_schema": "1.0.0", "submission_protocol": "2.0.0",
             "verifier_contract": "3.0.0"}
-# The old deployed route ignored X-Request-ID. Keep creates disabled until the
-# new capability is independently read back from production.
-VERSION_SCOPED_DURABLE_CREATE_VERIFIED = False
+# Only the first reviewed cell is authorized; widen after its cleanup audit.
+RUN_AUTHORIZED = {0}
+ORDER_PATH = Path(__file__).resolve().parents[1] / "configs/data/fleet-blackbox-qualification-order-20260925-v1.json"
 PROBES = {"bash": {"script": "printf task-quality-runtime-ok"},
           "submit_report": {"verdict": "no_flag", "explanation":
                             "Automated runtime check; exploitability was not tested."}}
@@ -85,10 +87,16 @@ def load_cell(wave_path: Path, index: int) -> tuple[dict, dict, str, str]:
     wave = load(wave_path)
     sha = wave.pop("sha256", None)
     rows = wave.get("wave")
+    order = checked(load(ORDER_PATH))
+    first = sorted(order["ordered_families"], key=lambda family: family["qualification_rank"])[:16]
+    identities = [tuple(family["representative"]) for family in first]
     if (sha != seal(wave)["sha256"]
             or wave.get("schema") != "fleet_blackbox_readonly_qualification_wave_v1"
             or wave.get("launch_authorized") is not False
-            or not isinstance(rows, list) or not 0 <= index < len(rows) <= 16
+            or wave.get("source_order_sha256") != order["sha256"]
+            or wave.get("rank_range") != [1, 16]
+            or not isinstance(rows, list) or len(rows) != 16 or not 0 <= index < 16
+            or [(row["task_key"], row["task_version_id"]) for row in rows] != identities
             or len({row["task_version_id"] for row in rows}) != len(rows)):
         raise ValueError("frozen qualification wave is invalid")
     row = rows[index]
@@ -110,9 +118,9 @@ def preview(wave_path: Path, index: int, root: Path) -> dict:
                  "cell_index": index, "task_version_id": row["task_version_id"],
                  "request_id": request_id, "binding_sha256": binding["sha256"],
                  "exact_binding": True, "claim_unclaimed": True,
-                 "create_authorized": VERSION_SCOPED_DURABLE_CREATE_VERIFIED,
+                 "create_authorized": index in RUN_AUTHORIZED,
                  "root_alert_annotation_required": False,
-                 "reason": "version-scoped provision does not honor durable create claim"})
+                 "reason": "first cell only; widen after cleanup audit"})
 
 
 def preflight(client: httpx.Client, row: dict, request_id: str) -> dict:
@@ -125,8 +133,14 @@ def preflight(client: httpx.Client, row: dict, request_id: str) -> dict:
     paths = api.get("paths") or {}
     claim_route = paths.get("/v1/env/instances/create-requests/{request_id}") or {}
     instance_route = paths.get("/v1/env/instances/{instance_id}") or {}
-    if not {"get", "delete"} <= set(claim_route) or not {"get", "delete"} <= set(instance_route):
-        raise ValueError("exact claim/instance cleanup routes are not deployed")
+    ttl_route = paths.get("/v1/env/instances/{instance_id}/ttl") or {}
+    if (not {"get", "delete"} <= set(claim_route)
+            or not {"get", "delete"} <= set(instance_route)
+            or "post" not in ttl_route
+            or ttl_route["post"].get("requestBody", {}).get("content", {}).get(
+                "application/json", {}).get("schema", {}).get("$ref")
+            != "#/components/schemas/SetTTLRequest"):
+        raise ValueError("exact claim, TTL, or cleanup routes are not deployed")
     capability = request(client, "GET", "/v1/rollout-rewards/capabilities")
     if (capability.get("version_scoped_durable_create_claim") != "v1"
             or capability.get("create_request_field") != "create_request_id"
@@ -138,7 +152,8 @@ def preflight(client: httpx.Client, row: dict, request_id: str) -> dict:
             if response.status_code != 405:
                 raise ValueError("version-scoped verifier route is not deployed")
     claim = client.get(PUBLIC + f"/v1/env/instances/create-requests/{request_id}")
-    if claim.status_code != 404:
+    if (claim.status_code != 404 or claim.json().get("detail", {}).get("error")
+            != "durable_create_request_not_found"):
         raise ValueError("create request ID is already claimed or cannot be checked")
     response = client.get(PRIVATE + f"/v1/pipeline/tasks/{row['task_id']}/status")
     response.raise_for_status()
@@ -291,9 +306,28 @@ def cleanup(client: httpx.Client, intent: dict, binding: dict,
                  "cleanup_complete": True})
 
 
+def clamp_ttl(client: httpx.Client, instance_id: str) -> dict:
+    path = f"/v1/env/instances/{instance_id}"
+    updated = request(client, "POST", path + "/ttl", json={"ttl_seconds": 900})
+    observed = request(client, "GET", path)
+    if (updated.get("instance_id") != instance_id
+            or observed.get("instance_id") != instance_id
+            or observed.get("status") != "running"):
+        raise ValueError("TTL clamp instance identity/status mismatch")
+    try:
+        expiry = datetime.fromisoformat(observed["expires_at"].replace("Z", "+00:00")).timestamp()
+        echoed = datetime.fromisoformat(updated["expires_at"].replace("Z", "+00:00")).timestamp()
+    except (KeyError, AttributeError, ValueError, TypeError) as error:
+        raise ValueError("TTL clamp has no valid expiry readback") from error
+    if abs(expiry - echoed) > 1 or not 0 < expiry - time.time() <= 930:
+        raise ValueError("TTL clamp expiry was not bounded and persisted")
+    return seal({"instance_id": instance_id, "ttl_clamped": True,
+                 "expires_at": observed["expires_at"]})
+
+
 def run_cell(wave_path: Path, index: int, root: Path) -> dict:
-    if not VERSION_SCOPED_DURABLE_CREATE_VERIFIED:
-        raise ValueError("version-scoped durable create is not deployed; no new provision")
+    if index not in RUN_AUTHORIZED:
+        raise ValueError("qualification create is not authorized; no new provision")
     _, row, sha, request_id = load_cell(wave_path, index)
     key = os.environ.get("FLEET_API_KEY", "")
     if not key:
@@ -333,6 +367,7 @@ def run_cell(wave_path: Path, index: int, root: Path) -> dict:
                     or instance.get("version") != binding["environment_version"]
                     or instance.get("status") != "running"):
                 raise ValueError("running instance identity mismatch")
+            write_once(cell / "TTL.json", clamp_ttl(client, instance_id))
             auth = request(client, "GET", "/v1/runner-auth/token")
             if not auth.get("header") or not auth.get("token"):
                 raise ValueError("runner authorization unavailable")

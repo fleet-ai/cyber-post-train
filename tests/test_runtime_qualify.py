@@ -3,6 +3,7 @@
 import json
 import tempfile
 import unittest
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -22,9 +23,10 @@ def response(code, value=None, *, headers=None):
 
 
 class RuntimeQualificationTests(unittest.TestCase):
-    def test_create_is_disabled_until_version_scoped_claim_exists(self):
-        with self.assertRaisesRegex(ValueError, "durable create is not deployed"):
-            q.run_cell(Path("not-read"), 0, Path("not-created"))
+    def test_only_first_cell_is_authorized(self):
+        with self.assertRaisesRegex(ValueError, "not authorized"):
+            q.run_cell(Path("not-read"), 1, Path("not-created"))
+        self.assertIn(0, q.RUN_AUTHORIZED)
 
     def test_preflight_reads_only_and_binds_exact_version(self):
         methods = []
@@ -39,7 +41,10 @@ class RuntimeQualificationTests(unittest.TestCase):
                 return response(200, {"paths": {
                     "/v1/env/instances/create-requests/{request_id}":
                         {"get": {}, "delete": {}},
-                    "/v1/env/instances/{instance_id}": {"get": {}, "delete": {}}}})
+                    "/v1/env/instances/{instance_id}": {"get": {}, "delete": {}},
+                    "/v1/env/instances/{instance_id}/ttl": {"post": {"requestBody": {
+                        "content": {"application/json": {"schema": {
+                            "$ref": "#/components/schemas/SetTTLRequest"}}}}}}}})
             if path == "/v1/rollout-rewards/capabilities":
                 return response(200, {"version_scoped_durable_create_claim": "v1",
                                       "create_request_field": "create_request_id",
@@ -48,7 +53,7 @@ class RuntimeQualificationTests(unittest.TestCase):
             if path.startswith("/v1/rollout-rewards/"):
                 return response(405)
             if path.startswith("/v1/env/instances/create-requests/"):
-                return response(404)
+                return response(404, {"detail": {"error": "durable_create_request_not_found"}})
             if path == "/v1/pipeline/tasks/task-1/status":
                 return response(200, {"eval_task_id": "task-1", "current_version_id": "version-1",
                                       "lifecycle_status": "production", "verifier_attached": True})
@@ -111,19 +116,33 @@ class RuntimeQualificationTests(unittest.TestCase):
         self.assertEqual(methods[-1], ("DELETE", "/v1/env/instances/instance-1"))
 
     def test_wave_digest_and_duplicate_gate(self):
-        wave = {"schema": "fleet_blackbox_readonly_qualification_wave_v1",
-                "launch_authorized": False, "wave": [ROW]}
+        source = q.ORDER_PATH.with_name("fleet-blackbox-qualification-rank16-20260925-v1.json")
+        wave = json.loads(source.read_text())
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "wave.json"
-            path.write_text(json.dumps(q.seal(wave)))
+            path.write_text(json.dumps(wave))
             _, row, _, first = q.load_cell(path, 0)
-            self.assertEqual(row, ROW)
+            self.assertEqual(row, wave["wave"][0])
             self.assertEqual(first, q.load_cell(path, 0)[3])
-            changed = q.seal({**wave, "wave": [{**ROW, "task_version_id": "other"}]})
-            changed["wave"][0]["task_version_id"] = "changed-again"
+            changed = {**wave, "wave": [{**wave["wave"][0], "task_version_id": "other"},
+                                       *wave["wave"][1:]]}
             path.write_text(json.dumps(changed))
             with self.assertRaisesRegex(ValueError, "wave is invalid"):
                 q.load_cell(path, 0)
+
+    def test_clamp_ttl_requires_persisted_short_expiry(self):
+        expiry = (datetime.now(UTC) + timedelta(seconds=900)).isoformat()
+        def handle(req):
+            self.assertEqual(req.url.path, "/v1/env/instances/instance-1" +
+                             ("/ttl" if req.method == "POST" else ""))
+            return response(200, {"instance_id": "instance-1", "status": "running",
+                                  "expires_at": expiry})
+        with httpx.Client(transport=httpx.MockTransport(handle)) as client:
+            self.assertTrue(q.clamp_ttl(client, "instance-1")["ttl_clamped"])
+        expiry = (datetime.now(UTC) + timedelta(hours=3)).isoformat()
+        with httpx.Client(transport=httpx.MockTransport(handle)) as client:
+            with self.assertRaisesRegex(ValueError, "not bounded"):
+                q.clamp_ttl(client, "instance-1")
 
     def test_mcp_session_header_is_used_and_closed(self):
         calls = []
