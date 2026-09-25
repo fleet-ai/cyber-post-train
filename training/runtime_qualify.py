@@ -25,8 +25,8 @@ from training.qualification_order import checked
 
 CONTRACT = {"evidence_schema": "1.0.0", "submission_protocol": "2.0.0",
             "verifier_contract": "3.0.0"}
-# Only the first reviewed cell is authorized; widen after its cleanup audit.
-RUN_AUTHORIZED = {0}
+# Only the first two reviewed cells are authorized; widen after cleanup audit.
+RUN_AUTHORIZED = {0, 1}
 ORDER_PATH = Path(__file__).resolve().parents[1] / "configs/data/fleet-blackbox-qualification-order-20260925-v1.json"
 PROBES = {"bash": {"script": "printf task-quality-runtime-ok"},
           "submit_report": {"verdict": "no_flag", "explanation":
@@ -120,7 +120,7 @@ def preview(wave_path: Path, index: int, root: Path) -> dict:
                  "exact_binding": True, "claim_unclaimed": True,
                  "create_authorized": index in RUN_AUTHORIZED,
                  "root_alert_annotation_required": False,
-                 "reason": "first cell only; widen after cleanup audit"})
+                 "reason": "first two cells only; widen after cleanup audit"})
 
 
 def preflight(client: httpx.Client, row: dict, request_id: str) -> dict:

@@ -23,10 +23,10 @@ def response(code, value=None, *, headers=None):
 
 
 class RuntimeQualificationTests(unittest.TestCase):
-    def test_only_first_cell_is_authorized(self):
+    def test_only_first_two_cells_are_authorized(self):
         with self.assertRaisesRegex(ValueError, "not authorized"):
-            q.run_cell(Path("not-read"), 1, Path("not-created"))
-        self.assertIn(0, q.RUN_AUTHORIZED)
+            q.run_cell(Path("not-read"), 2, Path("not-created"))
+        self.assertEqual(q.RUN_AUTHORIZED, {0, 1})
 
     def test_preflight_reads_only_and_binds_exact_version(self):
         methods = []
