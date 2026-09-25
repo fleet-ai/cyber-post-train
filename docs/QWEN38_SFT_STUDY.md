@@ -33,6 +33,18 @@ family roles before windowing, and seal separate train and teacher-validation
 files. The **actual** trainer-ready token/mask files and exact digests must be
 checked; a structured JSONL preview is not a completed corpus.
 
+The reviewed source-family roles are now frozen in
+`configs/data/qwen38-teacher3k-family-roles-20260925-v1.json`. Its canonical
+payload SHA-256 is
+`6c56b9b1ae9c0e5b21a36e48f0d5b6a451bda9da24ecab8262cb737acb1e2b68`.
+Of the 1,176 selected source versions, 1,057 are training, 113 are separate
+teacher-loss validation, and 6 are quarantined because their atom lineage
+touches a protected Fleet task family. Their source sessions are respectively
+2,671, 199, and 16; these counts are **not** packed training windows. This
+split prevents known family leakage in teacher loss but does not qualify any
+current Fleet task as runnable or prove that the new model-facing corpus is
+ready to train.
+
 ## Two different held-out measurements
 
 1. Teacher-validation loss measures next-token prediction on successful
