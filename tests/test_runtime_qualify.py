@@ -38,9 +38,14 @@ class RuntimeQualificationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "frozen qualification wave"):
                 q.load_cell(copy, 0)
 
-    def test_only_first_two_cells_are_authorized(self):
+    def test_only_first_two_final_cells_are_authorized(self):
+        root = Path(__file__).parents[1] / "configs/data"
+        old = root / "fleet-blackbox-qualification-rank16-20260925-v1.json"
+        dev = root / "fleet-blackbox-development-qualification-preview16-20260925-v1.json"
+        self.assertFalse(q.authorized(q.load_cell(old, 2)[0], 2))
+        self.assertTrue(q.authorized(q.load_cell(dev, 2)[0], 2))
         with self.assertRaisesRegex(ValueError, "not authorized"):
-            q.run_cell(Path("not-read"), 2, Path("not-created"))
+            q.run_cell(old, 2, Path("not-created"))
         self.assertEqual(q.RUN_AUTHORIZED, {0, 1})
 
     def test_preflight_reads_only_and_binds_exact_version(self):

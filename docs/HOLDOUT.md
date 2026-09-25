@@ -29,13 +29,18 @@ error before tool verification; its cause is not yet attributable to the task.
 Neither proves positive solvability, so no task was promoted to a runnable
 holdout. Registry/Lanes supplied no exact positive record. A sealed,
 DEV-family-first 16-cell roster is frozen. Its manifest authorizes no bulk
-launch; after the first cell's exact cleanup audit, the runtime checker permits
-only its first two cells as bounded, model-free diagnostics after live preflight.
+launch; after the first two cells' exact cleanup audits, the runtime checker
+permits the 16 frozen DEV representatives one at a time as bounded, model-free
+diagnostics after fresh live preflight.
 That first DEV cell passed startup, both task-tool probes, negative grading,
 and exact cleanup on September 25 (terminal SHA-256
 `2f79d4bbf13d1a13b08490d0d9fd58860607f69dabe98522b9bc91d35e7b9e2b`;
 independent instance readback `stopped`). It is **not** a positive solve or a
 qualified holdout task.
+The second DEV cell passed the same operational checks and independent stopped
+readback (terminal SHA-256
+`74dd660ace558d09e123fe944fc98895d50e1b94300d2e68af5ae62f6386997f`).
+It also has no positive solve; qualified-task count remains zero.
 
 A census found 257 full-credit leads on 68 keys. Private exact-version checks
 proved **20 historical positive versions/18 families** (six DEV, 12 final;

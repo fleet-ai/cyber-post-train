@@ -4,7 +4,7 @@ This is a direct API client, not a Kubernetes Job and not a model rollout. It
 uses one environment at a time, probes only bash/submit_report, checks the real
 verifier with a fixed no-flag control, and always attempts exact-ID cleanup.
 Only content-free receipts are saved. Run `recover` after an interrupted cell.
-The separate frozen DEV preview permits only its first two exact cells.
+The separate frozen DEV roster permits one bounded cell at a time.
 """
 
 from __future__ import annotations
@@ -30,8 +30,9 @@ PRIVATE = "https://api.internal.fleet-platform.fleetai.com"
 
 CONTRACT = {"evidence_schema": "1.0.0", "submission_protocol": "2.0.0",
             "verifier_contract": "3.0.0"}
-# Only the first two final or DEV cells are authorized; widen after cleanup audit.
+# The first two final cells are frozen; all 16 DEV cells follow two clean releases.
 RUN_AUTHORIZED = {0, 1}
+DEV_AUTHORIZED = frozenset(range(16))
 ORDER_PATH = Path(__file__).resolve().parents[1] / "configs/data/fleet-blackbox-qualification-order-20260925-v1.json"
 PROBES = {"bash": {"script": "printf task-quality-runtime-ok"},
           "submit_report": {"verdict": "no_flag", "explanation":
@@ -127,6 +128,11 @@ def load_cell(wave_path: Path, index: int) -> tuple[dict, dict, str, str]:
     return wave, row, sha, request_id
 
 
+def authorized(wave: dict, index: int) -> bool:
+    return index in (DEV_AUTHORIZED if wave["schema"] ==
+                     "fleet_blackbox_development_qualification_preview_v1" else RUN_AUTHORIZED)
+
+
 def preview(wave_path: Path, index: int, root: Path) -> dict:
     wave, row, sha, request_id = load_cell(wave_path, index)
     if (root / f"cell-{index:02d}").exists():
@@ -140,9 +146,9 @@ def preview(wave_path: Path, index: int, root: Path) -> dict:
                  "cell_index": index, "task_version_id": row["task_version_id"],
                  "request_id": request_id, "binding_sha256": binding["sha256"],
                  "exact_binding": True, "claim_unclaimed": True,
-                 "create_authorized": index in RUN_AUTHORIZED,
+                 "create_authorized": authorized(wave, index),
                  "root_alert_annotation_required": False,
-                 "reason": "first two cells only; widen after cleanup audit"})
+                 "reason": "exact frozen cell; one instance at a time"})
 
 
 def preflight(client: httpx.Client, row: dict, request_id: str) -> dict:
@@ -361,9 +367,11 @@ def clamp_ttl(client: httpx.Client, instance_id: str) -> dict:
 
 
 def run_cell(wave_path: Path, index: int, root: Path) -> dict:
-    if index not in RUN_AUTHORIZED:
+    if index not in RUN_AUTHORIZED | DEV_AUTHORIZED:
         raise ValueError("qualification create is not authorized; no new provision")
-    _, row, sha, request_id = load_cell(wave_path, index)
+    wave, row, sha, request_id = load_cell(wave_path, index)
+    if not authorized(wave, index):
+        raise ValueError("qualification create is not authorized; no new provision")
     key = os.environ.get("FLEET_API_KEY", "")
     if not key:
         raise ValueError("Fleet key unavailable")
