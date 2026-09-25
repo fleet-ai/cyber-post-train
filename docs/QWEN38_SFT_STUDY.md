@@ -36,6 +36,21 @@ unique final status. One-text-block conversion adds 219 TRAIN/15 DEV:
 remain unproved. OpenCode 1.18.27 truncates results above 50 KiB/2,000 lines;
 only 362 TRAIN/7 DEV sessions are size-safe—too little for accepted full SFT.
 
+## Bounded live target-wire probe (2026-09-25)
+
+The Chris-owned exact-base route (model UID `54beeb64-c498-4e7d-a504-05a8d694808b`,
+Pod UID `6a7308b4-4e8b-4683-a21f-9c32147dfd0a`) served two frozen TRAIN task
+anchors through pinned OpenCode 1.18.27 and the fixed proxy. Both first requests
+matched the reviewed system/user and two-tool hashes; both returned complete
+HTTP-200 SSE streams with distinct response IDs. The synthetic local MCP did
+not execute task tools. The first probe entered a tool loop: 10 bounded live
+chat requests total, each capped at 128 output tokens. The route was paused
+and independently read back at zero Pods/replicas and routing disabled.
+Private sealed diagnostic: `/private/tmp/cpt-q38-live-qwen-wire.YKisC9/LIVE_WIRE_DIAGNOSTIC.json`
+(file SHA-256 `c6d475ba5b54bb2a34b1f2f68ee4aa4e10964873de0208d7cc4ae326e81eeeed`).
+This proves current target first-request wire only, **not** the historical
+teacher tool-result renderer or corpus acceptance; `training_ready` stays false.
+
 ## Parallel execution lanes
 
 - **96k independent fast lane:** one node/eight GPUs; corrected family-disjoint
