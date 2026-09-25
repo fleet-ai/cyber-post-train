@@ -123,6 +123,7 @@ def job_payload(plan: dict, arm: str) -> dict:
         "name": f"chris-q38-fleet-{identity[7:19]}-{arm}",
         "models": [plan["routes"][arm]],
         "pass_k": 4,
+        "scoring_mode": common["scoring_mode"],
         "task_group_id": plan["task_group_id"],
         "agent_runtime": True,
         "harness": "opencode",
@@ -211,6 +212,7 @@ def preview(plan: dict, arm: str, *,
         "scientific_identity_sha256": _identity(protocol),
         "planned_sessions": sessions,
         "sampling": "server defaults; seeds, temperature and top_p are not observed or asserted",
+        "pass_criterion": protocol["common"]["pass_criterion"],
         "server_retry_policy": "not caller-configurable; duplicate attempts are invalid in accounting",
     }
 

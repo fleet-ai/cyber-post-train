@@ -38,6 +38,7 @@ def fixture():
             "max_steps": 600, "max_duration_minutes": 480,
             "temperature": None, "top_p": None,
             "seed_policy": {"mode": "server_assigned_unobserved"},
+            "scoring_mode": "partial", "pass_criterion": "cyber_ctf_full_solve_v1",
             "retry_limit": 0,
         },
         "arms": {
@@ -101,16 +102,18 @@ class LaunchTests(unittest.TestCase):
         packet = preview(plan, "base", **gates(plan, live, group))
         payload = packet["payload"]
         self.assertEqual(set(payload), {
-            "name", "models", "pass_k", "task_group_id", "agent_runtime",
+            "name", "models", "pass_k", "scoring_mode", "task_group_id", "agent_runtime",
             "harness", "mode", "tools", "max_steps", "max_duration_minutes",
         })
         self.assertEqual(payload["models"], [plan["routes"]["base"]])
         self.assertEqual(payload["pass_k"], 4)
+        self.assertEqual(payload["scoring_mode"], "partial")
         self.assertEqual(payload["tools"], [])
         self.assertEqual(payload["max_steps"], 600)
         self.assertEqual(payload["max_duration_minutes"], 480)
         self.assertEqual(packet["preview_kind"], "local_read_only_no_server_preview")
         self.assertIn("server defaults", packet["sampling"])
+        self.assertEqual(packet["pass_criterion"], "cyber_ctf_full_solve_v1")
         self.assertIn("not caller-configurable", packet["server_retry_policy"])
 
     def test_matched_arms_and_renamed_study_are_same_scientific_identity(self):
