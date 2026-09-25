@@ -8,14 +8,26 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from training.dense_bridge import (COMMIT, SOURCES, NATIVE_HELPER_SHA, _digest, _legacy_digest, stage_historical,
                                    validate_request, compose_teacher_ce, _file_sha,
                                    INPUTS, REQUEST_SCHEMA, ALGORITHM, MANIFEST_SCHEMA,
-                                   RECEIPT_SCHEMA, TARGET_BUILDER_SHA)
+                                   RECEIPT_SCHEMA, TARGET_BUILDER_SHA, TARGET_ROOT_ID)
 
 
 class DenseBridgeTest(unittest.TestCase):
+    def test_exact_frozen_directory_needs_no_git(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stage_historical(root / "sealed")
+            with patch.dict(os.environ, {"CYBER_HISTORICAL_ROOT": str(root / "sealed")}):
+                self.assertEqual(stage_historical(root / "copy", repository=root / "not-a-repo",
+                                                  target_names=True), TARGET_BUILDER_SHA)
+                (root / "sealed/training/dense.py").write_bytes(b"drift")
+                with self.assertRaisesRegex(ValueError, "differs"):
+                    stage_historical(root / "rejected", repository=root / "not-a-repo")
+
     def test_historical_dependency_closure_imports(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -73,7 +85,9 @@ class DenseBridgeTest(unittest.TestCase):
                       "[c['function'].__setitem__('name', 'fleet_bash' if c['function']['name']=='bash' "
                       "else 'fleet_submit_report') for m in r['messages'] for c in m.get('tool_calls',[])]; "
                       "r['content_digest']=x['digest_json']({k:v for k,v in r.items() if k!='content_digest'}); "
-                      "rows,_,_=x['_materialize'](r); "
+                      f"z=x['_roster'](); z['root_role_anchor_id']='{TARGET_ROOT_ID}'; "
+                      "z=x['_sealed']({k:v for k,v in z.items() if k!='sha256'}); "
+                      "rows,_,_=x['_materialize'](r,z); "
                       "assert rows and all(s['source_target_sha256'] for row in rows "
                       "for s in row['target_spans'])")
             result = subprocess.run([sys.executable, "-c", script], cwd=root, capture_output=True,

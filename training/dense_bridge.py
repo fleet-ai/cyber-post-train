@@ -46,7 +46,11 @@ ALGORITHM = "anchored_complete_message_rounds_with_exact_tool_contract_v1"
 TARGET_ALIAS_PATCH_FROM = 'SOURCE_TOOL_ALIASES = {\n    "bash": "bash",'
 TARGET_ALIAS_PATCH_TO = ('SOURCE_TOOL_ALIASES = {\n    "fleet_bash": "bash",\n'
                          '    "fleet_submit_report": "submit_report",\n    "bash": "bash",')
-TARGET_BUILDER_SHA = "sha256:a47527237cf9a55edcfb2b79bbebae5bfe0b0d9a8faf469c555c8640668d4b76"
+TARGET_ROOT_ID = "fleet-q38-teacher3k-transitive-roles-20260925-v1"
+TARGET_ANCHOR_SHA = "sha256:5b4d3d959d599a14235f0ecfdd8d8e699584424af4dd0b267440f388c0c2d224"
+TARGET_ROOT_PATCH_FROM = 'value["root_role_anchor_id"] != TRUSTED_FLEET_COLLECTION_ROOT_ID'
+TARGET_ROOT_PATCH_TO = f'value["root_role_anchor_id"] != "{TARGET_ROOT_ID}"'
+TARGET_BUILDER_SHA = "sha256:c18c1bf762e1bddcde8ec5cc83455f5f1f4d782cab727a37d34d91748ce2a8cd"
 
 
 def _digest(value: object) -> str:
@@ -117,17 +121,31 @@ def stage_historical(root: Path, *, repository: Path | None = None,
                      target_names: bool = False) -> str:
     """Copy only the exact historical source closure from a Git object."""
     repository = repository or Path(__file__).resolve().parents[1]
+    frozen_root = os.environ.get("CYBER_HISTORICAL_ROOT")
+    frozen_root = Path(frozen_root) if frozen_root else None
+    if frozen_root is not None and (frozen_root.is_symlink() or not frozen_root.is_dir()):
+        raise ValueError("frozen source directory is absent or linked")
     builder_sha = "sha256:" + SOURCES["training/message_aligned_teacher_corpus.py"]
     for relative, expected in SOURCES.items():
-        result = subprocess.run(["git", "-C", str(repository), "show", f"{COMMIT}:{relative}"],
-                                capture_output=True, check=False)
-        if result.returncode or hashlib.sha256(result.stdout).hexdigest() != expected:
+        if frozen_root is None:
+            result = subprocess.run(["git", "-C", str(repository), "show", f"{COMMIT}:{relative}"],
+                                    capture_output=True, check=False)
+            payload = result.stdout if result.returncode == 0 else b""
+        else:
+            source = frozen_root / relative
+            if source.is_symlink() or not source.is_file() or not source.resolve().is_relative_to(frozen_root.resolve()):
+                raise ValueError("frozen source file is absent or linked")
+            payload = source.read_bytes()
+        if hashlib.sha256(payload).hexdigest() != expected:
             raise ValueError("frozen source object is unavailable or differs")
-        payload = result.stdout
         if target_names and relative == "training/message_aligned_teacher_corpus.py":
             before, after = TARGET_ALIAS_PATCH_FROM.encode(), TARGET_ALIAS_PATCH_TO.encode()
             if payload.count(before) != 1:
                 raise ValueError("frozen source has no unique target-name patch point")
+            payload = payload.replace(before, after, 1)
+            before, after = TARGET_ROOT_PATCH_FROM.encode(), TARGET_ROOT_PATCH_TO.encode()
+            if payload.count(before) != 1:
+                raise ValueError("frozen source has no unique target-root patch point")
             payload = payload.replace(before, after, 1)
             builder_sha = "sha256:" + hashlib.sha256(payload).hexdigest()
             if builder_sha != TARGET_BUILDER_SHA:
@@ -280,7 +298,9 @@ def compose_teacher_ce(dense_dir: Path, dev_dir: Path, dev_source_dir: Path,
     identities = roster.get("identities")
     if not isinstance(identities, list) or not identities:
         raise ValueError("reviewed family identities are absent")
-    if roster.get("root_role_anchor_id") != "fleet-blackbox-current-study-20260914-v2":
+    expected_root = TARGET_ROOT_ID if new_method else "fleet-blackbox-current-study-20260914-v2"
+    if (roster.get("root_role_anchor_id") != expected_root
+            or new_method and roster.get("family_role_anchor_sha256") != TARGET_ANCHOR_SHA):
         raise ValueError("reviewed root identity differs")
     by_pair, by_version, family_roles = {}, {}, {}
     for item in identities:
