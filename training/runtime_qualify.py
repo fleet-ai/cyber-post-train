@@ -4,7 +4,7 @@ This is a direct API client, not a Kubernetes Job and not a model rollout. It
 uses one environment at a time, probes only bash/submit_report, checks the real
 verifier with a fixed no-flag control, and always attempts exact-ID cleanup.
 Only content-free receipts are saved. Run `recover` after an interrupted cell.
-The separate frozen DEV preview permits only its first exact cell.
+The separate frozen DEV preview permits only its first two exact cells.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ PRIVATE = "https://api.internal.fleet-platform.fleetai.com"
 
 CONTRACT = {"evidence_schema": "1.0.0", "submission_protocol": "2.0.0",
             "verifier_contract": "3.0.0"}
-# Only the first two final or first DEV cell are authorized; widen after cleanup audit.
+# Only the first two final or DEV cells are authorized; widen after cleanup audit.
 RUN_AUTHORIZED = {0, 1}
 ORDER_PATH = Path(__file__).resolve().parents[1] / "configs/data/fleet-blackbox-qualification-order-20260925-v1.json"
 PROBES = {"bash": {"script": "printf task-quality-runtime-ok"},
@@ -140,10 +140,9 @@ def preview(wave_path: Path, index: int, root: Path) -> dict:
                  "cell_index": index, "task_version_id": row["task_version_id"],
                  "request_id": request_id, "binding_sha256": binding["sha256"],
                  "exact_binding": True, "claim_unclaimed": True,
-                 "create_authorized": index in RUN_AUTHORIZED and (
-                     wave["schema"] != "fleet_blackbox_development_qualification_preview_v1" or index == 0),
+                 "create_authorized": index in RUN_AUTHORIZED,
                  "root_alert_annotation_required": False,
-                 "reason": "one DEV or two final cells only; widen after cleanup audit"})
+                 "reason": "first two cells only; widen after cleanup audit"})
 
 
 def preflight(client: httpx.Client, row: dict, request_id: str) -> dict:
@@ -364,9 +363,7 @@ def clamp_ttl(client: httpx.Client, instance_id: str) -> dict:
 def run_cell(wave_path: Path, index: int, root: Path) -> dict:
     if index not in RUN_AUTHORIZED:
         raise ValueError("qualification create is not authorized; no new provision")
-    wave, row, sha, request_id = load_cell(wave_path, index)
-    if wave["schema"] == "fleet_blackbox_development_qualification_preview_v1" and index != 0:
-        raise ValueError("qualification create is not authorized; no new provision")
+    _, row, sha, request_id = load_cell(wave_path, index)
     key = os.environ.get("FLEET_API_KEY", "")
     if not key:
         raise ValueError("Fleet key unavailable")

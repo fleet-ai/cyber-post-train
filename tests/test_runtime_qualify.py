@@ -27,6 +27,7 @@ class RuntimeQualificationTests(unittest.TestCase):
         path = Path(__file__).parents[1] / "configs/data/fleet-blackbox-development-qualification-preview16-20260925-v1.json"
         wave, row, _sha, _request_id = q.load_cell(path, 0)
         self.assertEqual((row["reserved_role"], row["qualification_rank"]), ("dev", 25))
+        self.assertEqual(q.load_cell(path, 1)[1]["qualification_rank"], 26)
         self.assertFalse(wave["launch_authorized"])
         altered = json.loads(path.read_text())
         altered["wave"][0]["reserved_role"] = "final_test"
