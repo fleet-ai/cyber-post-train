@@ -28,7 +28,9 @@ cleanup on September 25. The second stopped cleanly after an operational
 error before tool verification; its cause is not yet attributable to the task.
 Neither proves positive solvability, so no task was promoted to a runnable
 holdout. Registry/Lanes supplied no exact positive record. A sealed,
-DEV-family-first 16-cell preview exists, but authorizes no creates.
+DEV-family-first 16-cell roster is frozen. Its manifest authorizes no bulk
+launch; the runtime checker permits only its first cell as a bounded,
+model-free diagnostic after exact live preflight.
 
 A census found 257 full-credit leads on 68 keys. Private exact-version checks
 proved **20 historical positive versions/18 families** (six DEV, 12 final;

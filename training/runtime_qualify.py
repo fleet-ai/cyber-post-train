@@ -4,6 +4,7 @@ This is a direct API client, not a Kubernetes Job and not a model rollout. It
 uses one environment at a time, probes only bash/submit_report, checks the real
 verifier with a fixed no-flag control, and always attempts exact-ID cleanup.
 Only content-free receipts are saved. Run `recover` after an interrupted cell.
+The separate frozen DEV preview permits only its first exact cell.
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ PRIVATE = "https://api.internal.fleet-platform.fleetai.com"
 
 CONTRACT = {"evidence_schema": "1.0.0", "submission_protocol": "2.0.0",
             "verifier_contract": "3.0.0"}
-# Only the first two reviewed cells are authorized; widen after cleanup audit.
+# Only the first two final or first DEV cell are authorized; widen after cleanup audit.
 RUN_AUTHORIZED = {0, 1}
 ORDER_PATH = Path(__file__).resolve().parents[1] / "configs/data/fleet-blackbox-qualification-order-20260925-v1.json"
 PROBES = {"bash": {"script": "printf task-quality-runtime-ok"},
@@ -96,16 +97,29 @@ def load_cell(wave_path: Path, index: int) -> tuple[dict, dict, str, str]:
     sha = wave.pop("sha256", None)
     rows = wave.get("wave")
     order = checked(load(ORDER_PATH))
-    first = sorted(order["ordered_families"], key=lambda family: family["qualification_rank"])[:16]
+    families = sorted(order["ordered_families"], key=lambda family: family["qualification_rank"])
+    development = wave.get("schema") == "fleet_blackbox_development_qualification_preview_v1"
+    first = ([family for family in families if family["reserved_role"] == "dev"][:16]
+             if development else families[:16])
     identities = [tuple(family["representative"]) for family in first]
-    if (sha != seal(wave)["sha256"]
-            or wave.get("schema") != "fleet_blackbox_readonly_qualification_wave_v1"
-            or wave.get("launch_authorized") is not False
-            or wave.get("source_order_sha256") != order["sha256"]
-            or wave.get("rank_range") != [1, 16]
+    source = {(row["task_key"], row["task_version_id"]): row
+              for row in order["candidate_versions"]}
+    expected = [{**source[tuple(family["representative"])],
+                 "family_id": family["family_id"], "family_versions": family["versions"],
+                 "qualification_rank": family["qualification_rank"], "reserved_role": "dev"}
+                for family in first] if development else None
+    if (sha != seal(wave)["sha256"] or wave.get("launch_authorized") is not False
             or not isinstance(rows, list) or len(rows) != 16 or not 0 <= index < 16
-            or [(row["task_key"], row["task_version_id"]) for row in rows] != identities
-            or len({row["task_version_id"] for row in rows}) != len(rows)):
+            or len({row["task_version_id"] for row in rows}) != 16
+            or (development and (wave.get("source_order_sha256") != order["sha256"]
+                 or wave.get("selection_rule") != "first_16_frozen_dev_families_by_qualification_rank"
+                 or wave.get("counts") != {"families": 16, "family_versions": 19,
+                                           "representative_versions": 16}
+                 or rows != expected))
+            or (not development and (wave.get("schema") != "fleet_blackbox_readonly_qualification_wave_v1"
+                 or wave.get("source_order_sha256") != order["sha256"]
+                 or wave.get("rank_range") != [1, 16]
+                 or [(row["task_key"], row["task_version_id"]) for row in rows] != identities))):
         raise ValueError("frozen qualification wave is invalid")
     row = rows[index]
     request_id = str(uuid.uuid5(uuid.NAMESPACE_URL,
@@ -114,7 +128,7 @@ def load_cell(wave_path: Path, index: int) -> tuple[dict, dict, str, str]:
 
 
 def preview(wave_path: Path, index: int, root: Path) -> dict:
-    _, row, sha, request_id = load_cell(wave_path, index)
+    wave, row, sha, request_id = load_cell(wave_path, index)
     if (root / f"cell-{index:02d}").exists():
         raise ValueError("this exact cell was already attempted")
     key = os.environ.get("FLEET_API_KEY", "")
@@ -126,9 +140,10 @@ def preview(wave_path: Path, index: int, root: Path) -> dict:
                  "cell_index": index, "task_version_id": row["task_version_id"],
                  "request_id": request_id, "binding_sha256": binding["sha256"],
                  "exact_binding": True, "claim_unclaimed": True,
-                 "create_authorized": index in RUN_AUTHORIZED,
+                 "create_authorized": index in RUN_AUTHORIZED and (
+                     wave["schema"] != "fleet_blackbox_development_qualification_preview_v1" or index == 0),
                  "root_alert_annotation_required": False,
-                 "reason": "first two cells only; widen after cleanup audit"})
+                 "reason": "one DEV or two final cells only; widen after cleanup audit"})
 
 
 def preflight(client: httpx.Client, row: dict, request_id: str) -> dict:
@@ -349,7 +364,9 @@ def clamp_ttl(client: httpx.Client, instance_id: str) -> dict:
 def run_cell(wave_path: Path, index: int, root: Path) -> dict:
     if index not in RUN_AUTHORIZED:
         raise ValueError("qualification create is not authorized; no new provision")
-    _, row, sha, request_id = load_cell(wave_path, index)
+    wave, row, sha, request_id = load_cell(wave_path, index)
+    if wave["schema"] == "fleet_blackbox_development_qualification_preview_v1" and index != 0:
+        raise ValueError("qualification create is not authorized; no new provision")
     key = os.environ.get("FLEET_API_KEY", "")
     if not key:
         raise ValueError("Fleet key unavailable")

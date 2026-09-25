@@ -23,6 +23,20 @@ def response(code, value=None, *, headers=None):
 
 
 class RuntimeQualificationTests(unittest.TestCase):
+    def test_dev_first_cell_is_frozen_and_later_cells_stay_preview_only(self):
+        path = Path(__file__).parents[1] / "configs/data/fleet-blackbox-development-qualification-preview16-20260925-v1.json"
+        wave, row, _sha, _request_id = q.load_cell(path, 0)
+        self.assertEqual((row["reserved_role"], row["qualification_rank"]), ("dev", 25))
+        self.assertFalse(wave["launch_authorized"])
+        altered = json.loads(path.read_text())
+        altered["wave"][0]["reserved_role"] = "final_test"
+        altered = q.seal({key: value for key, value in altered.items() if key != "sha256"})
+        with tempfile.TemporaryDirectory() as directory:
+            copy = Path(directory) / "wave.json"
+            copy.write_text(json.dumps(altered))
+            with self.assertRaisesRegex(ValueError, "frozen qualification wave"):
+                q.load_cell(copy, 0)
+
     def test_only_first_two_cells_are_authorized(self):
         with self.assertRaisesRegex(ValueError, "not authorized"):
             q.run_cell(Path("not-read"), 2, Path("not-created"))
