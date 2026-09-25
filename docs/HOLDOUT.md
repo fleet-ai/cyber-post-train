@@ -22,10 +22,11 @@ Excluding Teacher3K overlaps and protected families left **408 candidate
 versions / 311 families / 14 apps**. Metadata is not runnability;
 `training/qualify_live.py` does not run environments.
 
-One API canary could not reconcile its create-request ID. Theseus #35155
-repaired it in staging, but production still returned 404, so
-`training/runtime_qualify.py` is create-disabled. No production qualification
-wave ran; Registry/Lanes supplied no exact positive record.
+Production now exposes durable create-request claims. One rank-ordered,
+model-free production check passed startup, tools, negative grading and exact
+cleanup on September 25. It did **not** prove positive solvability, so no
+task was promoted to a runnable holdout. Registry/Lanes supplied no exact
+positive record.
 
 A census found 257 full-credit leads on 68 keys. Private exact-version checks
 proved **20 historical positive versions/18 families** (six DEV, 12 final;
@@ -35,7 +36,7 @@ only **one final family**. Historical union: **19 families, six DEV/13 final**;
 current production runnability remains unproved. A later metadata-only scan of
 252 named session stores found 21 leads on six counted versions (not global);
 no new families. Staging cell 08 passed startup/tools/negative grade/cleanup only.
-Old wave16 predates frozen rank order; no broader wave ran or proved prod use.
+Old wave16 predates frozen rank order; no broader wave proved prod use.
 Old 75 receipts/model outcomes are not automatic positives; preserve unknowns.
 
 ## Teacher3K family roles
