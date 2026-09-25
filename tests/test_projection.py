@@ -42,6 +42,28 @@ def test_whole_session_projection_is_replayed(tmp_path, monkeypatch):
     sidecar = output / "PROJECTION.json"
     assert projection.seal_projection(source, output, legacy, sidecar)["selected_sessions"] == 943
     assert projection.verify_projection(source, output, legacy, sidecar)["selected_families"] == 116
+    selection = output / "selected-whole-sessions.json"
+    selection.write_text(json.dumps({"schema": "qwen38_diagnostic_near96k_selection_v1",
+                                     "rule": "lexicographic_first20_near90k_minrows8",
+                                     "session_ids": [f"synthetic-session-{i}" for i in range(8)]}))
+    monkeypatch.setattr(projection, "SELECTION_SHA", _file_sha(selection))
+    child = output / "dense-child-v1"
+    child.mkdir()
+    (child / "train-target.jsonl").write_text("".join(rows[:8]))
+    (child / "train-evidence.jsonl").write_text("".join(proofs[:8]))
+    request = {"normalized": {"path": str(child / "train-target.jsonl"),
+                               "sha256": _file_sha(child / "train-target.jsonl")},
+               "evidence": {"path": str(child / "train-evidence.jsonl"),
+                            "sha256": _file_sha(child / "train-evidence.jsonl")},
+               "family_roster": {"sha256": _file_sha(legacy)}, "output": str(child / "native-output")}
+    request["sha256"] = _digest(request)
+    (child / "REQUEST.json").write_text(json.dumps(request))
+    subset = projection.verify_subset(source, output, legacy, child, selection)
+    (child / "SUBSET.json").write_text(json.dumps(subset))
+    assert projection.verify_subset(source, output, legacy, child, selection, child / "SUBSET.json") == subset
+    (child / "train-evidence.jsonl").write_text("tampered\n")
+    with pytest.raises(ValueError, match="bytes differ"):
+        projection.verify_subset(source, output, legacy, child, selection, child / "SUBSET.json")
     (output / "train-only-evidence.jsonl").write_text("tampered\n")
     with pytest.raises(ValueError, match="bytes differ"):
         projection.verify_projection(source, output, legacy, sidecar)

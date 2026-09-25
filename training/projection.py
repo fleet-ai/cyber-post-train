@@ -14,6 +14,9 @@ LEGACY_ROSTER_FILE_SHA = "sha256:2fa2e62adb9785355e86b44225040b67dbc79301e0b64cd
 ROOT_ID = "fleet-q38-teacher3k-transitive-roles-20260925-v1"
 ANCHOR_SHA = "sha256:5b4d3d959d599a14235f0ecfdd8d8e699584424af4dd0b267440f388c0c2d224"
 BUILDER_SHA = "sha256:365657758efcd55220be80d556dd83257d7d80a6ff77f9a308b1da9096511ebd"
+SELECTION_SHA = "sha256:2be71521f4af4b0b8af78d276610a66647e40cde31e46ac0a6ea63f532dac675"
+SELECTOR_CODE_SHA = "sha256:1eecda755665becf5475538fd3671b479ce27f7dc5210381d697021670c2260e"
+SUBSET_BUILDER_SHA = "sha256:b43fd0ef20b3a528983c9ee2758a43d4f92fb4e8f4c795d865900028d137174d"
 
 def _bound(path: Path, sha: str) -> None:
     if path.is_symlink() or not path.is_file() or _file_sha(path) != sha:
@@ -98,4 +101,66 @@ def seal_projection(source: Path, projected: Path, legacy: Path, sidecar: Path) 
         json.dump(proof, stream, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         stream.write("\n")
     verify_projection(source, projected, legacy, sidecar)
+    return proof
+
+
+def verify_subset(source: Path, full: Path, legacy: Path, child: Path,
+                  selection: Path, sidecar: Path | None = None) -> dict:
+    """Replay a fixed eight-session child from the verified whole TRAIN projection."""
+    full, child, selection = Path(full), Path(child), Path(selection)
+    parent_file = full / "PROJECTION.json"
+    parent = verify_projection(source, full, legacy, parent_file)
+    _bound(selection, SELECTION_SHA)
+    chosen = json.loads(selection.read_text())
+    ids = chosen.get("session_ids")
+    if (chosen.get("schema") != "qwen38_diagnostic_near96k_selection_v1"
+            or chosen.get("rule") != "lexicographic_first20_near90k_minrows8"
+            or not isinstance(ids, list) or len(ids) != len(set(ids)) or len(ids) != 8):
+        raise ValueError("diagnostic selection differs")
+    proofs = {}
+    with (full / "train-only-evidence.jsonl").open("rb") as stream:
+        for line in stream:
+            sid = json.loads(line)["session_id"]
+            if sid in proofs:
+                raise ValueError("duplicate full-projection proof")
+            proofs[sid] = line
+    normal_hash, proof_hash, found = hashlib.sha256(), hashlib.sha256(), set()
+    with (full / "train-only-target.jsonl").open("rb") as stream:
+        for line in stream:
+            sid = json.loads(line)["record_id"]
+            if sid in ids:
+                if sid in found or sid not in proofs:
+                    raise ValueError("selected session is incomplete")
+                found.add(sid)
+                normal_hash.update(line)
+                proof_hash.update(proofs[sid])
+    if found != set(ids):
+        raise ValueError("selected session is missing")
+    expected = {"normalized": "sha256:" + normal_hash.hexdigest(),
+                "evidence": "sha256:" + proof_hash.hexdigest()}
+    _bound(child / "train-target.jsonl", expected["normalized"])
+    _bound(child / "train-evidence.jsonl", expected["evidence"])
+    request_file = child / "REQUEST.json"
+    if request_file.is_symlink() or not request_file.is_file():
+        raise ValueError("child request is missing or linked")
+    request = json.loads(request_file.read_text())
+    if (request.get("sha256") != _digest({k: v for k, v in request.items() if k != "sha256"})
+            or any(request.get(key) != {"path": str(child / name), "sha256": expected[key]}
+                   for key, name in (("normalized", "train-target.jsonl"), ("evidence", "train-evidence.jsonl")))
+            or request.get("family_roster", {}).get("sha256") != _file_sha(Path(legacy))
+            or request.get("output") != str(child / "native-output")):
+        raise ValueError("child native request differs")
+    proof = {"schema": "qwen38_diagnostic_whole_train_subset_v1",
+             "source_receipt_file_sha256": parent["source_receipt_file_sha256"],
+             "full_projection_file_sha256": _file_sha(parent_file), "full_projection_sha256": parent["sha256"],
+             "selection_file_sha256": SELECTION_SHA, "selector_code_sha256": SELECTOR_CODE_SHA,
+             "subset_builder_code_sha256": SUBSET_BUILDER_SHA,
+             "selected_identity_set_sha256": _digest(sorted(ids)), "selected_sessions": len(ids),
+             "child_files_sha256": expected, "child_request_file_sha256": _file_sha(request_file),
+             "child_request_sha256": request["sha256"], "whole_sessions": True,
+             "diagnostic_only": True, "training_ready": False}
+    proof["sha256"] = _digest(proof)
+    if sidecar is not None and (Path(sidecar).is_symlink() or not Path(sidecar).is_file()
+                                or json.loads(Path(sidecar).read_text()) != proof):
+        raise ValueError("child sidecar differs from independent replay")
     return proof
