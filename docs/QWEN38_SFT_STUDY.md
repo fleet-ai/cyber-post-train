@@ -28,7 +28,8 @@ source evidence; no trusted teacher cross-entropy panel exists yet.
 All **2,886** envelopes passed session/version/transcript digests. Provisional
 strict set: **943 TRAIN/116 families**, **27 teacher DEV/9**; 16 protected
 sessions quarantined. Hidden reasoning is excluded and OpenCode anchors/calls
-substituted, but live Qwen wire is unproved. `use_tool` wrappers stay out:
+substituted. The current first-request Qwen wire is checked below, but
+historical tool-result parity is unproved. `use_tool` wrappers stay out:
 CLI/MCP blocks are unbound; none of 28,312 wrapped bash strings recovers a
 unique final status. One-text-block conversion adds 219 TRAIN/15 DEV:
 **1,162/42** sessions, **153/12** families, old token proxies

@@ -40,8 +40,8 @@ probe failed. The later failure explicitly returned a tool rejection; the
 earlier response type is unknown. All 14 created instances were independently
 read back as `stopped` with matching durable create claims. Neither a probe
 rejection nor missing metadata alone proves a task is broken. None of these
-model-free checks proves an intended-path positive solve, so **zero tasks were
-promoted** to a qualified runnable holdout.
+model-free checks proves an intended-path positive solve, so that screen alone
+promoted **zero tasks**.
 
 | DEV cell | Result | Sealed terminal SHA-256 |
 |---|---|---|
@@ -52,6 +52,19 @@ promoted** to a qualified runnable holdout.
 | 11–13 | pass | `b96a08935dfb84b9c997923d3c7476fce61b567f8491083838c50f80c5f478a0`, `2d1225306d619eeea2802fc157593a0bfdba7a9fac125e48475468e2581ed3e9`, `c7fd02da61ff0fae6232585ba4f59212606889166e20a24d3f2b1f9e90e1c211` |
 | 14 | no-flag report rejected | `c0ccbaf48843951cb58e2d5583682ef420ce540812341ad8df8110abc7be2e66` |
 | 15 | pass | `1d9a44f75a2bbc9105b395b595d0ce588ca2fc3255a17d317f9c31d9b21355e0` |
+
+Two exact-version historical full-credit DEV paths were then replayed through
+fresh current instances: cell 0 (47 bash calls, terminal
+`0853aeedc42b1e1d43c195f0eda17ea053de0633cc4b3a79a88c4b0277c9c6a7`)
+and cell 3 (67 bash calls, terminal
+`4ad22edbf4414df38d34273edcbd44e6039f8a389ab15edf6ba86adb6c237492`).
+Both again earned full credit and were independently read back `stopped` with
+matching durable claims. The later receipt also bound the authoritative grader
+execution and score digest; the first recorded only full credit and authoritative
+status. This is a **current intended-path replay**, not an independent model
+solve or evidence that all family variants work. Cell 3 is the first strictly
+recorded current-positive DEV version; final-test current-positive count is
+still zero. Keep the remaining candidates provisional until comparable proof.
 
 A census found 257 full-credit leads on 68 keys. Private exact-version checks
 proved **20 historical positive versions/18 families** (six DEV, 12 final;
