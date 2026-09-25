@@ -47,7 +47,9 @@ checked; a structured JSONL preview is not a completed corpus.
 
 The live catalog has 1,217 blackbox task versions, but only 75 have the
 previous exact-version/runtime receipt proof, and just 20 (13 development,
-7 final) are both currently qualified and family-disjoint from Teacher3K.
+7 final) are provisionally receipt-backed and family-disjoint from Teacher3K.
+Those 20 still need fresh runtime/grade checks before they can support the
+current lift claim.
 Four attempts on one task are **not** four independent tasks. Twenty families
 cannot reliably resolve a modest 10-point lift. Expand the runnable,
 lineage-clean roster from the unreviewed pool before a final significance
