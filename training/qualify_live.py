@@ -123,6 +123,7 @@ def candidates(qa: list[dict], teacher: dict, coverage: dict,
                                                          for app in row["applications"]}),
             "independent_candidate_families": len(groups),
         },
+        "candidate_versions": sorted(unexposed, key=lambda row: (row["task_key"], row["task_version_id"])),
         "wave": wave,
         "launch_authorized": False,
     }
@@ -156,6 +157,8 @@ def safe_task(row: dict, client: httpx.Client) -> dict:
         "applications": sorted({atom.split("/")[2] for atom in atoms}),
         "environment_version_id": task.get("environment_version_id"),
         "difficulty": metadata.get("task_graph_band") or metadata.get("expected_difficulty"),
+        "source_project": metadata.get("task_graph_project") or "unknown",
+        "source_repo": metadata.get("source_repo") or "unknown",
         "lifecycle": task.get("task_lifecycle_status"),
         "verifier_attached": bool(task.get("verifier_id")),
     }

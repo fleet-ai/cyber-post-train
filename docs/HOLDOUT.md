@@ -103,3 +103,32 @@ has 113 versions, 199 sessions, and 4,433,757 tokens; quarantine has six
 versions, 16 sessions, and 381,734 tokens. These are source-lineage totals, not
 repacked training-window counts. A separate historical packer roster still
 needs a truthful new role-anchor binding before corpus materialization.
+
+## Frozen next qualification order (September 25)
+
+`configs/data/fleet-blackbox-qualification-order-20260925-v1.json` freezes
+408 exact candidate versions in 311 transitive task-key/shared-atom families
+(canonical payload SHA-256 `4e654dab459819dd1afeb043ca10a854c703795a50ef7df011527dd5a2c3703f`).
+Its candidate rows came from one read-only live QA/exact-version census, after
+excluding Teacher3K and the earlier protected Fleet families. No model outcome
+or runtime-qualification result chose its order or roles. Verify its digest and
+recompute the order with `python3 -m training.qualification_order <file>`.
+
+The fixed order alternates applications and prefers less represented metadata
+within each app. It spans all 14 apps in its first 16 families. Sixty families
+are reserved for development and 251 for final testing; **all 14 apps occur in
+both roles**. The overall difficulty labels are 17 easy, 256 medium, 37 hard,
+and one floor; development has 3 easy, 49 medium, 8 hard. The unique floor
+case is reserved for final testing. Source-project labels
+are 199 `ots`, 101 `cyber-ots`, and 11 `apollo`. The vulnerability-class column
+is only a keyword hint from atom names, **not** a reviewed vulnerability
+taxonomy: 181 families are unclassified. Only one family has multiple atoms.
+
+These are reservations, **not 251 valid final tasks**. Each exact version still
+needs accepted, independent positive solvability/grading evidence, plus current
+environment startup, tool, verifier, negative-control, and cleanup receipts;
+without positive evidence it remains provisional. A baseline model failure never makes
+a task invalid, and a baseline success must not be used to select the roster.
+Keep every failed/ambiguous qualification visible. If fewer than 100 independent
+final families pass these gates, report the final set as underpowered and seek
+new task families; do not promote development tasks or relax the proof gate.
