@@ -1,11 +1,14 @@
 """No-network checks for the held historical four-node 262K request."""
 
 import json
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from training.long_context_launch import cpu_preflight_job, historical_request, prepare, stage_old_code, verify_bundle
+from training.long_context_launch import cpu_preflight_job, historical_request, prepare, stage_old_code, successor_spec, verify_bundle
 
 
 class LongContextLaunchTests(unittest.TestCase):
@@ -31,7 +34,7 @@ class LongContextLaunchTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 prepare(output)
 
-    def test_v2_changes_only_identity_and_root_approved_gate(self):
+    def test_v3_repairs_only_runtime_plan_field_and_identity(self):
         old_plan, old_request = historical_request()
         plan, request = historical_request(successor=True)
         self.assertTrue(plan["qualification"]["submission_gate"]["submission_authorized"])
@@ -45,12 +48,12 @@ class LongContextLaunchTests(unittest.TestCase):
         self.assertEqual(request["gpus_per_worker"], old_request["gpus_per_worker"])
         self.assertEqual(request["priority_class"], old_request["priority_class"])
         self.assertIs(request["failureAlerts"], False)
-        self.assertEqual(request["name"], "chris-q38-t3k262-4n-can-v2")
+        self.assertEqual(request["name"], "chris-q38-t3k262-4n-can-v3")
         with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
             stage_old_code(Path(a))
             stage_old_code(Path(b), successor=True)
             for name in ("training/sft_262k_4node_v1.py", "training/sft_262k_runtime.py", "configs/runs/qwen38-teacher3k-262k-4node-canary-v1.json"):
-                before = (Path(a) / name).read_text().replace("chris-q38-t3k262-4n-can-v1", "chris-q38-t3k262-4n-can-v2")
+                before = (Path(a) / name).read_text().replace("chris-q38-t3k262-4n-can-v1", "chris-q38-t3k262-4n-can-v3")
                 after = (Path(b) / name).read_text()
                 if name.endswith("sft_262k_runtime.py"):
                     old_gate = '''    "submission_authorized": False,
@@ -58,9 +61,17 @@ class LongContextLaunchTests(unittest.TestCase):
         "zero-GPU preflight receipt absent",
         "four-node GPU launch has not received root review",
     ],'''
-                    new_gate = '    "submission_authorized": True,\n    "blockers": [],\n    "approval_evidence": ' + repr(plan["qualification"]["submission_gate"]["approval_evidence"]) + ','
+                    new_gate = '    "submission_authorized": True,\n    "blockers": [],\n    "approval_evidence": ' + repr(successor_spec()["root_review"]) + ','
                     before = before.replace(old_gate, new_gate)
+                    before = before.replace('        set(plan) != expected_keys', '        set(plan) - {"plan_sha256"} != expected_keys')
+                    old = '    _BASE_VALIDATE_PLAN(plan, check_files=check_files)'
+                    before = before.replace(old, old + '\n    if "plan_sha256" in plan and plan["plan_sha256"] != base._unsigned_digest({k: v for k, v in plan.items() if k != "plan_sha256"}):\n        raise ValueError("runtime plan digest changed")')
                 self.assertEqual(before, after)
+
+            program = "import json,sys; from training.sft_262k_runtime import validate_plan; from cyber_post_train.jobs import digest; p=json.load(sys.stdin); p['plan_sha256']=digest(p); validate_plan(p,check_files=False)"
+            for root, candidate, success in ((a, old_plan, False), (b, plan, True)):
+                result = subprocess.run([sys.executable, "-c", program], input=json.dumps(candidate), text=True, capture_output=True, cwd=root, env={**os.environ, "PYTHONPATH": root})
+                self.assertEqual(result.returncode == 0, success)
 
     def test_cpu_preflight_job_is_bounded_and_zero_gpu(self):
         job = cpu_preflight_job()
@@ -77,7 +88,7 @@ class LongContextLaunchTests(unittest.TestCase):
         self.assertLess(len(container["env"][0]["value"]), 120000)
         compile(container["command"][2], "preflight", "exec")
         successor = cpu_preflight_job(successor=True)
-        self.assertEqual(successor["metadata"]["name"], "chris-q38-262k4n-cpu-pre-v5")
+        self.assertEqual(successor["metadata"]["name"], "chris-q38-262k4n-cpu-pre-v6")
         self.assertEqual(successor["metadata"]["annotations"], {"fleet.ai/failure-alerts": "off"})
         self.assertNotIn("nvidia.com/gpu", successor["spec"]["template"]["spec"]["containers"][0]["resources"]["requests"])
         compile(successor["spec"]["template"]["spec"]["containers"][0]["command"][2], "successor-preflight", "exec")

@@ -1,8 +1,8 @@
-"""Prepare and preview the historical 4×8 Qwen3.8 262K canary; never submit.
+"""Prepare, preview, and create once the historical 4×8 Qwen3.8 262K canary.
 
 The compiler and runtime are exact Git blobs from the held 65fcf038 candidate.
 This bridge stages them in a temporary directory, then discards that directory.
-Only a reviewed, create-once request may later be handed to an operator.
+The create-once path repeats the server preview and writes a durable intent.
 """
 
 from __future__ import annotations
@@ -24,9 +24,9 @@ from training.long_context import ROOT, SPEC, validate_length_audit, validate_re
 
 
 REVISION = "65fcf03812e48cf6f0845c607152b2069f3275b4"
-SUCCESSOR = ROOT / "configs/runs/qwen38-262k-four-node-canary-v2.json"
+SUCCESSOR = ROOT / "configs/runs/qwen38-262k-four-node-canary-v3.json"
 OLD_NAME = "chris-q38-t3k262-4n-can-v1"
-NEW_NAME = "chris-q38-t3k262-4n-can-v2"
+NEW_NAME = "chris-q38-t3k262-4n-can-v3"
 SOURCES = (
     "training/__init__.py",
     "training/io.py",
@@ -58,22 +58,23 @@ def successor_spec() -> dict:
     validate_spec(base)
     if (
         set(spec) != {"schema", "base_spec", "base_spec_sha256", "name", "output_root", "delta", "accepted", "submission_authorized", "root_review", "cpu_preflight", "remaining_gates"}
-        or spec["schema"] != "qwen38_262k_four_node_successor_v1"
+        or spec["schema"] != "qwen38_262k_four_node_repair_v1"
         or spec["base_spec"] != str(SPEC.relative_to(ROOT))
         or spec["base_spec_sha256"] != digest(SPEC.read_bytes())
         or spec["name"] != NEW_NAME
         or spec["output_root"] != f"/mnt/sfs/jobs/{NEW_NAME}"
-        or spec["delta"] != "create-once identity and root-approved gate only; no trainer, model, data, or recipe change"
+        or spec["delta"] != "create-once identity; accept the entrypoint-added plan_sha256 field; no model, data, or recipe change"
         or spec["accepted"] is not False
         or spec["submission_authorized"] is not True
         or spec["root_review"] != {
-            "scope": "one create-once v2 four-node capacity canary; one finite step, checkpoint, and reload; not scientific training",
+            "scope": "one create-once v3 four-node capacity canary; one finite step, checkpoint, and reload; not scientific training",
             "v1_cpu_receipt_sha256": "39c827afa6db9733e175c6ebb3b5c75478e661d5266a265fa6402f40132b5cf0",
-            "v2_false_gate_preview_sha256": "19b4bd9265751fa96992daff8004ac6348de9a948e5f7403f597d28b11752963",
+            "v2_failed_run_id": "1502ba9f-0506-43ac-93fb-c77f88c2a019",
+            "v2_failed_rayjob_uid": "090b0a43-560d-42dc-8b49-6a96aaca4bc9",
         }
         or spec["cpu_preflight"] != {
-            "path": "docs/evidence/qwen38-262k-four-node-cpu-preflight-v5-passed.json",
-            "file_sha256": "699dd2362f181f615cd4bbda8e969a97cc24d65286908dcd5935651340903235",
+            "path": "docs/evidence/qwen38-262k-four-node-cpu-preflight-v6-passed.json",
+            "file_sha256": "5f4a88b8f8cb9f414ab0e6c4f374780a72a23b4e19ad0621426aa5bf6cca0bca",
         }
         or len(spec["remaining_gates"]) != 3
     ):
@@ -87,8 +88,8 @@ def successor_spec() -> dict:
         or receipt.get("status") != "Succeeded"
         or receipt.get("gpu_request") != 0
         or receipt.get("job_and_pod_released") is not True
-        or receipt.get("candidate_plan_sha256") != "c1aa4371a94efab1fee41bff436615db527afa779fd978abaa07d2527df6efec"
-        or receipt.get("candidate_request_sha256") != "3cb50179559f6b819da1b477f6fcf0eff9a8a53a6d9b9540cf65805f1d9667c3"
+        or receipt.get("candidate_plan_sha256") != "85cbab43a21e195e231176b3e6246dc017204c9955a27e018c8ff0a3a86977f4"
+        or receipt.get("candidate_request_sha256") != "c6fe8a4b142673a6d2645c9e35dc0e6bd0a3e4721cc372795e275fa853f82192"
     ):
         raise ValueError("v2 exact-image native CPU preflight has not passed")
     return spec
@@ -106,7 +107,7 @@ def stage_old_code(root: Path, *, successor: bool = False) -> None:
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(blob)
     if successor:
-        # Only identity and the now-reviewed capacity-canary gate change.
+        # Repair the exact entrypoint mismatch, leaving data and recipe intact.
         for name, expected in (
             ("training/sft_262k_4node_v1.py", 2),
             ("training/sft_262k_runtime.py", 4),
@@ -128,6 +129,16 @@ def stage_old_code(root: Path, *, successor: bool = False) -> None:
         new = '    "submission_authorized": True,\n    "blockers": [],\n    "approval_evidence": ' + repr(approved) + ','
         if source.count(old) != 1:
             raise ValueError("historical submission gate changed")
+        source = source.replace(old, new)
+        old = '        set(plan) != expected_keys'
+        new = '        set(plan) - {"plan_sha256"} != expected_keys'
+        if source.count(old) != 1:
+            raise ValueError("historical runtime plan-key gate changed")
+        source = source.replace(old, new)
+        old = '    _BASE_VALIDATE_PLAN(plan, check_files=check_files)'
+        new = old + '\n    if "plan_sha256" in plan and plan["plan_sha256"] != base._unsigned_digest({k: v for k, v in plan.items() if k != "plan_sha256"}):\n        raise ValueError("runtime plan digest changed")'
+        if source.count(old) != 1:
+            raise ValueError("historical runtime validation hook changed")
         path.write_text(source.replace(old, new))
 
 
@@ -265,6 +276,26 @@ print(json.dumps({'manifest_yaml': p['manifest_yaml'], 'warnings': p.get('warnin
     return summary
 
 
+def submit_v3(dest: Path) -> dict:
+    request = json.loads((dest / "request.json").read_text())
+    _, exact = historical_request(successor=True)
+    proof = json.loads((dest / "preview-summary.json").read_text())
+    if request != exact or proof["root_failed_job_alerts"] != "off" or proof["priority"] != "q1":
+        raise ValueError("saved v3 request or preview changed")
+    with tempfile.TemporaryDirectory(prefix="q38-262k-4n-") as tmp:
+        root = Path(tmp)
+        stage_old_code(root, successor=True)
+        return _old_python(root, """
+import json,os,sys
+from pathlib import Path
+from cyber_post_train.jobs import Jobs
+v=json.loads(sys.stdin.read())
+with Jobs(os.environ['FLEET_API_KEY']) as jobs:
+    result=jobs.submit_once(v['request'],Path(v['journal']))
+print(json.dumps({k:result.get(k) for k in ('name','status','run_dir')},sort_keys=True))
+""", stdin=json.dumps({"request": request, "journal": str(dest / "SUBMISSION.jsonl")}))
+
+
 def cpu_preflight_job(*, successor: bool = False) -> dict:
     """A one-shot 0-GPU Job on the exact image; never creates it here."""
     plan, request = historical_request(successor=successor)
@@ -299,6 +330,10 @@ try:
         stage='plan_request_binding'
         assert digest(plan)=={digest(json.dumps(plan, sort_keys=True, separators=(',', ':')).encode())!r}
         assert digest(job_request(plan))=={digest(json.dumps(request, sort_keys=True, separators=(',', ':')).encode())!r}
+        if {successor!r}:
+            stage='entrypoint_plan_validation'
+            from training.sft_262k_runtime import validate_plan
+            validate_plan({{**plan,'plan_sha256':digest(plan)}},check_files=False)
         # The historical generic preflight's final receipt calls the generic
         # request builder, which rejects this candidate's different runtime
         # digest. Point only that receipt call at the exact candidate builder.
@@ -320,7 +355,7 @@ except BaseException as exc:
     return {
         "apiVersion": "batch/v1", "kind": "Job",
         "metadata": {
-            "name": "chris-q38-262k4n-cpu-pre-v5" if successor else "chris-q38-262k4n-cpu-pre-v4", "namespace": "fleet-train-jobs",
+            "name": "chris-q38-262k4n-cpu-pre-v6" if successor else "chris-q38-262k4n-cpu-pre-v4", "namespace": "fleet-train-jobs",
             "annotations": {"fleet.ai/failure-alerts": "off"},
             "labels": {"kueue.x-k8s.io/queue-name": "training-lq", "kueue.x-k8s.io/priority-class": "q1"},
         },
@@ -349,11 +384,14 @@ except BaseException as exc:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("prepare", "preview", "prepare-v2", "preview-v2"))
+    parser.add_argument("action", choices=("prepare", "preview", "prepare-v3", "preview-v3", "submit-v3"))
     parser.add_argument("directory", type=Path)
     args = parser.parse_args()
-    successor = args.action.endswith("-v2")
-    print(json.dumps(prepare(args.directory, successor=successor) if args.action.startswith("prepare") else preview(args.directory, successor=successor), sort_keys=True))
+    successor = args.action.endswith("-v3")
+    result = (submit_v3(args.directory) if args.action == "submit-v3" else
+              prepare(args.directory, successor=successor) if args.action.startswith("prepare") else
+              preview(args.directory, successor=successor))
+    print(json.dumps(result, sort_keys=True))
 
 
 if __name__ == "__main__":

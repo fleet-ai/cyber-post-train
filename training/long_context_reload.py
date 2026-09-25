@@ -14,10 +14,10 @@ import tempfile
 import time
 from pathlib import Path
 
-NAME = "chris-q38-t3k262-4n-reload-v1"
-MANIFEST = Path("/mnt/sfs/jobs/chris-q38-t3k262-4n-can-v2/checkpoint-manifest-step1.json")
-CHECKPOINT = "/mnt/sfs/jobs/chris-q38-t3k262-4n-can-v2/checkpoints/global_step_1"
-SOURCE_SHA = "c1aa4371a94efab1fee41bff436615db527afa779fd978abaa07d2527df6efec"
+NAME = "chris-q38-t3k262-4n-reload-v2"
+MANIFEST = Path("/mnt/sfs/jobs/chris-q38-t3k262-4n-can-v3/checkpoint-manifest-step1.json")
+CHECKPOINT = "/mnt/sfs/jobs/chris-q38-t3k262-4n-can-v3/checkpoints/global_step_1"
+SOURCE_SHA = "85cbab43a21e195e231176b3e6246dc017204c9955a27e018c8ff0a3a86977f4"
 PINNED = {
     "training/checkpoints.py": "b2bfa604a45a7ea1ed1b195401ce3c489f6460b36d2cd39d68a43033d23873b7",
     "training/recovery.py": "0765eb0f09378566c68e47861f6cc3d04c245aa438353befdb1c176d8726e84a",

@@ -72,14 +72,18 @@ two stored names (`bash`, `submit_report`), not the provider-facing bytes.
   checkpoint immediately queue teacher loss and matched Fleet DEV pass@4;
   retain state through eval (old keep-two evicted too early).
 - **262k capacity lane:** four-node 112-row canary
-  `chris-q38-t3k262-4n-can-v2-1502ba9f` is **not scientific**. Require real
+  `chris-q38-t3k262-4n-can-v2-1502ba9f` was admitted on four B300 nodes on
+  2026-09-25, then failed before training: the entrypoint added a plan digest
+  field that the candidate's strict validator rejected. No optimizer step or
+  checkpoint was proven; the exact Pods and Ray cluster were released. The
+  narrowly repaired v3 validator checks that field's digest, and its local
+  regression test reproduces the v2 failure. An exact-image zero-GPU v3
+  preflight is running before any further GPU submission. This lane is **not
+  scientific**. Require real
   near-262k first-batch update, finite gradients, peak memory, checkpoint,
   release and separate zero-step reload. Old eight-node step/zero-GPU preflight
   prove neither; CPU preflight v2/v3 failed, pinned v4 passed.
-  At 2026-09-25 12:42 UTC it remained unadmitted, holding zero GPUs: the
-  training queue had 25 GPUs below its 192-GPU quota, short of this job's 32.
-  Kueue displayed a `cpu-head` topology fallback error; that alone does not
-  establish a job-config defect while the B300 flavor lacks quota.
+  Earlier queueing held zero GPUs until the 22:37 UTC admission.
   A restore-only adapter and synthetic test exist, but no source step-1 seal,
   exact-image restore preflight, or GPU reload acceptance exists yet.
 - **262k corrected scientific lane (not launchable):** freeze independent

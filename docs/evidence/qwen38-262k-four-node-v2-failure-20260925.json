@@ -1,0 +1,18 @@
+{
+  "schema": "qwen38_262k_failure_audit_v1",
+  "name": "chris-q38-t3k262-4n-can-v2-1502ba9f",
+  "api_run_id": "1502ba9f-0506-43ac-93fb-c77f88c2a019",
+  "rayjob_uid": "090b0a43-560d-42dc-8b49-6a96aaca4bc9",
+  "workload_uid": "b1297080-9531-4078-bc36-62a4cf4ff874",
+  "raycluster_uid": "86fde4ea-dc45-4265-8374-511cd05096f6",
+  "admitted_at_utc": "2026-09-25T22:37:19Z",
+  "failed_at_utc": "2026-09-25T22:39:42Z",
+  "api_status": "FAILED",
+  "kubernetes_reason": "AppFailed",
+  "failure": "The entrypoint adds plan_sha256 after loading the immutable plan; the four-node validator rejected it as an extra key before optimizer setup.",
+  "training_steps_proven": 0,
+  "checkpoint_proven": false,
+  "alert_annotation": "off",
+  "release_evidence": "Workload Finished=True; exact RayCluster absent and all four exact Pods absent on readback after failure.",
+  "repair": "The v3 validator permits only the expected entrypoint-added plan_sha256 and checks it against the unsigned plan digest. A local regression test reproduces the v2 failure and passes for v3."
+}
