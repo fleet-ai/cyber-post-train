@@ -96,13 +96,15 @@ A second exact final-test version was independently replayed (73 bash calls),
 with full credit, authoritative grader agreement, and stopped/claim readback:
 terminal `sha256:1531e8c3b13e0f59d65b2d79fa13ec1ab97127e7130e745fae8c9802816f8876`
 (private file SHA-256 `038217ee2b25617f14050a9e538825f48b2a4fc736197a0daa70dfd44f77ee1b`).
-Four further final versions replayed 37/70/54/38 calls for full authoritative
+Six further final versions replayed 37/70/54/38/60/59 calls for authoritative
 credit, with exact stopped-instance and create-claim readbacks. Terminals:
 `sha256:b4b8e5b970862c18fcfb0715e6d45a2b3d78853ea3f90eb4b6d729c205dbe8a4`,
 `sha256:93ebfc30039c468d58f044777db312f82983b0917303a03be010c4de689dd2c0`,
 `sha256:f3224ac43d09d2eef508b9461c7d0a5f1da19f2a6ade7f8586fbf1ae20f73b17`,
-`sha256:4a2554a82a8a6319a82013cac56b3492efa937f82b0a4555f174a088768aca8e`.
-These **six** current-positive families are not independent model solves or a sufficient panel.
+`sha256:4a2554a82a8a6319a82013cac56b3492efa937f82b0a4555f174a088768aca8e`,
+`sha256:4c8d8d030614e180c3419ce72815835cdda6d8812ebf3f5147fb9326522b8013`,
+`sha256:b74f9c22cce26b8357e925ec6bea99a2513524040fbf109d1e5227e361220836`.
+These **eight** current-positive families are not independent model solves or a sufficient panel.
 Never use final actions, reports, or scores for training or checkpoint selection.
 An additional final-version replay timed out after 76/84 historical bash calls,
 before grading; its sealed terminal is
