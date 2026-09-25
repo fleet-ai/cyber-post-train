@@ -32,15 +32,26 @@ DEV-family-first 16-cell roster is frozen. Its manifest authorizes no bulk
 launch; after the first two cells' exact cleanup audits, the runtime checker
 permits the 16 frozen DEV representatives one at a time as bounded, model-free
 diagnostics after fresh live preflight.
-That first DEV cell passed startup, both task-tool probes, negative grading,
-and exact cleanup on September 25 (terminal SHA-256
-`2f79d4bbf13d1a13b08490d0d9fd58860607f69dabe98522b9bc91d35e7b9e2b`;
-independent instance readback `stopped`). It is **not** a positive solve or a
-qualified holdout task.
-The second DEV cell passed the same operational checks and independent stopped
-readback (terminal SHA-256
-`74dd660ace558d09e123fe944fc98895d50e1b94300d2e68af5ae62f6386997f`).
-It also has no positive solve; qualified-task count remains zero.
+The September 25 DEV screen attempted all 16 frozen representatives, one at a
+time: 12 passed startup, both task tools, zero-score negative grading, and
+cleanup; two were rejected before creation because the exact task metadata
+lacked `cyber_contract`; two reached `submit_report` but its harmless no-flag
+probe failed. The later failure explicitly returned a tool rejection; the
+earlier response type is unknown. All 14 created instances were independently
+read back as `stopped` with matching durable create claims. Neither a probe
+rejection nor missing metadata alone proves a task is broken. None of these
+model-free checks proves an intended-path positive solve, so **zero tasks were
+promoted** to a qualified runnable holdout.
+
+| DEV cell | Result | Sealed terminal SHA-256 |
+|---|---|---|
+| 0–3 | pass | `2f79d4bbf13d1a13b08490d0d9fd58860607f69dabe98522b9bc91d35e7b9e2b`, `74dd660ace558d09e123fe944fc98895d50e1b94300d2e68af5ae62f6386997f`, `6ce9346e80c088dfdef036b5f5ec7201e4de7dfdb133a88e131634289c523d63`, `74007316d93942311df2dd9099cfb78fea68821c77809c27710794f049a92e49` |
+| 4 | report probe indeterminate | `a3552141e1eaa136ab7ae7580f9908dc9a33127c8e98dc6d4abd89ea5cdd3834` |
+| 5–8 | pass | `6fa1a53ac41f5a5a30d814c5f32c79aaad549ea8f89d01b812f33512ba918d53`, `16655473ec8b57fe2df3744b8cfa092203f89c7a59a9caa7c3575f6dbd6e0e1d`, `5ced3980896e52fd075ee71777f72e0ca1d7f9f6f1bb9882f56f0896b1427453`, `ebb196b1e49347c93a5009efb2b4ebc44987dff9b6156c96f9e6ce228a738474` |
+| 9–10 | preflight rejection; no instance | n/a |
+| 11–13 | pass | `b96a08935dfb84b9c997923d3c7476fce61b567f8491083838c50f80c5f478a0`, `2d1225306d619eeea2802fc157593a0bfdba7a9fac125e48475468e2581ed3e9`, `c7fd02da61ff0fae6232585ba4f59212606889166e20a24d3f2b1f9e90e1c211` |
+| 14 | no-flag report rejected | `c0ccbaf48843951cb58e2d5583682ef420ce540812341ad8df8110abc7be2e66` |
+| 15 | pass | `1d9a44f75a2bbc9105b395b595d0ce588ca2fc3255a17d317f9c31d9b21355e0` |
 
 A census found 257 full-credit leads on 68 keys. Private exact-version checks
 proved **20 historical positive versions/18 families** (six DEV, 12 final;

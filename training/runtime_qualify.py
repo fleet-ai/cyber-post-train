@@ -286,8 +286,9 @@ def probe_tools(root_url: str, auth_header: str, token: str,
                 answer = mcp_json(client.post(endpoint, headers=headers, json={
                     "jsonrpc": "2.0", "id": call_id, "method": "tools/call",
                     "params": {"name": name, "arguments": PROBES[name]}}))
-                if (answer.get("id") != call_id or not isinstance(answer.get("result"), dict)
-                        or answer["result"].get("isError") is True):
+                if isinstance(answer.get("result"), dict) and answer["result"].get("isError") is True:
+                    raise RuntimeError("MCP tool rejected model-free probe")
+                if answer.get("id") != call_id or not isinstance(answer.get("result"), dict):
                     raise ValueError("MCP tool probe failed")
             return "sha256:" + hashlib.sha256(canonical({"tools": tools})).hexdigest()
         finally:

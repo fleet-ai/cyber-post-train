@@ -208,7 +208,7 @@ class RuntimeQualificationTests(unittest.TestCase):
         with patch.object(q.httpx, "Client", side_effect=lambda **kw: original(
                 transport=httpx.MockTransport(handle), **kw)):
             stage = ["runner_auth"]
-            with self.assertRaisesRegex(ValueError, "tool probe failed"):
+            with self.assertRaisesRegex(RuntimeError, "rejected model-free probe"):
                 q.probe_tools("https://example.test", "X-Runner", "dummy", stage)
         self.assertEqual(stage, ["mcp_bash"])
         self.assertIn(stage[0], q.FAILURE_STAGES)
