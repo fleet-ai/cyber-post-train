@@ -56,7 +56,7 @@ claim; verify startup, tools, verifier, outcome, and cleanup on exact versions.
 The 2026-09-25 read-only discovery found 671 current, not-yet-analyzed
 versions on task keys absent from Teacher3K. Exact-version metadata checks
 passed for all 671; shared-atom lineage removes 238, leaving 433 candidate
-versions in 327 independent components across 13 apps. **These are candidates,
+versions in 327 independent components across 14 apps. **These are candidates,
 not 327 qualified runnable tasks.** Model-free startup, tool, verifier,
 negative-control, and cleanup checks must still be completed before assigning
 any to the outcome holdout. After also excluding the separately protected
@@ -64,6 +64,13 @@ pending task roster, 408 versions in 311 independent components remained;
 the first frozen model-free qualification wave contains 16 components across
 14 applications (14 medium, 2 hard). Its metadata status is not runtime
 acceptance.
+
+The first runtime-qualification canary did start an environment, but its
+client expected a deterministic create-request ID while the deployed
+version-scoped API minted a different ID. The exact environment was stopped
+and deletion verified. This is a qualification-client defect, **not** evidence
+that the task is broken or runnable. No later wave cell was launched. The
+client must use a supported create-once and recovery route before resuming.
 
 An additional source-compatibility gate is open. In a stratified sample of
 198 selected teacher sessions, 193 task/user messages explicitly referenced
@@ -97,6 +104,12 @@ an anchor transform remains unqualified until independently reproduced.
   qualify four nodes with a real near-262k sample, one finite optimizer step,
   memory evidence, checkpoint, and zero-step reload. Only then train the same
   corrected corpus and evaluate every checkpoint as above.
+
+These are **new** study runs with new output identities. The historical live
+96k job cannot satisfy the corrected 96k data, checkpoint-evaluation, or lift
+gates. The 262k CPU-only preflight passed on 2026-09-25 with zero GPUs and
+released its Job and Pod; it cannot substitute for a four-node GPU update and
+reload proof. The capacity-only 262k sample is not the final SFT corpus.
 
 Before any paid submission, check live project capacity/duplicates, use c1,
 and verify the **rendered root Job/RayJob** has
