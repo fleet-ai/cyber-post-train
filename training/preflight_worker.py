@@ -90,8 +90,9 @@ if __name__ == "__main__":
         result = run()
         code = 0
     except BaseException as exc:
+        site = next((f"{Path(frame.filename).name}:{frame.lineno}" for frame in reversed(__import__("traceback").extract_tb(exc.__traceback__)) if Path(frame.filename).name in {"sft.py", "sft_runtime.py", "lazy_overlay.py", "preflight_worker.py"}), "unknown")
         result = {"schema": "qwen38_cpu_preflight_observation_v1", "status": "failed",
-                  "error_class": type(exc).__name__}
+                  "error_class": type(exc).__name__, "error_site": site}
         code = 2
     Path("/dev/termination-log").write_bytes(canonical(result))
     raise SystemExit(code)
