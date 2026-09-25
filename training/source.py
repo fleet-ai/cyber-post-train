@@ -419,7 +419,7 @@ def hydrate(request: dict, *, get: Callable[[str], dict] = _request,
                 raise SourceError("existing hydrated source identity differs")
             _validate_raw(row, saved.get("transcript_envelope"))
             if saved.get("summary") is not None:
-                raise SourceError("cached summaries must be authenticated independently")
+                _validate_envelope(row, saved["summary"], saved["transcript_envelope"])
             existing += 1
             continue
         missing.append((row, path))
@@ -502,9 +502,11 @@ def verify_hydration_cache(root: Path, selection_path: Path,
         except (OSError, ValueError):
             raise SourceError("private hydrated session has invalid JSON") from None
         if (not isinstance(saved, dict) or saved.get("schema") != "fleet_teacher_hydrated_session_v1"
-                or saved.get("selection") != row or saved.get("summary") is not None):
+                or saved.get("selection") != row):
             raise SourceError("private hydrated session identity differs")
         _validate_raw(row, saved.get("transcript_envelope"))
+        if saved.get("summary") is not None:
+            _validate_envelope(row, saved["summary"], saved["transcript_envelope"])
     return {"selected_sessions": len(rows), "selection_sha256": receipt["selection_sha256"],
             "hydration_receipt_file_sha256": expected_receipt_file_sha,
             "sessions_sha256": receipt["sessions_sha256"]}
@@ -646,9 +648,9 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
             if saved.get("schema") != "fleet_teacher_hydrated_session_v1" or saved.get("selection") != item:
                 raise SourceError("hydrated session identity differs")
             envelope = saved.get("transcript_envelope")
-            if saved.get("summary") is not None:
-                raise SourceError("cached summaries must be authenticated independently")
             summary = _summary(get, key, sid, summaries)
+            if saved.get("summary") is not None and saved["summary"] != summary:
+                raise SourceError("cached summary differs from independent Fleet listing")
             _validate_envelope(item, summary, envelope)
             verifier = envelope["verifier_execution"]
             score = verifier["score"]

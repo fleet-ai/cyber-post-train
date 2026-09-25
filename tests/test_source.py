@@ -264,6 +264,38 @@ class SourceTests(unittest.TestCase):
             source.verify_hydration_cache(self.root / "private-hydration", Path(selection["path"]),
                                           source.file_digest(self.root / "private-hydration" / "HYDRATED.json"))
 
+    def _embed_summary(self, request, summary):
+        root = self.root / "source-hydration"
+        session = next((root / "sessions").glob("*.json"))
+        saved = json.loads(session.read_text())
+        saved["summary"] = summary
+        session.write_text(json.dumps(saved))
+        receipt_path = root / "HYDRATED.json"
+        receipt = json.loads(receipt_path.read_text())
+        receipt["sessions_sha256"] = source.digest({session.name: source.file_digest(session)})
+        receipt_path.write_text(json.dumps(seal({k: v for k, v in receipt.items() if k != "sha256"})))
+        request["hydration"]["sha256"] = source.file_digest(receipt_path)
+        return seal({k: v for k, v in request.items() if k != "sha256"})
+
+    def test_embedded_summary_is_rechecked_against_independent_listing(self):
+        request = self._embed_summary(self.request(), self.summary)
+        root = self.root / "source-hydration"
+        source.verify_hydration_cache(root, Path(request["selection"]["path"]),
+                                      request["hydration"]["sha256"])
+        self.assertEqual(source.hydrate(json.loads((root / "HYDRATE_REQUEST.json").read_text()),
+                                        get=self.get)["new_sessions"], 0)
+        with self.patched_source():
+            self.assertEqual(source.fetch(request, get=self.get)["retained_sessions"], 1)
+
+    def test_embedded_summary_cannot_override_independent_listing(self):
+        request = self._embed_summary(self.request(), {**self.summary, "created_at": "different"})
+        source.verify_hydration_cache(self.root / "source-hydration",
+                                      Path(request["selection"]["path"]),
+                                      request["hydration"]["sha256"])
+        with self.patched_source(), self.assertRaises(source.SourceError):
+            source.fetch(request, get=self.get)
+        self.assertFalse((self.root / "private-output" / "RECEIPT.json").exists())
+
     def test_hydration_rejects_changed_success_without_receipt(self):
         selection = self._file("hydration-selection.jsonl", [self.selection], jsonl=True)
         request = seal({"schema": "fleet_teacher_source_hydration_v1", "selection": selection,
