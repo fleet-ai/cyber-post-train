@@ -3,6 +3,9 @@
 Goal: measured lift on new Fleet blackbox tasks. Historical 96k run
 `chris-q38-t3k96-b8-v3-e7d5c0f8` proves mechanics, **not** this independent
 corrected-data study. See [HOLDOUT.md](HOLDOUT.md) for source and split evidence.
+Its running Pod, checkpoints, and evaluations cannot satisfy any new 96k
+milestone below: the corrected run needs its own frozen data, name, output,
+checkpoint chain, and matched held-out evaluations.
 
 ## Why the old run cannot answer the question
 
@@ -97,6 +100,8 @@ collect fresh verifier-backed OpenCode teacher successes on TRAIN families.
   training queue had 25 GPUs below its 192-GPU quota, short of this job's 32.
   Kueue displayed a `cpu-head` topology fallback error; that alone does not
   establish a job-config defect while the B300 flavor lacks quota.
+  A restore-only adapter and synthetic test exist, but no source step-1 seal,
+  exact-image restore preflight, or GPU reload acceptance exists yet.
 - **262k corrected scientific lane (not launchable):** freeze independent
   name/output/data/steps after source/capacity gates. Require transitive roles,
   verified successes, exact OpenCode 1.18.27 anchors/tools, visible complete
