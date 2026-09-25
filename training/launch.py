@@ -44,6 +44,8 @@ SOURCES = {
     "configs/models/qwen38-27b-1d4bf0f2.lock.json": "f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
     "configs/models/qwen38-27b-1d4bf0f2.weights.json": "80a5e9de066e068abb012a0e9bd144676813a31042bb578226472803f8e0e84f",
 }
+COMMON_RECIPE = {"nodes": 1, "gpus_per_node": 8, "max_length": 98304,
+                 "batch_size": 8, "microbatch_per_gpu": 1}
 
 
 def sha(data: bytes) -> str:
@@ -62,7 +64,7 @@ def historical_source(name: str) -> bytes:
     )
     if result.returncode:
         raise ValueError("qualified historical source is unavailable")
-    if SOURCES[name] and sha(result.stdout) != SOURCES[name]:
+    if sha(result.stdout) != SOURCES[name]:
         raise ValueError("qualified historical source digest changed")
     return result.stdout
 
@@ -145,11 +147,7 @@ except BaseException as exc:
 
 def _require_debug_config(config: dict) -> None:
     recipe, cluster = config.get("recipe", {}), config.get("cluster", {})
-    expected = {
-        "nodes": 1, "gpus_per_node": 8, "max_length": 98304,
-        "batch_size": 8, "microbatch_per_gpu": 1,
-    }
-    if any(recipe.get(key) != value for key, value in expected.items()):
+    if any(recipe.get(key) != value for key, value in COMMON_RECIPE.items()):
         raise ValueError("debug recipe differs from qualified one-node 96k shape")
     if cluster.get("priority") != "c1" or config.get("backend") != "skyrl":
         raise ValueError("debug run requires SkyRL and c1")
@@ -176,8 +174,7 @@ def _require_converted_manifest(manifest: dict) -> None:
 
 def _require_full_config(config: dict) -> None:
     recipe, data, wandb = (config.get(key, {}) for key in ("recipe", "data", "wandb"))
-    expected = {"epochs": 1, "batch_size": 8, "microbatch_per_gpu": 1,
-                "nodes": 1, "gpus_per_node": 8, "max_length": 98304,
+    expected = {**COMMON_RECIPE, "epochs": 1,
                 "eval_interval": 50, "checkpoint_interval": 50,
                 "keep_checkpoints": "all", "lr": 3e-6, "seed": 20260925}
     if (config.get("name") != FULL_NAME or config.get("output_root") != FULL_OUTPUT
@@ -314,10 +311,11 @@ def prepared(directory: Path) -> tuple[dict, dict, dict]:
         manifest_bytes = (directory / "corpus.manifest.json").read_bytes()
         if receipt.get("manifest_file_sha256") != sha(manifest_bytes):
             raise ValueError("full corpus manifest bytes changed")
-        _require_full_manifest(json.loads(manifest_bytes), FULL_DATA_ROOT)
+        manifest = json.loads(manifest_bytes)
+        _require_full_manifest(manifest, FULL_DATA_ROOT)
         interval = plan["recipe"]["checkpoint_interval"]
         if (plan.get("schema") != "cyber_sft_runtime_dense_v1"
-            or plan.get("corpus_manifest_sha256") != json.loads(manifest_bytes)["sha256"]
+            or plan.get("corpus_manifest_sha256") != manifest["sha256"]
             or plan["recipe"]["eval_interval"] != interval
             or plan["recipe"]["keep_checkpoints"] != plan["recipe"]["max_steps"]
             or receipt.get("planned_native_checkpoints") != (plan["recipe"]["max_steps"] + interval - 1) // interval
@@ -674,28 +672,23 @@ def _lease(holder: str | None, *, expected_uid: str | None = None,
             if spec.get("holderIdentity") and (now - stamp).total_seconds() < min(
                 int(spec.get("leaseDurationSeconds", 900)), 900):
                 raise ValueError("another project submitter holds the capacity lease")
-            lease = {"apiVersion": "coordination.k8s.io/v1", "kind": "Lease",
-                     "metadata": {"name": LEASE, "namespace": NAMESPACE,
-                                  "resourceVersion": current["metadata"]["resourceVersion"]},
-                     "spec": {"holderIdentity": holder, "leaseDurationSeconds": 900,
-                              "acquireTime": now.isoformat(), "renewTime": now.isoformat()}}
             verb = "replace"
         else:
-            lease = {"apiVersion": "coordination.k8s.io/v1", "kind": "Lease",
-                     "metadata": {"name": LEASE, "namespace": NAMESPACE},
-                     "spec": {"holderIdentity": holder, "leaseDurationSeconds": 900,
-                              "acquireTime": now.isoformat(), "renewTime": now.isoformat()}}
             verb = "create"
+        spec = {"holderIdentity": holder, "leaseDurationSeconds": 900,
+                "acquireTime": now.isoformat(), "renewTime": now.isoformat()}
     else:
         if (not current or current["metadata"].get("uid") != expected_uid
             or current.get("spec", {}).get("holderIdentity") != expected_holder):
             raise ValueError("capacity lease identity changed before release")
-        lease = {"apiVersion": "coordination.k8s.io/v1", "kind": "Lease",
-                 "metadata": {"name": LEASE, "namespace": NAMESPACE,
-                              "resourceVersion": current["metadata"]["resourceVersion"]},
-                 "spec": {"holderIdentity": "", "leaseDurationSeconds": 0,
-                          "renewTime": now.isoformat()}}
         verb = "replace"
+        spec = {"holderIdentity": "", "leaseDurationSeconds": 0,
+                "renewTime": now.isoformat()}
+    meta = {"name": LEASE, "namespace": NAMESPACE}
+    if current:
+        meta["resourceVersion"] = current["metadata"]["resourceVersion"]
+    lease = {"apiVersion": "coordination.k8s.io/v1", "kind": "Lease",
+             "metadata": meta, "spec": spec}
     result = _kubectl(PROD_CONTEXT, ["-n", NAMESPACE, verb, "-f", "-"], lease)
     if result.get("spec", {}).get("holderIdentity") != (holder or ""):
         raise ValueError("capacity lease compare-and-swap drifted")

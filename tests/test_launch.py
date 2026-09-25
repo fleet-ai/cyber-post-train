@@ -119,6 +119,21 @@ def fake_preview(request: dict) -> dict:
     return {"manifest_yaml": json.dumps(obj), "errors": [], "warnings": []}
 
 
+def native_preflight(receipt: dict) -> dict:
+    return {
+        "status": "passed", "gpus": 0,
+        "request_sha256": receipt["request_sha256"],
+        "plan_sha256": receipt["plan_sha256"],
+        "checked": [
+            "native_sources", "model_files", "dataset_files", "native_config",
+            "native_forward_backward_signature", "native_train_only_loader",
+            "tokenization", "target_accounting",
+        ],
+        "counts": {"train": {"rows": 16, "supervised_tokens": 100},
+                   "dev": {"rows": 1, "supervised_tokens": 10}},
+    }
+
+
 class LaunchTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -149,41 +164,24 @@ class LaunchTests(unittest.TestCase):
             "validate_preview", {"request": request, "preview": fake_preview(request)}
         )["gpus"], 8)
 
-    def test_missing_root_alert_annotation_fails_closed(self) -> None:
+    def test_rendered_root_alert_and_priority_drift_fail_closed(self) -> None:
         _dest, request = self.prepare()
-        preview = fake_preview(request)
-        obj = json.loads(preview["manifest_yaml"])
-        del obj["metadata"]["annotations"]["fleet.ai/failure-alerts"]
-        preview["manifest_yaml"] = json.dumps(obj)
-        with self.assertRaisesRegex(ValueError, "validate_preview gate rejected"):
-            launch._legacy("validate_preview", {"request": request, "preview": preview})
-
-    def test_rendered_priority_drift_fails_closed(self) -> None:
-        _dest, request = self.prepare()
-        preview = fake_preview(request)
-        obj = json.loads(preview["manifest_yaml"])
-        obj["metadata"]["labels"]["kueue.x-k8s.io/priority-class"] = "q0"
-        preview["manifest_yaml"] = json.dumps(obj)
-        with self.assertRaisesRegex(ValueError, "validate_preview gate rejected"):
-            launch._legacy("validate_preview", {"request": request, "preview": preview})
+        for field in ("failure-alerts", "priority-class"):
+            with self.subTest(field=field):
+                preview = fake_preview(request)
+                obj = json.loads(preview["manifest_yaml"])
+                if field == "failure-alerts":
+                    del obj["metadata"]["annotations"]["fleet.ai/failure-alerts"]
+                else:
+                    obj["metadata"]["labels"]["kueue.x-k8s.io/priority-class"] = "q0"
+                preview["manifest_yaml"] = json.dumps(obj)
+                with self.assertRaisesRegex(ValueError, "validate_preview gate rejected"):
+                    launch._legacy("validate_preview", {"request": request, "preview": preview})
 
     def test_cpu_gate_must_bind_both_splits_and_exact_request(self) -> None:
         dest, _request = self.prepare()
         _plan, _request, receipt = launch.prepared(dest)
-        result = {
-            "status": "passed", "gpus": 0,
-            "request_sha256": receipt["request_sha256"],
-            "plan_sha256": receipt["plan_sha256"],
-            "checked": [
-                "native_sources", "model_files", "dataset_files", "native_config",
-                "native_forward_backward_signature", "native_train_only_loader",
-                "tokenization", "target_accounting",
-            ],
-            "counts": {
-                "train": {"rows": 16, "supervised_tokens": 100},
-                "dev": {"rows": 1, "supervised_tokens": 10},
-            },
-        }
+        result = native_preflight(receipt)
         self.assertTrue(launch._preflight_matches(result, receipt))
         result["counts"].pop("dev")
         self.assertFalse(launch._preflight_matches(result, receipt))
@@ -263,17 +261,8 @@ class LaunchTests(unittest.TestCase):
 
     def test_gpu_submit_requires_fresh_uid_bound_cpu_receipt_before_network(self) -> None:
         dest, _ = self.prepare()
-        native = {
-            "status": "passed", "gpus": 0, "checked": [
-                "native_sources", "model_files", "dataset_files", "native_config",
-                "native_forward_backward_signature", "native_train_only_loader",
-                "tokenization", "target_accounting"],
-            "counts": {"train": {"rows": 1, "supervised_tokens": 1},
-                       "dev": {"rows": 1, "supervised_tokens": 1}},
-        }
         receipt = json.loads((dest / "PREPARED.json").read_text())
-        native.update({"plan_sha256": receipt["plan_sha256"],
-                       "request_sha256": receipt["request_sha256"]})
+        native = native_preflight(receipt)
         (dest / "PREFLIGHT.json").write_text(json.dumps(native))
         with mock.patch.object(launch, "_lease") as lease:
             with self.assertRaisesRegex(ValueError, "UID-bound"):
@@ -328,16 +317,9 @@ class LaunchTests(unittest.TestCase):
     def test_gpu_review_drift_blocks_post_under_lease(self) -> None:
         dest, _ = self.prepare()
         receipt = json.loads((dest / "PREPARED.json").read_text())
-        native = {"status": "passed", "gpus": 0,
-                  "plan_sha256": receipt["plan_sha256"],
-                  "request_sha256": receipt["request_sha256"],
-                  "checked": ["native_sources", "model_files", "dataset_files",
-                              "native_config", "native_forward_backward_signature",
-                              "native_train_only_loader", "tokenization", "target_accounting"],
-                  "counts": {"train": {"rows": 1, "supervised_tokens": 1},
-                             "dev": {"rows": 1, "supervised_tokens": 1}},
-                  "cpu_job": {"uid": "job", "pod_uid": "pod", "output_absent": True,
-                              "context": launch.PROD_CONTEXT, "observed_at_unix": time.time()}}
+        native = native_preflight(receipt)
+        native["cpu_job"] = {"uid": "job", "pod_uid": "pod", "output_absent": True,
+                             "context": launch.PROD_CONTEXT, "observed_at_unix": time.time()}
         (dest / "PREFLIGHT.json").write_text(json.dumps(native))
         historical = launch._legacy
 
