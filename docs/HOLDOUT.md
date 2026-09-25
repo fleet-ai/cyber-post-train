@@ -29,18 +29,16 @@ repaired that contract; staging advertised it, but production still returned
 qualification wave ran. Registry and Pipeline Lanes had no positive record
 for these exact candidate versions.
 
-A pre-freeze session census found 257 full-credit leads on 68 candidate task
-keys. Private checks of pinned task/environment versions, real bash output
-before flag submission, runtime-pinned full-credit grading and teardown proved
-**20 historical positive versions in 18 families**: six DEV and 12 final
-families, spanning 17 medium and three hard versions. The other 48 lead keys
-were for different task versions; 340 keys had no positive lead. This does
-not prove those tasks broken or runnable now. A second one-cell staging-only
-rehearsal on a historically proven DEV version passed startup, both tools,
-zero-credit negative grading and independently confirmed teardown. Staging
-is not production qualification. The old 75 receipts are also not
-automatically positive-qualified. Never select tasks by baseline or candidate
-model outcomes; preserve unknowns as `unproven`.
+A session census found 257 full-credit leads on 68 candidate keys. Private
+exact-version/task/environment/verifier checks proved **20 historical positive
+versions in 18 families** (six DEV, 12 final; 17 medium, three hard). Of 408
+candidate versions, 340 had no positive lead; strict older-version contract
+and seed-byte checks transferred only two of the other 48 leads, adding **one
+independent final family**. Thus the historical union is **19 families: six DEV,
+13 final**—not a large valid panel or proof of current production runnability.
+A one-cell staging rehearsal passed startup, tools, zero-credit negative grading
+and teardown, but staging is not production. Old 75 receipts are not automatic
+positive controls; never select by candidate-model outcomes. Preserve unknowns.
 
 ## Teacher3K family roles
 
