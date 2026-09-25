@@ -73,6 +73,13 @@ target OpenCode model request would be equally unjustified. Preserve the
 original transcript, capture the actual target model-facing request without
 private content, compare exact task/version prompt identities, and admit only
 a reviewed lossless transform or a demonstrated equivalent target contract.
+With historical `use_tool` wrappers counted correctly, 184/198 sampled
+sessions have exactly one complete report call, 10 have two, and 4 have none;
+the one-report subset should be developed first. A same-task/version local
+OpenCode 1.18.27 probe confirmed the target user and system anchors differ
+from the source transcript, even though the Fleet task prompt itself matches
+the source user text by hash. The tool definitions match the target names, but
+an anchor transform remains unqualified until independently reproduced.
 
 ## Parallel execution lanes
 
