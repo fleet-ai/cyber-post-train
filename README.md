@@ -1,7 +1,7 @@
 # Cyber post-training
 
 Compact Qwen cyber-training and evaluation research code. The repository was
-reset on 2026-09-24; [RESET.md](docs/RESET.md) records what was retired.
+reset on 2026-09-24; the [reset record](https://github.com/fleet-ai/cyber-post-train/blob/f6fb3b88/docs/RESET.md) remains in Git history.
 Read [AGENTS.md](AGENTS.md) before any cluster or paid operation.
 
 The current study and its unpassed launch gates are in
