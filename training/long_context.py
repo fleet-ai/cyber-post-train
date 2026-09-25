@@ -69,7 +69,7 @@ def _sha256(value: bytes) -> str:
 
 def validate_spec(spec: dict) -> None:
     """Check immutable intent, not execution or capacity."""
-    _require(set(spec) == {"schema", "status", "accepted", "submission_authorized", "name", "output_root", "parent", "model", "data", "recipe", "cluster", "example_gate"}, "unexpected canary spec fields")
+    _require(set(spec) == {"schema", "status", "accepted", "submission_authorized", "name", "output_root", "parent", "model", "data", "length_audit", "recipe", "cluster", "example_gate"}, "unexpected canary spec fields")
     _require(spec["schema"] == "qwen38_262k_four_node_capacity_canary_v1", "wrong canary schema")
     _require(spec["status"] == "unqualified_hypothesis" and spec["accepted"] is False and spec["submission_authorized"] is False, "unproven acceptance or submission claim")
     _require(spec["name"] == "chris-q38-t3k262-4n-can-v1" and spec["output_root"] == "/mnt/sfs/jobs/chris-q38-t3k262-4n-can-v1", "wrong create-once identity")
@@ -81,6 +81,7 @@ def validate_spec(spec: dict) -> None:
     _require(parent["runtime_commit"] == "45c04d709f855e20d931456233b85f427558525f" and parent["runtime_path"] == "training/sft_runtime.py" and parent["runtime_sha256"] == PARENT_RUNTIME_SHA256 and parent["hook_ast_sha256"] == HOOKS, "wrong historical runtime")
     _require(spec["model"] == {"repo": "Qwen/Qwen3.8-27B", "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0", "weight_manifest_sha256": "06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"}, "wrong model")
     _require(spec["data"] == {"path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher3k-262k-v1/capacity-v5/train.parquet", "sha256": "2359c54e5c5cd756761a0f6e8c250ec8b32b87c8f84f0888252ddac932cfc5ec", "rows": 112, "purpose": "capacity_only_not_scientific_training"}, "wrong capacity corpus")
+    _require(spec["length_audit"] == {"path": "docs/evidence/qwen38-262k-capacity-lengths-20260925.json", "file_sha256": "81ea8ddc237cf3ea66ae614e09bacde5f7aabe831ca76b5286a96711c1d2b42e"}, "wrong length audit")
     _require(spec["recipe"] == RECIPE and RECIPE["world_size"] == RECIPE["nodes"] * RECIPE["gpus_per_node"] and RECIPE["batch_size"] == RECIPE["world_size"] * RECIPE["microbatch_per_gpu"] * RECIPE["gradient_accumulation"], "wrong four-node recipe")
     cluster = spec["cluster"]
     _require(cluster == {"image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4", "priority_class": "c1", "queue_priority": "q1", "root_annotation": {"fleet.ai/failure-alerts": "off"}, "shutdown_after_finish": True, "ttl_seconds_after_finish": 0}, "wrong cluster binding")
@@ -121,6 +122,24 @@ def validate_example(spec: dict, example: dict) -> None:
     _require(bool(re.fullmatch(r"[0-9a-f]{64}", str(example.get("row_sha256", "")))), "missing source row digest")
 
 
+def validate_length_audit(spec: dict) -> None:
+    """Bind the aggregate read-only data observation; this is not row proof."""
+    path = ROOT / spec["length_audit"]["path"]
+    blob = path.read_bytes()
+    _require(_sha256(blob) == spec["length_audit"]["file_sha256"], "length audit digest mismatch")
+    audit = json.loads(blob)
+    _require(
+        audit.get("schema") == "qwen38_262k_capacity_length_observation_v1"
+        and audit.get("train_parquet_sha256") == spec["data"]["sha256"]
+        and audit.get("rows") == spec["data"]["rows"]
+        and audit.get("max_input_tokens") == spec["recipe"]["max_length"]
+        and audit.get("rows_with_at_least_250000_input_tokens") == 61
+        and audit.get("input_length_equals_mask_length_equals_token_count") is True
+        and audit.get("loss_mask_sum_equals_target_token_count") is True,
+        "length audit does not bind the capacity corpus",
+    )
+
+
 def validate_rendered_job(spec: dict, job: dict) -> None:
     """Inspect a server-rendered root RayJob, not a request flag or Pod label."""
     _require(job.get("kind") == "RayJob", "preview is not a RayJob")
@@ -145,9 +164,10 @@ def validate_rendered_job(spec: dict, job: dict) -> None:
 def preflight(spec: dict, example: dict, rendered_job: dict) -> dict:
     validate_spec(spec)
     validate_historical_hooks(spec)
+    validate_length_audit(spec)
     validate_example(spec, example)
     validate_rendered_job(spec, rendered_job)
-    return {"metadata_checks": "passed", "real_row_verified": False, "gpu_qualified": False, "checkpoint_reload_proven": False, "submission_authorized": False}
+    return {"metadata_checks": "passed", "aggregate_lengths_verified": True, "real_row_verified": False, "gpu_qualified": False, "checkpoint_reload_proven": False, "submission_authorized": False}
 
 
 def main() -> None:

@@ -36,6 +36,10 @@
     "rows": 112,
     "purpose": "capacity_only_not_scientific_training"
   },
+  "length_audit": {
+    "path": "docs/evidence/qwen38-262k-capacity-lengths-20260925.json",
+    "file_sha256": "81ea8ddc237cf3ea66ae614e09bacde5f7aabe831ca76b5286a96711c1d2b42e"
+  },
   "recipe": {
     "full_weight": true,
     "nodes": 4,

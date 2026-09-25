@@ -4,7 +4,7 @@ from copy import deepcopy
 import json
 import unittest
 
-from training.long_context import SPEC, preflight, validate_example, validate_historical_hooks, validate_rendered_job, validate_spec
+from training.long_context import SPEC, preflight, validate_example, validate_historical_hooks, validate_length_audit, validate_rendered_job, validate_spec
 
 
 class LongContextTests(unittest.TestCase):
@@ -15,6 +15,7 @@ class LongContextTests(unittest.TestCase):
     def test_exact_source_and_hypothesis(self):
         validate_spec(self.spec)
         validate_historical_hooks(self.spec)
+        validate_length_audit(self.spec)
         self.assertEqual(self.spec["status"], "unqualified_hypothesis")
 
     def test_scientific_and_submission_drift_fails(self):
@@ -52,6 +53,9 @@ class LongContextTests(unittest.TestCase):
                 wrong = {**example, field: bad}
                 with self.assertRaises(ValueError):
                     validate_example(self.spec, wrong)
+        aggregate = json.loads((SPEC.parents[2] / self.spec["length_audit"]["path"]).read_text())
+        with self.assertRaisesRegex(ValueError, "wrong example summary"):
+            validate_example(self.spec, aggregate)
 
     def test_only_root_alert_off_and_effective_4x8_c1_render_pass(self):
         image = self.spec["cluster"]["image"]
