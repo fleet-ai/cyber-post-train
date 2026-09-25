@@ -1,128 +1,87 @@
 # Blackbox data and holdout qualification
 
-`training.qualify.components` groups reviewed task versions by shared atoms.
-The frozen current candidate order is replayed by
-`python3 -m training.qualification_order <file>`; runtime qualification is a
-separate live test. Neither metadata step certifies a runnable task.
+`training.qualify.components` joins exact task versions by shared atoms;
+`python3 -m training.qualification_order <file>` replays the frozen candidate
+order. Both use metadata, not live task execution. Authenticate their input
+receipts independently: a JSON assertion alone proves nothing.
 
-There are three separate questions:
+## Three separate gates
 
-1. **Was an old teacher session genuinely successful?** Its exact historical
-   task version, completed verifier, finite outcome, infrastructure validity,
-   acceptance receipt, and trace digest must agree. Today's task status does
-   not invalidate that old session. An SFT example additionally needs an
-   intact trace, the successful report still present after any trimming, and
-   proof that its model-facing tool interface matches the one we will evaluate.
-2. **Can this exact task version run now?** It needs a current production
-   catalog readback with attached verifier, plus a bound model-free receipt
-   proving environment startup, both tools, verifier execution, a finite
-   outcome, and cleanup. An old success receipt or a `clean` QA label alone is
-   not this proof. Even a complete receipt describes its observation time,
-   not an indefinite guarantee.
-3. **Is it independent of training?** All versions of one task key and every
-   task sharing a reviewed vulnerability patch are one connected family. A
-   family cannot cross train, teacher-validation, development, or final test.
-   The tool does not admit unknown atom lineage and reports teacher-exposed heldout
-   tasks instead of counting them as clean.
+1. **Historical SFT source:** prove exact task version, completed verifier,
+   genuine finite success, intact trace/receipt digests, retained report, and
+   model-facing tool contract. Today's breakage cannot undo an old success.
+2. **Runnable now:** prove current production/verifier status and exact-version
+   start, tool, verifier, outcome, cleanup, and intended-path grading. An old
+   receipt or `clean` QA label is insufficient; proof expires with time.
+3. **Independent holdout:** keep every key version and shared-atom task in one
+   family across `train`, `teacher_validation`, `dev`, `final_test`. Unknown
+   lineage is inadmissible. Four attempts are still one independent family.
 
-The retired all-in-one metadata report was not an admission authority. The
-current tools keep the decisions separate: source receipts prove historical
-success, family roles prevent train/test leakage, and exact-version runtime
-receipts prove what worked at a particular time. All input summaries must be
-independently authenticated; a JSON assertion alone is not proof. Frozen roles
-are `train`, `teacher_validation`, `dev`, and `final_test`.
+## Frozen source and task counts
 
-For the September 24 frozen census, the report finds 1,217 blackbox versions. Seventy-
-five have prior exact-version execution receipts; another 33 have reviewed
-lineage but no complete runtime receipt. The **1,035** `not_analyzed` versions
-without prior exact receipts are the discovery pool. First fetch each exact
-current version and its atom metadata, then join shared-atom families, then
-obtain bounded model-free runtime receipts. The old Teacher3K lineage map
-already resolves 194 of those 1,035 exact versions; 841 need initial atom
-lineage review. All 1,035 still need current-status and runtime checks before
-they can enlarge the runnable heldout. Do not confuse this report with a fresh
-runtime test: no new jobs or evaluations were launched to make it.
+The September 24 census had **1,217** blackbox versions: 75 with prior exact
+execution receipts, 33 more with lineage but no runtime proof, and 1,035
+`not_analyzed` without receipts. Teacher3K lineage resolves 194 of the 1,035;
+841 still need atom review. All need fresh runtime proof for holdout use.
 
-On September 25, a read-only live QA refresh found 1,109 `not_analyzed`
-blackbox versions, one fewer than the frozen census; 26 were `agent_failure`,
-one more. Excluding the same 75 prior exact receipts leaves 1,034 unreviewed.
-Of those, 363 share a Teacher3K task key; 671 have new keys. Exact-version
-metadata GETs succeeded for all 671, including production status, verifier,
-environment version, and atom-source locators. After excluding Teacher3K atom
-keys, 433 versions across 14 apps in 327 independent atom-key families remain as **possible**
-new heldout candidates. That is a discovery count, not a runtime-qualified
-count. The 20 existing live-heldout and 16 conditional candidate families must
-also be excluded before fixing a new wave. `training/qualify_live.py` performs
-this current metadata-only selection; it never creates environments.
-After protected-family exclusion, 408 versions across the same 14 apps and
-311 independent families remain. The frozen 16-family first wave is metadata
-only. A direct API canary on September 25 created one exact environment and
-proved its deletion, but did **not** qualify the task: version-scoped rollout
-provisioning ignored the caller's create-request ID, so the durable claim could
-not be reconciled. Theseus PR #35155 repaired this in source and staging now
-advertises the exact capability, but production still returned 404 on September
-25. `training/runtime_qualify.py` remains create-disabled until production
-readback. Its runtime receipt is deliberately not task acceptance: a positive
-intended-path/grade proof is also required. The first 16 candidates have no
-Pipeline Lanes and no solvability-stage Registry run, so neither the 16-wave nor
-the broader 311-family pool is yet a runnable heldout set.
+September 25 live QA found 1,109 `not_analyzed` and 26 `agent_failure` (−1/+1),
+leaving 1,034 without the same 75 prior receipts: 363 share Teacher3K keys,
+671 have new keys. Exact-version production, verifier, environment and atom
+metadata GETs succeeded for all 671. Removing 238 Teacher3K-atom overlaps
+leaves **433 versions / 327 families / 14 apps** as possible heldout. Protecting
+the existing 20 live-heldout and 16 conditional families leaves **408 versions
+/ 311 families**. `training/qualify_live.py` never runs environments.
 
-Teacher3K had 2,886 accepted whole-session successes, but its old packing
-clipped most windows inside messages, used tool names that differed from the
-OpenCode evaluation, and salvaged 149 prefixes, 148 without a retained report.
-Rebuild SFT examples only after preserving complete task/tool context and
-verifying success in the retained segment. The historical audit groups its
-496 task keys into 370 components using exact atom-version locators;
-stripping version suffixes merges those into **356** stricter base-atom
-families. `training/family_roles.py` splits by those 356 and requires the
-reviewed Fleet holdout split and exact receipts. Five protected families were
-exposed by six teacher source versions (16 sessions, 381,734 tokens); all
-source versions in those families are quarantined as `test`, never trained or
-used for teacher validation. Its 37-family teacher-validation slice covers all
-seven source apps, but cannot claim representation on environment, difficulty,
-or vulnerability type without those missing source labels. Split by these
-families, not by session or task-key spelling. Reserve teacher validation
-before packing, and keep both that slice and the live development/final tasks
-out of all SFT and RL inputs. The existing 20 Teacher3K-clean live families
-are a useful debugging panel, **not** a powered test for a modest 10-point
-improvement. Four attempts per family do not make four independent tasks.
-Expand and freeze a genuinely new final set before repeated checkpoint tuning.
+The September 25 API canary created/deleted one environment but could not
+reconcile its create-request ID: version-scoped provisioning ignored that ID.
+Theseus PR #35155 repaired source; staging advertised it, production returned
+404. `training/runtime_qualify.py` remains create-disabled pending production
+readback. No later wave cell ran. The first 16 candidates have no Pipeline
+Lanes or solvability Registry run; neither they nor the 311-family pool have
+accepted positive grading, negative-control and cleanup evidence. A baseline
+model failure cannot invalidate a task; baseline success cannot select it.
 
-The frozen metadata-only role file is
-`configs/data/qwen38-teacher3k-family-roles-20260925-v1.json` (SHA-256
-`6c56b9b1ae9c0e5b21a36e48f0d5b6a451bda9da24ecab8262cb737acb1e2b68`).
-It covers all 1,176 exact teacher source versions: train has 1,057 versions,
-2,671 sessions, and 52,569,390 source supervised tokens; teacher validation
-has 113 versions, 199 sessions, and 4,433,757 tokens; quarantine has six
-versions, 16 sessions, and 381,734 tokens. These are source-lineage totals, not
-repacked training-window counts. A separate historical packer roster still
-needs a truthful new role-anchor binding before corpus materialization.
+## Teacher3K family roles
 
-## Frozen next qualification order (September 25)
+The 2,886 accepted whole-session successes span 496 task keys and about 57.4
+million estimated supervised tokens. The historical
+audit found 370 components with exact atom-version locators; joining all
+versions of each atom yields **356 stricter families**. Five protected families
+were exposed through six source versions (16 sessions, 381,734 estimated
+supervised tokens), so those source versions are quarantined as `test`.
+`training/family_roles.py` reserves 37 teacher-validation families across all
+seven source apps before packing. Missing source labels prevent a claim of
+representation by environment, difficulty, or vulnerability type.
+
+The frozen metadata-only roster is
+`configs/data/qwen38-teacher3k-family-roles-20260925-v1.json`, canonical
+SHA-256 `6c56b9b1ae9c0e5b21a36e48f0d5b6a451bda9da24ecab8262cb737acb1e2b68`.
+Across all **1,176** exact source versions: train has 1,057 versions / 2,671
+sessions / 52,569,390 estimated source tokens; teacher validation has 113 /
+199 / 4,433,757; quarantine has 6 / 16 / 381,734. These are source totals,
+not repacked target-token counts. A truthful new historical-packer role-anchor
+binding is still required before corpus materialization. Only **20** existing
+Fleet heldout families (13 development, 7 final) are Teacher3K-clean and
+provisionally receipt-backed; they need fresh runtime/grade checks and are not
+a powered final test for a modest 10-point lift.
+
+## Frozen next qualification order
 
 `configs/data/fleet-blackbox-qualification-order-20260925-v1.json` freezes
-408 exact candidate versions in 311 transitive task-key/shared-atom families
-(canonical payload SHA-256 `4e654dab459819dd1afeb043ca10a854c703795a50ef7df011527dd5a2c3703f`).
-Its candidate rows came from one read-only live QA/exact-version census, after
-excluding Teacher3K and the earlier protected Fleet families. No model outcome
-or runtime-qualification result chose its order or roles. Verify its digest and
-recompute the order with `python3 -m training.qualification_order <file>`.
+408 exact versions / 311 task-key/shared-atom families, payload SHA-256
+`4e654dab459819dd1afeb043ca10a854c703795a50ef7df011527dd5a2c3703f`.
+No model outcome or runtime result selected its order or roles. The order
+alternates apps and favors underrepresented metadata; its first 16 families
+span all 14 apps (14 medium, two hard). Sixty families are reserved for
+development and 251 for final test; all apps occur in both. Difficulty labels
+overall: 17 easy, 256
+medium, 37 hard, one floor (final); development: 3 easy, 49 medium, 8 hard.
+Source-project labels are 199 `ots`, 101 `cyber-ots`, 11 `apollo`. Atom-name
+vulnerability keywords are **not** a reviewed taxonomy: 181 families are
+unclassified. Only one family contains multiple atoms.
 
-The fixed order alternates applications and prefers less represented metadata
-within each app. It spans all 14 apps in its first 16 families. Sixty families
-are reserved for development and 251 for final testing; **all 14 apps occur in
-both roles**. The overall difficulty labels are 17 easy, 256 medium, 37 hard,
-and one floor; development has 3 easy, 49 medium, 8 hard. The unique floor
-case is reserved for final testing. Source-project labels
-are 199 `ots`, 101 `cyber-ots`, and 11 `apollo`. The vulnerability-class column
-is only a keyword hint from atom names, **not** a reviewed vulnerability
-taxonomy: 181 families are unclassified. Only one family has multiple atoms.
-
-These are reservations, **not 251 valid final tasks**. Each exact version still
-needs accepted, independent positive solvability/grading evidence, plus current
-environment startup, tool, verifier, negative-control, and cleanup receipts;
-without positive evidence it remains provisional. A baseline model failure never makes
-a task invalid, and a baseline success must not be used to select the roster.
-Keep every failed/ambiguous qualification visible. If fewer than 100 independent
-final families pass these gates, report the final set as underpowered and seek
-new task families; do not promote development tasks or relax the proof gate.
+These reservations are not valid eval tasks. Each exact version still needs
+independent intended-path/grading evidence plus current start, tool, verifier,
+negative-control and cleanup receipts. Preserve failures and ambiguity. If
+fewer than 100 independent final families pass, report an underpowered final
+set and seek new families; never promote development tasks or relax proof.
