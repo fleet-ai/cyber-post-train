@@ -12,9 +12,9 @@ def sha(char):
     return "sha256:" + char * 64
 
 
-def protocol(count=2, role="dev"):
+def protocol(count=2, role="dev", seed_mode="fixed"):
     return seal_protocol({
-        "schema": "fleet_paired_pass4_v1",
+        "schema": "fleet_paired_pass4_v2",
         "study_id": "qwen-synthetic-comparison",
         "role": role,
         "final_selection_sha256": sha("f") if role == "final" else None,
@@ -31,9 +31,13 @@ def protocol(count=2, role="dev"):
             "harness_version": "pinned", "system_prompt_sha256": sha("b"),
             "tools": ["fleet_bash", "fleet_submit_report"], "tool_schema_sha256": sha("c"),
             "context_policy": "native_compaction", "context_window_tokens": 262144,
-            "max_output_tokens": 32768, "max_model_requests": 600,
-            "timeout_seconds": 28800, "temperature": 0.6, "top_p": 0.95,
-            "seeds": [11, 12, 13, 14], "retry_limit": 0,
+            "max_output_tokens": 32768, "max_steps": 600,
+            "max_duration_minutes": 480,
+            "temperature": 0.6 if seed_mode == "fixed" else None,
+            "top_p": 0.95 if seed_mode == "fixed" else None,
+            "seed_policy": ({"mode": "fixed", "seeds": [11, 12, 13, 14]}
+                            if seed_mode == "fixed" else {"mode": seed_mode}),
+            "retry_limit": 0,
         },
         "arms": {
             "base": {"model_revision": "base-revision", "weights_sha256": sha("1")},
@@ -49,7 +53,9 @@ def events(plan, *, candidate_wins=()):
         version = task["task_version_id"]
         for arm in ("base", "candidate"):
             artifact = plan["arms"][arm]
-            for attempt, seed in enumerate(plan["common"]["seeds"], 1):
+            for attempt in range(1, 5):
+                policy = plan["common"]["seed_policy"]
+                seed = policy["seeds"][attempt - 1] if policy["mode"] == "fixed" else None
                 rows.append({
                     "protocol_sha256": plan["sha256"], "arm": arm,
                     "task_version_id": version, "attempt": attempt, "seed": seed,
@@ -104,6 +110,36 @@ class FleetEvalTests(unittest.TestCase):
         self.assertEqual((result["base_pass4"], result["candidate_pass4"]), (0, 1))
         self.assertEqual(result["candidate_minus_base_pass4"], 0.5)
         self.assertEqual(dev_decision(result), (0.5, 0.5))
+        self.assertEqual(result["seed_policy"], "fixed")
+        self.assertIn("matching fixed seeds", result["pairing_interpretation"])
+
+    def test_native_unseeded_pass4_is_task_paired_not_seed_paired(self):
+        plan = protocol(seed_mode="server_assigned_unobserved")
+        rows = events(plan, candidate_wins={"version-0"})
+        self.assertTrue(all(row["seed"] is None for row in rows))
+        result = summarize(plan, rows)
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(result["candidate_minus_base_pass4"], 0.5)
+        self.assertEqual(result["seed_policy"], "server_assigned_unobserved")
+        self.assertIn("not seed-paired", result["pairing_interpretation"])
+        self.assertIn("not asserted", result["sampling_interpretation"])
+        rows[0]["seed"] = 11
+        with self.assertRaisesRegex(ValueError, "seed mismatch"):
+            summarize(plan, rows)
+
+    def test_seed_and_sampling_policies_reject_false_claims(self):
+        raw = {k: v for k, v in protocol().items() if k != "sha256"}
+        raw["common"]["seed_policy"]["seeds"] = [11, 11, 12, 13]
+        with self.assertRaisesRegex(ValueError, "distinct fixed seeds"):
+            seal_protocol(raw)
+        raw = {k: v for k, v in protocol(seed_mode="server_assigned_unobserved").items() if k != "sha256"}
+        raw["common"]["seed_policy"]["seeds"] = [11, 12, 13, 14]
+        with self.assertRaisesRegex(ValueError, "unknown fields"):
+            seal_protocol(raw)
+        raw = {k: v for k, v in protocol(seed_mode="server_assigned_unobserved").items() if k != "sha256"}
+        raw["common"]["temperature"] = 0.6
+        with self.assertRaisesRegex(ValueError, "both be explicit or both be unavailable"):
+            seal_protocol(raw)
 
     def test_invalid_output_or_process_error_never_becomes_zero(self):
         plan = protocol()

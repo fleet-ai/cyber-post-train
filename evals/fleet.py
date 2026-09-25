@@ -9,7 +9,7 @@ import os
 import re
 from pathlib import Path
 
-SCHEMA = "fleet_paired_pass4_v1"
+SCHEMA = "fleet_paired_pass4_v2"
 SHA = re.compile(r"sha256:[0-9a-f]{64}\Z")
 IMAGE = re.compile(r"[^\s@]+@sha256:[0-9a-f]{64}\Z")
 TASK_FIELDS = {
@@ -20,8 +20,8 @@ COMMON_FIELDS = {
     "model_repository", "tokenizer_sha256", "chat_template_sha256",
     "serving_image", "serving_config_sha256", "harness_image", "harness_version",
     "system_prompt_sha256", "tools", "tool_schema_sha256", "context_policy",
-    "context_window_tokens", "max_output_tokens", "max_model_requests",
-    "timeout_seconds", "temperature", "top_p", "seeds", "retry_limit",
+    "context_window_tokens", "max_output_tokens", "max_steps",
+    "max_duration_minutes", "temperature", "top_p", "seed_policy", "retry_limit",
 }
 EVENT_FIELDS = {
     "protocol_sha256", "arm", "task_version_id", "attempt", "seed",
@@ -86,19 +86,29 @@ def _structure(protocol: dict) -> None:
             raise ValueError(f"{key} must be an immutable digest")
     if not isinstance(common["tools"], list) or not common["tools"] or not all(map(_text, common["tools"])) or len(set(common["tools"])) != len(common["tools"]):
         raise ValueError("ordered tool names must be unique and nonempty")
-    for key in ("context_window_tokens", "max_output_tokens", "max_model_requests", "timeout_seconds"):
+    for key in ("context_window_tokens", "max_output_tokens", "max_steps", "max_duration_minutes"):
         if type(common[key]) is not int or common[key] <= 0:
             raise ValueError(f"{key} must be positive")
     if common["max_output_tokens"] > common["context_window_tokens"]:
         raise ValueError("output budget exceeds context window")
-    for key in ("temperature", "top_p"):
-        if type(common[key]) not in {int, float} or not math.isfinite(common[key]):
-            raise ValueError(f"{key} must be finite")
-    if not 0 <= common["temperature"] <= 2 or not 0 < common["top_p"] <= 1:
-        raise ValueError("invalid sampling")
-    seeds = common["seeds"]
-    if not isinstance(seeds, list) or len(seeds) != 4 or any(type(x) is not int or x < 0 for x in seeds) or len(set(seeds)) != 4:
-        raise ValueError("pass@4 requires four distinct fixed seeds")
+    if (common["temperature"] is None) != (common["top_p"] is None):
+        raise ValueError("sampling controls must both be explicit or both be unavailable")
+    if common["temperature"] is not None:
+        for key in ("temperature", "top_p"):
+            if type(common[key]) not in {int, float} or not math.isfinite(common[key]):
+                raise ValueError(f"{key} must be finite")
+        if not 0 <= common["temperature"] <= 2 or not 0 < common["top_p"] <= 1:
+            raise ValueError("invalid sampling")
+    seed_policy = common["seed_policy"]
+    if not isinstance(seed_policy, dict) or seed_policy.get("mode") not in {"fixed", "server_assigned_unobserved"}:
+        raise ValueError("seed policy must be fixed or server_assigned_unobserved")
+    if seed_policy["mode"] == "fixed":
+        _fields(seed_policy, {"mode", "seeds"}, "fixed seed policy")
+        seeds = seed_policy["seeds"]
+        if not isinstance(seeds, list) or len(seeds) != 4 or any(type(x) is not int or x < 0 for x in seeds) or len(set(seeds)) != 4:
+            raise ValueError("pass@4 requires four distinct fixed seeds")
+    else:
+        _fields(seed_policy, {"mode"}, "server-assigned seed policy")
     if type(common["retry_limit"]) is not int or common["retry_limit"] not in (0, 1):
         raise ValueError("reviewed infrastructure retry limit must be zero or one")
     arms = _fields(protocol["arms"], {"base", "candidate"}, "arms")
@@ -167,6 +177,7 @@ def summarize(protocol: dict, events: list[dict]) -> dict:
     """Return a paired family result only when every planned attempt is valid."""
     validate_protocol(protocol)
     tasks = {task["task_version_id"]: task for task in protocol["tasks"]}
+    seed_policy = protocol["common"]["seed_policy"]
     cells = {}
     invalid = {}
     for event in events:
@@ -174,8 +185,11 @@ def summarize(protocol: dict, events: list[dict]) -> dict:
         arm, version, attempt = event["arm"], event["task_version_id"], event["attempt"]
         if arm not in ("base", "candidate") or version not in tasks or type(attempt) is not int or attempt not in (1, 2, 3, 4):
             raise ValueError("attempt is outside the frozen arm/task roster")
-        if event["protocol_sha256"] != protocol["sha256"] or event["seed"] != protocol["common"]["seeds"][attempt - 1]:
-            raise ValueError("attempt protocol or seed mismatch")
+        if event["protocol_sha256"] != protocol["sha256"]:
+            raise ValueError("attempt protocol mismatch")
+        expected_seed = (seed_policy["seeds"][attempt - 1] if seed_policy["mode"] == "fixed" else None)
+        if event["seed"] != expected_seed or (seed_policy["mode"] == "fixed" and type(event["seed"]) is not int):
+            raise ValueError("attempt seed mismatch")
         artifact = protocol["arms"][arm]
         if (event["model_revision"] != artifact["model_revision"]
                 or event["weights_sha256"] != artifact["weights_sha256"]
@@ -193,6 +207,16 @@ def summarize(protocol: dict, events: list[dict]) -> dict:
     missing = expected - cells.keys()
     result = {
         "protocol_sha256": protocol["sha256"], "role": protocol["role"],
+        "seed_policy": seed_policy["mode"],
+        "pairing_interpretation": (
+            "same task versions and four matching fixed seeds per arm"
+            if seed_policy["mode"] == "fixed" else
+            "same task versions; server-controlled or unseeded attempts have no observed seed and are not seed-paired"
+        ),
+        "sampling_interpretation": (
+            "explicit temperature and top_p" if protocol["common"]["temperature"] is not None
+            else "server-default sampling; temperature and top_p are not asserted"
+        ),
         "families": len(tasks), "valid_attempts": len(cells) - len(invalid),
         "missing_attempts": len(missing), "infrastructure_invalid_attempts": len(invalid),
         "missing_cells": [list(key) for key in sorted(missing)],
