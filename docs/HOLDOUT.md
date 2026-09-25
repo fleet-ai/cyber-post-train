@@ -32,9 +32,10 @@ DEV-family-first 16-cell roster is frozen. Its manifest authorizes no bulk
 launch; after the first two cells' exact cleanup audits, the runtime checker
 permits the 16 frozen DEV representatives one at a time as bounded, model-free
 diagnostics after fresh live preflight.
-An exact-atom Registry query for those first 16 families found records for
-only three; all five records were author/build stages, not solvability or
-current-version grading proof. Registry presence cannot promote this wave.
+A read-only Registry search over all 313 candidate atom subjects found 28
+solvability-stage runs (none positive) and 29 QA runs (12 green for later
+solvability); none bound an exact current candidate task-version ID. Registry
+presence cannot promote this wave.
 The September 25 DEV screen attempted all 16 frozen representatives, one at a
 time: 12 passed startup, both task tools, zero-score negative grading, and
 cleanup; two were rejected before creation because the exact task metadata
@@ -78,7 +79,9 @@ current production runnability remains unproved. A later metadata-only scan of
 252 named session stores found 21 leads on six counted versions (not global);
 no new families. Staging cell 08 passed startup/tools/negative grade/cleanup only.
 Old wave16 predates frozen rank order; no broader wave proved prod use.
-Old 75 receipts/model outcomes are not automatic positives; preserve unknowns.
+Six of the old 75 split's eight final versions have exact-version historical
+full-credit leads and no Teacher3K TRAIN-family overlap; none is yet current-
+positive. Old receipts/model outcomes are not automatic positives.
 
 On September 25, read-only current-task checks found all 20 exact historical
 positive versions still match their frozen task version, environment version,
@@ -96,6 +99,10 @@ terminal `sha256:1531e8c3b13e0f59d65b2d79fa13ec1ab97127e7130e745fae8c9802816f887
 This establishes **two** current-positive final versions, not independent model
 success and not a sufficiently large final panel. Do not use historical final
 actions, reports, or scores for training or checkpoint selection.
+An additional final-version replay timed out after 76/84 historical bash calls,
+before grading; its sealed terminal is
+`sha256:9dcd36965083f24a80bdcd499a56dd5e4e66e68ad36fb0389607bcd891081985`.
+Exact claim and stopped-instance readback prove release, not task invalidity.
 
 ## Teacher3K family roles
 
