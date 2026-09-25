@@ -128,6 +128,20 @@ def test_tampered_cpu_gate_rejects_ready(tmp_path):
         flow._receipt(path)
 
 
+def test_mechanics_checkpoint_profile_is_accepted_without_teacher_ce(tmp_path):
+    plan = {"runtime_sha256": flow.SOURCES["training/sft_runtime.py"],
+            "execution": {"image": "image@sha256:" + "a" * 64}}
+    request = {"image": plan["execution"]["image"]}
+    prepared = {"schema": "qwen38_96k_mechanics_prepared_v1",
+                "historical_commit": flow.COMMIT,
+                "plan_sha256": flow._sha(flow._canonical(plan)),
+                "request_sha256": flow._sha(flow._canonical(request))}
+    for name, value in (("plan.json", plan), ("request.json", request),
+                        ("PREPARED.json", prepared)):
+        (tmp_path / name).write_text(json.dumps(value))
+    assert flow._prepared(tmp_path) == (plan, request, prepared)
+
+
 def test_stage_specs_require_c1_root_alert_opt_out(tmp_path, monkeypatch):
     plan = {"run_name": "q38-corrected", "output_root": str(tmp_path / "run"),
             "recipe": {"max_steps": 32, "checkpoint_interval": 16},

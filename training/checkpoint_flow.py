@@ -75,7 +75,7 @@ def _prepared(directory: Path) -> tuple[dict, dict, dict]:
     receipt = json.loads((directory / "PREPARED.json").read_text())
     plan = json.loads((directory / "plan.json").read_text())
     request = json.loads((directory / "request.json").read_text())
-    if (receipt.get("schema") not in {"qwen38_96k_debug_prepared_v1",
+    if (receipt.get("schema") not in {"qwen38_96k_mechanics_prepared_v1",
                                            "qwen38_96k_full_prepared_v1"}
         or receipt.get("historical_commit") != COMMIT
         or receipt.get("plan_sha256") != _sha(_canonical(plan))
