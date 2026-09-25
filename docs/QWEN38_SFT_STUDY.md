@@ -6,35 +6,31 @@ corrected-data study. See [HOLDOUT.md](HOLDOUT.md) for source and split evidence
 
 ## Why the old run cannot answer the question
 
-Old packing clipped **11,794/14,693** rows, often losing the system/task/tool
-anchor; its tool names differed from OpenCode evaluation. Of 149 prefix-salvaged
-sessions, 148 lost the final report. Step-1000 also mixed output-limit failures
-and leaked families: **not defensible lift evidence**. New data must retain
-private originals, match target anchors/tools, preserve complete early/middle/
-late rounds without duplicate targets or submit bias, freeze roles, and verify
-native token/mask bytes.
+Old packing clipped **11,794/14,693** rows, often losing task/tool anchors;
+tools differed from OpenCode eval. Of 149 prefix-salvaged sessions, 148 lost
+the final report. Step-1000 mixed output-limit failures and leaked families:
+**not defensible lift evidence**. New data must retain private originals,
+match target anchors/tools, preserve complete early/middle/late rounds without
+duplicate targets or submit bias, freeze roles, and verify native masks.
 
 ## Two held-out measurements
 
 Teacher cross-entropy on unseen successes diagnoses optimization, **not** exploit
 ability. Matched base/checkpoint Fleet pass@4 on runnable versions measures
 ability: select on DEV, confirm once on final, exclude infrastructure failures.
-Old 13-DEV/7-final families need fresh proof and cannot resolve modest lift.
 
 ## Source-to-OpenCode compatibility
 
-All **2,886** envelopes passed session/version/transcript digests. Strict
-checks provisionally retain **943 TRAIN/116 families**, **27 teacher DEV/9**;
-16 protected sessions are quarantined. Hidden reasoning is excluded and
-OpenCode anchors/calls substituted, but local probes cannot prove live Qwen
-wire. `use_tool` wrappers stay out: CLI/MCP blocks are unbound and none of
-28,312 wrapped bash strings recovers a unique final status. Provisional
-one-text-block conversion adds 219 TRAIN/15 DEV: **1,162/42** sessions,
-**153/12** families, old token proxies **22,295,624/639,694**. Native masked
-tokens, live wire and historical tool-result parity remain unproved; acceptance
-needs attested blocks or fresh target-harness successes. OpenCode 1.18.27
-truncates tool output above 50 KiB or 2,000 lines; only 362 TRAIN/7 DEV
-sessions have size-safe results throughout, too little for accepted full SFT.
+All **2,886** envelopes passed session/version/transcript digests. Provisional
+strict set: **943 TRAIN/116 families**, **27 teacher DEV/9**; 16 protected
+sessions quarantined. Hidden reasoning is excluded and OpenCode anchors/calls
+substituted, but live Qwen wire is unproved. `use_tool` wrappers stay out:
+CLI/MCP blocks are unbound; none of 28,312 wrapped bash strings recovers a
+unique final status. One-text-block conversion adds 219 TRAIN/15 DEV:
+**1,162/42** sessions, **153/12** families, old token proxies
+**22,295,624/639,694**. Native masked tokens/live wire/tool-result parity
+remain unproved. OpenCode 1.18.27 truncates results above 50 KiB/2,000 lines;
+only 362 TRAIN/7 DEV sessions are size-safe—too little for accepted full SFT.
 
 ## Parallel execution lanes
 
@@ -54,16 +50,13 @@ sessions have size-safe results throughout, too little for accepted full SFT.
   contiguous teacher DEV. Final families never train. Old runtime binds a
   capacity-only corpus/no-CE mode; qualify a new binding.
 
-Initial full262 hypothesis: full-weight Qwen3.8-27B, four 8-B300 nodes,
-262,144 context, global batch 32, one epoch, LR 3e-6, and proven
-group-1/GDN-512/chunk-1024 mechanics **only after** capacity/reload pass.
-Freeze `max_steps = ceil(train_rows / 32)`, align CE with roughly 10–20 spaced
-checkpoints, and retain **all** native checkpoints through seal/export/reload/
-eval; budget SFS first. Validate native recovery without an optimizer step and
-under a new output/W&B identity. Each selected checkpoint needs BF16 readback
-and matched baseline/checkpoint Fleet DEV and OpenCode WebExploitBench pass@4;
-final families remain sealed until selection. Training loss/teacher CE do not
-establish lift.
+Initial full262 hypothesis after capacity/reload pass: full-weight Qwen3.8-27B,
+four 8-B300 nodes, 262,144 context, global batch 32, one epoch, LR 3e-6,
+group-1/GDN-512/chunk-1024. Freeze `max_steps = ceil(train_rows / 32)`, ~10–20
+spaced CE/checkpoints; retain **all** native saves through eval and budget SFS.
+Validate zero-step recovery with a new output/W&B identity. Each checkpoint
+needs BF16 readback and matched base/candidate Fleet DEV and OpenCode
+WebExploitBench pass@4. Keep final families sealed; train/teacher loss is not lift.
 
 Before full262 POST, server-preview root `fleet.ai/failure-alerts: "off"`,
 c1/q1, four-node shape/release; recheck duplicates, empty output and capacity.

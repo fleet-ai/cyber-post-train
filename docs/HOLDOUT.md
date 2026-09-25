@@ -1,52 +1,47 @@
 # Blackbox data and holdout qualification
 
-`training.qualify.components` joins versions by shared atoms; the
-`training.qualification_order` module replays the frozen candidate order.
-Both are metadata-only; independently authenticate their input receipts.
+`training.qualify.components` joins shared-atom versions;
+`training.qualification_order` replays frozen order. Both are metadata-only;
+authenticate their input receipts independently.
 
 ## Three separate gates
 
 1. **Historical SFT:** exact version, finite verifier success, intact trace,
-   retained report and model-facing tools; today's breakage cannot undo it.
-2. **Runnable now:** current production/version, start, tools, positive and
-   negative grading, cleanup; an old receipt or `clean` label is insufficient.
-3. **Independent holdout:** all versions/shared-atom tasks stay in one family
-   across TRAIN, teacher DEV, task DEV and final; unknown lineage is excluded.
-   Four attempts remain one independent family.
+   retained report/tools; today's breakage cannot undo it.
+2. **Runnable now:** production version starts, tools work, positive/negative
+   grading and cleanup pass; old `clean` labels are insufficient.
+3. **Independent holdout:** shared-atom versions stay in one family across
+   TRAIN, teacher DEV, task DEV and final; exclude unknown lineage. Four
+   attempts still count as one family.
 
 ## Frozen source and task counts
 
-The September 25 census found 1,034 blackbox versions without the old 75
-execution receipts. Of these, 671 have new task keys; exact-version task,
-verifier, environment and atom metadata GETs succeeded. Excluding Teacher3K
-atom overlaps and protected families leaves **408 candidate versions / 311
-families / 14 apps**. Metadata does not prove current runnability, and
-`training/qualify_live.py` never runs environments.
+September 25 census: 1,034 blackbox versions lacked the old 75 execution
+receipts; 671 had new keys. Exact task/verifier/env/atom metadata GETs passed.
+Excluding Teacher3K overlaps and protected families left **408 candidate
+versions / 311 families / 14 apps**. Metadata is not runnability;
+`training/qualify_live.py` does not run environments.
 
 One API canary could not reconcile its create-request ID. Theseus #35155
-repaired that contract; staging advertised it, but production still returned
-404. `training/runtime_qualify.py` remains create-disabled; no production
-qualification wave ran. Registry and Pipeline Lanes had no positive record
-for these exact candidate versions.
+repaired it in staging, but production still returned 404, so
+`training/runtime_qualify.py` is create-disabled. No production qualification
+wave ran; Registry/Lanes supplied no exact positive record.
 
-A session census found 257 full-credit leads on 68 candidate keys. Private
-exact-version/task/environment/verifier checks proved **20 historical positive
-versions in 18 families** (six DEV, 12 final; 17 medium, three hard). Of 408
-candidate versions, 340 had no positive lead; strict older-version contract
-and seed-byte checks transferred only two of the other 48 leads, adding **one
-independent final family**. Thus the historical union is **19 families: six DEV,
-13 final**—not a large valid panel or proof of current production runnability.
-A one-cell staging rehearsal passed startup, tools, zero-credit negative grading
-and teardown, but staging is not production. Old 75 receipts are not automatic
-positive controls; never select by candidate-model outcomes. Preserve unknowns.
+A census found 257 full-credit leads on 68 keys. Private exact-version checks
+proved **20 historical positive versions/18 families** (six DEV, 12 final;
+17 medium, three hard). Of 408 candidates, 340 had no positive lead; strict
+older-version contract/seed-byte proof transferred two other leads but added
+only **one final family**. Historical union: **19 families, six DEV/13 final**;
+current production runnability remains unproved. One-cell staging startup,
+tools, negative grading and teardown passed—not production proof. Old 75
+receipts and model outcomes are not automatic positives; preserve unknowns.
 
 ## Teacher3K family roles
 
-The 2,886 whole-session successes span 496 keys and ~57.4M estimated source
-tokens. Shared-atom lineage yields **356 strict families**; six source
-versions/16 sessions leak into five protected families and are quarantined.
-The split reserves 37 teacher-validation families across seven apps. Missing
-labels prevent claims of env/difficulty/vulnerability representativeness.
+2,886 whole-session successes span 496 keys/~57.4M estimated source tokens
+and **356 strict shared-atom families**. Six versions/16 sessions overlap five
+protected families and are quarantined. Teacher DEV reserves 37 families in
+seven apps; missing labels preclude env/difficulty/vulnerability balance claims.
 
 Frozen metadata-only roster: `configs/data/qwen38-teacher3k-family-roles-20260925-v1.json`
 (SHA-256 `6c56b9b1ae9c0e5b21a36e48f0d5b6a451bda9da24ecab8262cb737acb1e2b68`).
