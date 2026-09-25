@@ -98,9 +98,8 @@ credit, with exact stopped-instance and create-claim readbacks. Terminals:
 `sha256:b74f9c22cce26b8357e925ec6bea99a2513524040fbf109d1e5227e361220836`.
 These **eight** current-positive families are not independent model solves or a sufficient panel.
 Never use final actions, reports, or scores for training or checkpoint selection.
-An additional final-version replay timed out after 76/84 historical bash calls,
-before grading; its sealed terminal is
-`sha256:9dcd36965083f24a80bdcd499a56dd5e4e66e68ad36fb0389607bcd891081985`.
+An additional final-version replay timed out after 76/84 bash calls, before
+grading (terminal `sha256:9dcd36965083f24a80bdcd499a56dd5e4e66e68ad36fb0389607bcd891081985`).
 Exact claim and stopped-instance readback prove release, not task invalidity.
 
 ## Teacher3K family roles

@@ -325,13 +325,14 @@ class LaunchTests(unittest.TestCase):
                                   "queued_jobs": 1, "owned_active_gpu_pods": 1})
 
     def test_lease_release_must_match_original_holder(self) -> None:
-        existing = {"metadata": {"uid": "lease-uid", "resourceVersion": "3"},
-                    "spec": {"holderIdentity": "another", "renewTime": "2026-09-25T00:00:00Z",
-                             "leaseDurationSeconds": 900}}
-        with mock.patch.object(launch, "_kubectl", return_value=existing) as kubectl:
-            with self.assertRaisesRegex(ValueError, "identity changed"):
-                launch._lease(None, expected_uid="lease-uid", expected_holder="mine")
-            kubectl.assert_called_once()
+        existing = {"metadata": {"uid": "lease-uid", "resourceVersion": "3"}, "spec": {"holderIdentity": "another"}}
+        with mock.patch.object(launch, "_kubectl", return_value=existing) as kubectl, self.assertRaisesRegex(ValueError, "identity changed"):
+            launch._lease(None, expected_uid="lease-uid", expected_holder="mine")
+        kubectl.assert_called_once()
+        released = {"spec": {"holderIdentity": ""}}
+        with mock.patch.object(launch, "_kubectl", side_effect=[existing, released]) as kubectl:
+            self.assertEqual(launch._lease(None, expected_uid="lease-uid", expected_holder="another"), released)
+        self.assertEqual(kubectl.call_args.args[2]["spec"]["leaseDurationSeconds"], 900)
 
     def test_gpu_review_drift_blocks_post_under_lease(self) -> None:
         dest, _ = self.prepare()

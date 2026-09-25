@@ -817,7 +817,7 @@ def _lease(holder: str | None, *, expected_uid: str | None = None,
             or current.get("spec", {}).get("holderIdentity") != expected_holder):
             raise ValueError("capacity lease identity changed before release")
         verb = "replace"
-        spec = {"holderIdentity": "", "leaseDurationSeconds": 0,
+        spec = {"holderIdentity": "", "leaseDurationSeconds": 900,
                 "renewTime": now.isoformat()}
     meta = {"name": LEASE, "namespace": NAMESPACE}
     if current:
