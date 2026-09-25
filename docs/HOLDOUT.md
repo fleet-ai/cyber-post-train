@@ -19,28 +19,20 @@ receipts independently: a JSON assertion alone proves nothing.
 
 ## Frozen source and task counts
 
-The September 24 census had **1,217** blackbox versions: 75 with prior exact
-execution receipts, 33 more with lineage but no runtime proof, and 1,035
-`not_analyzed` without receipts. Teacher3K lineage resolves 194 of the 1,035;
-841 still need atom review. All need fresh runtime proof for holdout use.
+The September 25 census found 1,034 blackbox versions without the old 75
+execution receipts. Of these, 671 have new task keys; exact-version task,
+verifier, environment and atom metadata GETs succeeded. Excluding Teacher3K
+atom overlaps and protected families leaves **408 candidate versions / 311
+families / 14 apps**. Metadata does not prove current runnability, and
+`training/qualify_live.py` never runs environments.
 
-September 25 live QA found 1,109 `not_analyzed` and 26 `agent_failure` (−1/+1),
-leaving 1,034 without the same 75 prior receipts: 363 share Teacher3K keys,
-671 have new keys. Exact-version production, verifier, environment and atom
-metadata GETs succeeded for all 671. Removing 238 Teacher3K-atom overlaps
-leaves **433 versions / 327 families / 14 apps** as possible heldout. Protecting
-the existing 20 live-heldout and 16 conditional families leaves **408 versions
-/ 311 families**. `training/qualify_live.py` never runs environments.
-
-The September 25 API canary created/deleted one environment but could not
-reconcile its create-request ID: version-scoped provisioning ignored that ID.
-Theseus PR #35155 repaired source; staging advertised it, production returned
-404. `training/runtime_qualify.py` remains create-disabled pending production
-readback. No production wave cell ran. The first 16 candidates have no Pipeline
-Lanes or solvability Registry run; neither they nor the 311-family pool have
-complete intended-path positive grading, negative-control, and cleanup proof.
-A baseline model failure cannot invalidate a task; baseline success cannot
-select it.
+One API canary created/deleted an environment but could not reconcile its
+create-request ID. Theseus #35155 repaired source; staging advertised it,
+production returned 404. `training/runtime_qualify.py` remains create-disabled
+pending deployment. No production qualification wave ran. The first 16 lack
+Pipeline Lanes/solvability receipts, and the 311-family pool lacks complete
+intended-path positive grading, negative-control and cleanup proof. Never
+select or reject tasks by baseline model outcomes.
 
 A single staging-only, exact-version rehearsal later proved startup, the two
 tools, a zero-credit negative verifier, and cleanup; it did **not** qualify the
