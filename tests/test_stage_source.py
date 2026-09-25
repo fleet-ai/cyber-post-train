@@ -35,6 +35,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(job["metadata"]["labels"]["kueue.x-k8s.io/priority-class"], "q1")
         pod = job["spec"]["template"]["spec"]
         self.assertEqual((pod["priorityClassName"], pod["priority"]), ("c1", 10000))
+        self.assertEqual(pod["securityContext"]["supplementalGroups"], [2000])
         self.assertEqual(pod["volumes"][0]["persistentVolumeClaim"]["claimName"], "sfs-shared")
         self.assertTrue(job["spec"]["suspend"])
         self.assertNotIn("nvidia.com/gpu", json.dumps(job))

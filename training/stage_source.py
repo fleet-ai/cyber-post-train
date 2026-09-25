@@ -9,7 +9,7 @@ from pathlib import Path
 from training.source import SourceError, digest, verify_hydration_cache
 
 DEST = Path("/mnt/sfs/jobs/chris-q38-goal-teacher-source-v1")
-NAME = "chris-q38-goal-teacher-source-stage-v1"
+NAME = "chris-q38-goal-teacher-source-stage-v2"
 IMAGE = ("661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
          "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4")
 SELECTION_SHA = "sha256:441f489c11e2f775bca81d98b7f578e0993a459375bf07f9e1828532ae3d91b6"
@@ -83,6 +83,7 @@ raise SystemExit(2)
         "spec": {"suspend": True, "backoffLimit": 0, "activeDeadlineSeconds": 3600,
                  "ttlSecondsAfterFinished": 7200, "template": {"spec": {
                      "restartPolicy": "Never", "automountServiceAccountToken": False,
+                     "securityContext": {"supplementalGroups": [2000]},
                      "nodeSelector": {"kubernetes.io/arch": "amd64", "workload": "fleetai-training-ng-cpu"},
                      "priorityClassName": "c1", "priority": 10000,
                      "tolerations": [{"key": "workload", "operator": "Equal",
