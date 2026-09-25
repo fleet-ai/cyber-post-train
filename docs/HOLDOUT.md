@@ -139,3 +139,6 @@ terminal receipt. The exact create claim later returned 404; exhaustive recent
 queued, pending and running instance listings found no matching environment.
 Do not retry that create ID or count this version current-positive. Resolve the
 create/claim mismatch before another replay; no active allocation was observed.
+Distinct DEV index 11 then failed at Fleet environment creation with an HTTP
+error before any tool call. Its create claim is absent and exhaustive recent
+queued/pending/running listings found no bound instance; no positive credit.
