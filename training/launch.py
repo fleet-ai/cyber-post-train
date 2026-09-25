@@ -30,7 +30,7 @@ LEASE = "chris-cpt-gpu-submit"
 FULL_NAME = "chris-q38-corr96-full-v1"
 FULL_OUTPUT = f"/mnt/sfs/jobs/{FULL_NAME}"
 FULL_DATA_ROOT = "/mnt/sfs/jobs/chris-q38-corrected-corpus-v1/full96-data"
-FAST_NAME = "chris-q38-fast96-strict-v1"
+FAST_NAME = "chris-q38-fast96-probe-v1"
 FAST_OUTPUT = f"/mnt/sfs/jobs/{FAST_NAME}"
 FAST_DATA_ROOT = "/mnt/sfs/jobs/chris-q38-fast96-strict-data-v2"
 MECHANICS_NAME = "chris-q38-prov96-step1-v1"
@@ -160,14 +160,15 @@ except BaseException as exc:
 
 def _require_profile_config(config: dict, full: bool) -> None:
     name, output, data_root, group, manifest = (
-        (FAST_NAME, FAST_OUTPUT, FAST_DATA_ROOT, "qwen38-fast96-strict-v1", "manifest.json")
+        (FAST_NAME, FAST_OUTPUT, FAST_DATA_ROOT, "qwen38-fast96-probe-v1", "manifest.json")
         if config.get("name") == FAST_NAME else
         (FULL_NAME, FULL_OUTPUT, FULL_DATA_ROOT, "qwen38-corrected-teacher96-full-v1", "qwen38-96k-full-v1.manifest.json")
         if full else (MECHANICS_NAME, MECHANICS_OUTPUT, MECHANICS_DATA_ROOT,
                       "qwen38-provisional96-mechanics-v1", "manifest.json"))
     recipe, data, wandb = (config.get(key, {}) for key in ("recipe", "data", "wandb"))
+    diagnostic = config.get("name") == FAST_NAME
     expected = {**COMMON_RECIPE, "epochs": 1, "lr": 3e-6, "seed": 20260925,
-                "eval_interval": 50 if full else 0, "checkpoint_interval": 50 if full else 1,
+                "eval_interval": 1 if diagnostic else 50 if full else 0, "checkpoint_interval": 1 if diagnostic or not full else 50,
                 "keep_checkpoints": "all" if full else 2}
     if (config.get("name") != name or config.get("output_root") != output
         or config.get("backend") != "skyrl" or config.get("cluster", {}).get("priority") != "c1"
@@ -176,7 +177,7 @@ def _require_profile_config(config: dict, full: bool) -> None:
         or any(recipe.get(key) != value for key, value in expected.items())
         or wandb.get("entity") != "thefleet" or wandb.get("project") != "cyber-post-train"
         or wandb.get("group") != group or wandb.get("run_id") != name
-        or wandb.get("name") != name or (not full and config.get("pause_after_step") != 1)):
+        or wandb.get("name") != name or config.get("pause_after_step") != (1 if diagnostic or not full else None)):
         raise ValueError("96k profile identity, science, or c1 recipe differs")
 
 
@@ -375,7 +376,7 @@ def prepare(config_path: Path, destination: Path,
     if full:
         receipt["supervised_tokens"] = plan["datasets"]["train"]["supervised_tokens"]
         interval = plan["recipe"]["checkpoint_interval"]
-        receipt["planned_native_checkpoints"] = (plan["recipe"]["max_steps"] + interval - 1) // interval
+        receipt["planned_native_checkpoints"] = (1 if config["name"] == FAST_NAME else (plan["recipe"]["max_steps"] + interval - 1) // interval)
         receipt["checkpoint_retention_capacity"] = plan["recipe"]["keep_checkpoints"]
     destination.mkdir(parents=True, mode=0o700)
     _create_only(destination / "corpus.manifest.json", manifest_bytes)
@@ -419,7 +420,8 @@ def prepared(directory: Path) -> tuple[dict, dict, dict]:
             or plan.get("corpus_manifest_sha256") != manifest["sha256"]
             or plan["recipe"]["eval_interval"] != interval
             or plan["recipe"]["keep_checkpoints"] != plan["recipe"]["max_steps"]
-            or receipt.get("planned_native_checkpoints") != (plan["recipe"]["max_steps"] + interval - 1) // interval
+            or plan.get("pause_after_step") != (1 if diagnostic else None)
+            or receipt.get("planned_native_checkpoints") != (1 if diagnostic else (plan["recipe"]["max_steps"] + interval - 1) // interval)
             or receipt.get("checkpoint_retention_capacity") != plan["recipe"]["keep_checkpoints"]
             or receipt.get("supervised_tokens") != plan["datasets"]["train"]["supervised_tokens"]):
             raise ValueError("full run evidence/retention binding changed")

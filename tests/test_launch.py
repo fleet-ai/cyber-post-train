@@ -432,8 +432,9 @@ class FullLaunchTests(unittest.TestCase):
         config = json.loads(FULL_CONFIG.read_text())
         config.update(name=launch.FAST_NAME, output_root=launch.FAST_OUTPUT)
         config["data"] = {"root": launch.FAST_DATA_ROOT, "manifest": "manifest.json"}
-        config["wandb"].update(group="qwen38-fast96-strict-v1", run_id=launch.FAST_NAME,
+        config["wandb"].update(group="qwen38-fast96-probe-v1", run_id=launch.FAST_NAME,
                                name=launch.FAST_NAME)
+        config["recipe"].update(eval_interval=1, checkpoint_interval=1); config["pause_after_step"] = 1
         manifest = fake_full_manifest()
         manifest["algorithm"] = dense_bridge.ALGORITHM
         manifest["split_sha256"] = dense_bridge.TARGET_ANCHOR_SHA
@@ -455,8 +456,8 @@ class FullLaunchTests(unittest.TestCase):
         destination = self.root / "fast-prepared"
         launch.prepare(path, destination)
         plan, request, receipt = launch.prepared(destination)
-        self.assertEqual((receipt["purpose"], request["name"], plan["validation_mode"]),
-                         ("diagnostic_fast_sft", launch.FAST_NAME, "teacher_cross_entropy"))
+        self.assertEqual((receipt["purpose"], request["name"], plan["validation_mode"], plan["pause_after_step"], receipt["planned_native_checkpoints"]),
+                         ("diagnostic_fast_sft", launch.FAST_NAME, "teacher_cross_entropy", 1, 1))
         manifest["diagnostic_only"] = False
         manifest["sha256"] = "sha256:" + launch.sha(launch.canonical({
             k: v for k, v in manifest.items() if k != "sha256"}))
