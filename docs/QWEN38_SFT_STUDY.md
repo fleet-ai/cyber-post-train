@@ -65,6 +65,12 @@ earlier attempt against an obsolete TRAIN task version was rejected before an
 instance was created; its durable claim was independently absent. Fresh teacher
 collection through Fleet OpenCode was also rejected before job creation with
 `sales_product_required`; the correct cyber-study billing label needs review.
+Another current TRAIN version returned one successful MCP text block but differed
+from its stored result by one character (2,251 versus 2,252); line-ending
+equivalence was **not** established. A bounded follow-up timed out during
+creation after the server materialized an instance. Its exact durable claim
+enabled cleanup, and independent readback confirmed that instance `stopped`.
+No further retry of that probe is planned without a changed diagnostic.
 
 A read-only check of one exact strict TRAIN session found 53 stored tool-result
 strings but neither raw MCP response blocks nor a separately captured next
