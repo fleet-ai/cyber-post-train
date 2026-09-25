@@ -12,7 +12,7 @@ from pathlib import Path
 from training.dense_bridge import (COMMIT, SOURCES, NATIVE_HELPER_SHA, _digest, _legacy_digest, stage_historical,
                                    validate_request, compose_teacher_ce, _file_sha,
                                    INPUTS, REQUEST_SCHEMA, ALGORITHM, MANIFEST_SCHEMA,
-                                   RECEIPT_SCHEMA)
+                                   RECEIPT_SCHEMA, TARGET_BUILDER_SHA)
 
 
 class DenseBridgeTest(unittest.TestCase):
@@ -54,6 +54,31 @@ class DenseBridgeTest(unittest.TestCase):
                 cwd=root, capture_output=True, check=False, env={**os.environ, "PYTHONPATH": str(root)},
             )
             self.assertEqual(result.returncode, 0, result.stdout.decode(errors="replace")[-1000:])
+
+    def test_new_method_mechanics_patch_accepts_exact_target_tool_names(self):
+        repository = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.assertEqual(stage_historical(root, target_names=True), TARGET_BUILDER_SHA)
+            for relative in ("tests/test_message_aligned_teacher_corpus.py",
+                             "configs/data/qwen38-rl-filtered-canary-tool-catalog-v1.json"):
+                payload = subprocess.run(["git", "-C", str(repository), "show", f"{COMMIT}:{relative}"],
+                                         capture_output=True, check=True).stdout
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(payload)
+            script = ("import runpy; from pathlib import Path; "
+                      "x=runpy.run_path('tests/test_message_aligned_teacher_corpus.py'); "
+                      "r=x['_record'](); "
+                      "[c['function'].__setitem__('name', 'fleet_bash' if c['function']['name']=='bash' "
+                      "else 'fleet_submit_report') for m in r['messages'] for c in m.get('tool_calls',[])]; "
+                      "r['content_digest']=x['digest_json']({k:v for k,v in r.items() if k!='content_digest'}); "
+                      "rows,_,_=x['_materialize'](r); "
+                      "assert rows and all(s['source_target_sha256'] for row in rows "
+                      "for s in row['target_spans'])")
+            result = subprocess.run([sys.executable, "-c", script], cwd=root, capture_output=True,
+                                    env={**os.environ, "PYTHONPATH": str(root)}, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace")[-1000:])
 
     def test_request_shape_and_bound_input_hashes(self):
         with tempfile.TemporaryDirectory() as temporary:

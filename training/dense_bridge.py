@@ -43,6 +43,10 @@ RECEIPT_SCHEMA = "cyber_message_aligned_teacher_corpus_receipt_v1"
 MODEL_LOCK_SHA = "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac"
 NATIVE_HELPER_SHA = "sha256:55c15b660067749febda00d4fb1c2110ff436717bbd4b73bf66055a73d0b87d5"
 ALGORITHM = "anchored_complete_message_rounds_with_exact_tool_contract_v1"
+TARGET_ALIAS_PATCH_FROM = 'SOURCE_TOOL_ALIASES = {\n    "bash": "bash",'
+TARGET_ALIAS_PATCH_TO = ('SOURCE_TOOL_ALIASES = {\n    "fleet_bash": "bash",\n'
+                         '    "fleet_submit_report": "submit_report",\n    "bash": "bash",')
+TARGET_BUILDER_SHA = "sha256:a47527237cf9a55edcfb2b79bbebae5bfe0b0d9a8faf469c555c8640668d4b76"
 
 
 def _digest(value: object) -> str:
@@ -109,21 +113,33 @@ def validate_request(path: Path) -> dict:
     return request
 
 
-def stage_historical(root: Path, *, repository: Path | None = None) -> None:
+def stage_historical(root: Path, *, repository: Path | None = None,
+                     target_names: bool = False) -> str:
     """Copy only the exact historical source closure from a Git object."""
     repository = repository or Path(__file__).resolve().parents[1]
+    builder_sha = "sha256:" + SOURCES["training/message_aligned_teacher_corpus.py"]
     for relative, expected in SOURCES.items():
         result = subprocess.run(["git", "-C", str(repository), "show", f"{COMMIT}:{relative}"],
                                 capture_output=True, check=False)
         if result.returncode or hashlib.sha256(result.stdout).hexdigest() != expected:
             raise ValueError("frozen source object is unavailable or differs")
+        payload = result.stdout
+        if target_names and relative == "training/message_aligned_teacher_corpus.py":
+            before, after = TARGET_ALIAS_PATCH_FROM.encode(), TARGET_ALIAS_PATCH_TO.encode()
+            if payload.count(before) != 1:
+                raise ValueError("frozen source has no unique target-name patch point")
+            payload = payload.replace(before, after, 1)
+            builder_sha = "sha256:" + hashlib.sha256(payload).hexdigest()
+            if builder_sha != TARGET_BUILDER_SHA:
+                raise ValueError("target-name mechanics patch digest differs")
         target = Path(root) / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("xb") as stream:
-            stream.write(result.stdout)
+            stream.write(payload)
+    return builder_sha
 
 
-def build_dense(request_path: Path) -> dict:
+def build_dense(request_path: Path, *, target_names: bool = False) -> dict:
     """Run the frozen packer, then independently verify its sealed output."""
     request_path = Path(request_path).absolute()
     request = validate_request(request_path)
@@ -133,7 +149,7 @@ def build_dense(request_path: Path) -> dict:
     output = Path(request["output"])
     output = output if output.is_absolute() else request_path.parent / output
     with tempfile.TemporaryDirectory(prefix="q38-frozen-dense-") as temporary:
-        stage_historical(Path(temporary))
+        builder_sha = stage_historical(Path(temporary), target_names=target_names)
         result = subprocess.run(
             [sys.executable, "-m", "training.message_aligned_teacher_corpus",
              "--config", str(request_path)], cwd=temporary, capture_output=True,
@@ -149,7 +165,7 @@ def build_dense(request_path: Path) -> dict:
     train = manifest.get("files", {}).get("train", {})
     parquet = output / "train.parquet"
     expected_builders = {
-        "message_aligned_teacher_corpus.py": "sha256:" + SOURCES["training/message_aligned_teacher_corpus.py"],
+        "message_aligned_teacher_corpus.py": builder_sha,
         "dense.py": "sha256:" + SOURCES["training/dense.py"],
         "corpus.py": "sha256:" + SOURCES["training/corpus.py"],
         "native_helper": NATIVE_HELPER_SHA,
@@ -177,7 +193,8 @@ def build_dense(request_path: Path) -> dict:
 
 
 def compose_teacher_ce(dense_dir: Path, dev_dir: Path, dev_source_dir: Path,
-                       roster_path: Path, corpus_root: Path, output: Path) -> dict:
+                       roster_path: Path, corpus_root: Path, output: Path,
+                       *, train_source_dir: Path | None = None) -> dict:
     """Bind dense train and contiguous dev to one teacher-CE SFT manifest.
 
     No payload is copied. The caller must set the SFT config's ``data.root`` to
@@ -203,6 +220,15 @@ def compose_teacher_ce(dense_dir: Path, dev_dir: Path, dev_source_dir: Path,
 
     dense_path, dev_path = dense_dir / "manifest.json", dev_dir / "manifest.json"
     dense = sealed(dense_path, MANIFEST_SCHEMA)
+    new_method = (dense_dir / "TARGET-METHOD.json").exists()
+    target_verified = None
+    if new_method:
+        if train_source_dir is None:
+            raise ValueError("new target-anchor method requires its exact private source")
+        from .target_dense import verify_method
+        target_verified = verify_method(dense_dir, train_source_dir)
+        if target_verified["trainer_ready"] is not True:
+            raise ValueError("new target-anchor method lacks live serving attestation")
     native = sealed(dev_path, "qwen38_tool_aware_parquet_v1")
     dense_receipt = sealed(dense_dir / "RECEIPT.json", RECEIPT_SCHEMA)
     source_receipt = sealed(dev_source_dir / "RECEIPT.json", "structured_message_windows_v1",
@@ -210,7 +236,8 @@ def compose_teacher_ce(dense_dir: Path, dev_dir: Path, dev_source_dir: Path,
     roster = sealed(roster_path, "cyber_exact_task_family_role_roster_v1", _digest)
     train, dev = dense.get("files", {}).get("train", {}), native.get("files", {}).get("dev", {})
     expected_builders = {
-        "message_aligned_teacher_corpus.py": "sha256:" + SOURCES["training/message_aligned_teacher_corpus.py"],
+        "message_aligned_teacher_corpus.py": (TARGET_BUILDER_SHA if new_method else
+                                              "sha256:" + SOURCES["training/message_aligned_teacher_corpus.py"]),
         "dense.py": "sha256:" + SOURCES["training/dense.py"],
         "corpus.py": "sha256:" + SOURCES["training/corpus.py"],
         "native_helper": NATIVE_HELPER_SHA,
@@ -320,7 +347,9 @@ def compose_teacher_ce(dense_dir: Path, dev_dir: Path, dev_source_dir: Path,
             or _file_sha(train_file) != train["sha256"] or _file_sha(dev_file) != dev["sha256"]):
         raise ValueError("train/dev rows violate the frozen family roles")
 
-    result = {**dense, "validation_mode": "teacher_cross_entropy", "dev_windows": dev["rows"],
+    result = {**dense, "algorithm": ("opencode_1_18_27_target_anchor_visible_only_multi_target_v1"
+                                      if new_method else ALGORITHM),
+              "validation_mode": "teacher_cross_entropy", "dev_windows": dev["rows"],
               "files": {"train": {**train, "path": train_relative},
                         "dev": {**dev, "path": dev_relative}},
               "composition": {"schema": "qwen38_dense_train_contiguous_dev_v1",
@@ -330,6 +359,8 @@ def compose_teacher_ce(dense_dir: Path, dev_dir: Path, dev_source_dir: Path,
                               "dev_source_receipt_sha256": source_receipt["sha256"],
                               "family_roster_sha256": roster["sha256"],
                               "corpus_root": str(root)}}
+    if target_verified:
+        result["composition"]["target_method_sha256"] = target_verified["method_sha256"]
     result["sha256"] = _legacy_digest({k: v for k, v in result.items() if k != "sha256"})
     output.parent.mkdir(parents=True, exist_ok=True)
     with os.fdopen(os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as stream:
