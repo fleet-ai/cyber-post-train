@@ -190,12 +190,20 @@ def _tool_operations(messages: list[dict], end: int) -> tuple[list[dict], list[d
         role = message.get("role")
         if role == "tool":
             call_id = message.get("tool_call_id")
+            result = message.get("content")
+            extracted = _one_block_text(result) if not isinstance(result, str) else None
             if (set(message) != {"role", "tool_call_id", "content"}
-                    or not isinstance(message["content"], str)
+                    or not isinstance(result, str) and extracted is None
                     or not isinstance(call_id, str) or call_id not in pending):
                 return None
-            pending.pop(call_id)["result_sha256"] = digest(message)
-            target_messages.append(dict(message))
+            operation = pending.pop(call_id)
+            operation["result_sha256"] = digest(message)
+            target = dict(message)
+            if extracted is not None:
+                target["content"] = extracted
+                operation["result_transform"] = "exact_one_mcp_text_block_v1"
+                operation["target_result_sha256"] = digest(target)
+            target_messages.append(target)
             continue
         if pending or role != "assistant":
             if pending:
@@ -295,6 +303,17 @@ def _training_messages(messages: list[dict]) -> list[dict] | None:
             converted["content"] = text
         out.append(converted)
     return out
+
+
+def _one_block_text(value: Any) -> str | None:
+    if (not isinstance(value, dict) or set(value) not in
+            ({"_meta", "content"}, {"_meta", "content", "structuredContent"})
+            or value["_meta"] is not None or value.get("structuredContent") is not None
+            or not isinstance(value["content"], list) or len(value["content"]) != 1):
+        return None
+    block = value["content"][0]
+    return (block["text"] if isinstance(block, dict) and set(block) == {"type", "text"}
+            and block["type"] == "text" and isinstance(block["text"], str) else None)
 
 
 def _write(path: Path, value: Any, *, lines: bool = False) -> str:
@@ -749,6 +768,9 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
                    "excluded_sessions": dict(sorted(exclusions.items())),
                    "original_anchor_legacy_tool_name_sessions": old_anchor_mentions,
                    "exact_discovery_elided_sessions": 0,
+                   "exact_one_block_result_transforms": sum(
+                       op.get("result_transform") == "exact_one_mcp_text_block_v1"
+                       for row in target_records for op in row["tool_transform"]["operations"]),
                    "anchor_method": ANCHOR_METHOD,
                    "visibility_method": "visible_only_assistant_content_v1",
                    "model_facing_tools_sha256": TOOL_DIGEST,

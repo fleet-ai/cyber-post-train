@@ -299,6 +299,27 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(receipt["excluded_sessions"],
                          {"tool_argument_or_result_contract_mismatch": 1})
 
+    def test_only_exact_single_mcp_text_block_is_extracted(self):
+        self.messages[3]["content"] = {"_meta": None, "content": [{"type": "text", "text": "ok"}],
+                                       "structuredContent": None}
+        self.selection["trace_sha256"] = source.digest(self.envelope)
+        with (patch.object(source, "TOOL_DIGEST", source.digest(self.tools, ascii=True)),
+              patch.object(source, "TARGET_SYSTEM_DIGEST", source.text_digest("Target system.")),
+              patch.object(source, "MIN_ANCHOR_PROBES", 1)):
+            receipt = source.fetch(self.request(), get=self.get)
+        row = json.loads((self.root / "private-output" / "dense-target-anchored.jsonl").read_text())
+        operation = row["tool_transform"]["operations"][0]
+        self.assertEqual(row["messages"][3]["content"], "ok")
+        self.assertEqual(operation["result_transform"], "exact_one_mcp_text_block_v1")
+        self.assertEqual(operation["result_sha256"], source.digest(self.messages[3]))
+        self.assertEqual(operation["target_result_sha256"], source.digest(row["messages"][3]))
+        self.assertEqual(receipt["exact_one_block_result_transforms"], 1)
+        self.assertFalse(receipt["training_ready"])
+        self.assertIsNone(source._one_block_text({"_meta": None, "content": [
+            {"type": "text", "text": "ok"}, {"type": "text", "text": "more"}]}))
+        self.assertIsNone(source._one_block_text({"_meta": {"private": True}, "content": [
+            {"type": "text", "text": "ok"}]}))
+
     def test_source_use_tool_wrapper_is_not_assumed_opencode_text(self):
         self.messages[2]["tool_calls"][0]["function"] = {
             "name": "use_tool", "arguments": {"tool_name": "fleet_environment__bash",
