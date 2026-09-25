@@ -77,8 +77,11 @@ two stored names (`bash`, `submit_report`), not the provider-facing bytes.
   field that the candidate's strict validator rejected. No optimizer step or
   checkpoint was proven; the exact Pods and Ray cluster were released. The
   narrowly repaired v3 validator checks that field's digest, and its local
-  regression test reproduces the v2 failure. An exact-image zero-GPU v3
-  preflight is running before any further GPU submission. This lane is **not
+  regression test reproduces the v2 failure. Exact-image zero-GPU preflight v6
+  passed and was released. The create-once v3 RayJob UID
+  `0b135d1f-3326-401b-a83c-68923d6e1b6b` / Workload UID
+  `14050301-32dd-4855-bcc9-9d3919b5619f` was queued at 23:12 UTC on
+  September 25 without a Ray cluster or GPU allocation. This lane is **not
   scientific**. Require real
   near-262k first-batch update, finite gradients, peak memory, checkpoint,
   release and separate zero-step reload. Old eight-node step/zero-GPU preflight
@@ -103,6 +106,10 @@ WebExploitBench pass@4. Keep final families sealed; train/teacher loss is not li
 
 Before full262 POST, server-preview root `fleet.ai/failure-alerts: "off"`,
 c1/q1, four-node shape/release; recheck duplicates, empty output and capacity.
-This draft authorizes no full POST. Apply [AGENTS.md](../AGENTS.md). Until
+The historical 57M-token full request passed an exact-image zero-GPU CPU check
+and live four-node/32-GPU server preview (receipt in
+`docs/evidence/qwen38-262k-full57-cpu-preflight-v1-passed.json`), but
+`submission_authorized` remains false until canary checkpoint and reload
+acceptance. No full POST has occurred. Apply [AGENTS.md](../AGENTS.md). Until
 Chris clarifies the wording, use stricter **>10 percentage-point absolute**
 final-task lift with statistical evidence; never iterate on the final panel.
