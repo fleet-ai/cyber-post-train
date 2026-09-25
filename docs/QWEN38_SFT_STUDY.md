@@ -52,8 +52,7 @@ chat requests total, each capped at 128 output tokens. The route was paused
 and independently read back at zero Pods/replicas and routing disabled.
 Private sealed diagnostic: `/private/tmp/cpt-q38-live-qwen-wire.YKisC9/LIVE_WIRE_DIAGNOSTIC.json`
 (file SHA-256 `c6d475ba5b54bb2a34b1f2f68ee4aa4e10964873de0208d7cc4ae326e81eeeed`).
-This proves current target first-request wire only, **not** the historical
-teacher tool-result renderer or corpus acceptance; `training_ready` stays false.
+This proves first-request wire, **not** historical tool-result parity or corpus acceptance; `training_ready` stays false.
 
 An isolated OpenCode 1.18.27 mock confirmed that two one-block MCP text results
 reached its model request byte-for-byte. A separate current TRAIN task/version
@@ -70,11 +69,12 @@ collection through Fleet OpenCode was also rejected before job creation with
 `sales_product_required`. The live OTS Cyber project has no default billing
 selection; the active catalog offers both OTS Dataminer and Platform General.
 An exact one-task TRAIN-only probe against current production version
-`43dc2c52-f283-4454-8987-69c6cbbd4160` then used Platform General (general
-research, not OTS Dataminer). The public Jobs API rejected `harness=opencode`
-with HTTP 400 before job creation; no rollout or instance started. Its accepted
-harness names are Claude Code, Codex, Grok and Grok-bot. Do not retry this route:
-fresh OpenCode teacher collection needs the direct Fleet-instance runner.
+`43dc2c52-f283-4454-8987-69c6cbbd4160` used Platform General. The Jobs API
+rejected `harness=opencode` (HTTP 400); it accepts Claude Code, Codex, Grok and
+Grok-bot. Direct Fleet-instance creation then returned generic HTTP 500 before
+a claim or instance existed on three current TRAIN versions (fira, fentry,
+rops). Delayed claim readback remained absent. Stop repeating this route until
+its server defect is understood; no model rollout or GPU allocation occurred.
 Another current TRAIN version returned one successful MCP text block but differed
 from its stored result by one character (2,251 versus 2,252); line-ending
 equivalence was **not** established. A bounded follow-up timed out during
