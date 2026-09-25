@@ -178,4 +178,3 @@ def write_once(path: Path, capture: dict) -> None:
         stream.write(data)
         stream.flush()
         os.fsync(stream.fileno())
-
