@@ -12,8 +12,6 @@ import hashlib
 import json
 import os
 import re
-import urllib.parse
-import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -181,49 +179,3 @@ def write_once(path: Path, capture: dict) -> None:
         stream.flush()
         os.fsync(stream.fileno())
 
-
-def fetch_exact_task_prompt(task_key: str, version_id: str, path: Path) -> str:
-    """Privately fetch one exact Fleet task; return a digest, never its text.
-
-    This is read-only and does not provision an environment or run a model.
-    The output must be outside Git; the caller owns its prompt-file lifecycle.
-    """
-    key = os.environ.get("FLEET_API_KEY")
-    if (not key or not re.fullmatch(r"[A-Za-z0-9_.-]+", task_key) or
-            not re.fullmatch(r"[0-9a-f-]{36}", version_id) or not path.is_absolute() or
-            path.resolve().is_relative_to(Path(__file__).resolve().parents[1])):
-        raise ValueError("private exact task fetch preflight failed")
-
-    def get(route: str) -> dict:
-        request = urllib.request.Request("https://orchestrator.fleetai.com" + route,
-                                         headers={"Authorization": "Bearer " + key,
-                                                  "Accept": "application/json"})
-        class NoRedirect(urllib.request.HTTPRedirectHandler):
-            def redirect_request(self, *_: Any) -> None:
-                return None
-        try:
-            with urllib.request.build_opener(NoRedirect).open(request, timeout=30) as response:
-                value = json.load(response)
-        except Exception:
-            raise ValueError("Fleet read-only task fetch failed") from None
-        if not isinstance(value, dict):
-            raise ValueError("Fleet read-only response malformed")
-        return value
-
-    account = get("/v1/account")
-    if account.get("team_id") != "a1025f0b-ad67-49fc-a023-51800ab43e84":
-        raise ValueError("Fleet team identity differs")
-    route = ("/v1/tasks/" + urllib.parse.quote(task_key, safe="") + "?version_id=" +
-             urllib.parse.quote(version_id, safe=""))
-    task = get(route)
-    prompt = task.get("prompt")
-    if (task.get("key") != task_key or task.get("eval_task_version_id") != version_id or
-            not isinstance(prompt, str) or not prompt):
-        raise ValueError("Fleet exact task identity or prompt differs")
-    data = prompt.encode("utf-8")
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "wb") as stream:
-        stream.write(data)
-        stream.flush()
-        os.fsync(stream.fileno())
-    return "sha256:" + hashlib.sha256(data).hexdigest()
