@@ -587,7 +587,7 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
     os.chmod(output, 0o700)
     request_file_sha256 = _write(output / "REQUEST.json", request)
     target_records, target_proofs, raw_sources = [], [], []
-    quarantine, exclusions, summaries = [], Counter(), {}
+    exclusions, summaries = Counter(), {}
     probe_versions, old_anchor_mentions = set(), 0
     try:
         for item in sorted(selected, key=lambda row: row["session_id"]):
@@ -627,15 +627,11 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
                     [m.get("role") for m in messages[:2] if isinstance(m, dict)] != ["system", "user"] or
                     not all(_text_content(m.get("content")) for m in messages[:2])):
                 exclusions["missing_original_anchor"] += 1
-                quarantine.append({"selection": item, "summary": summary,
-                                   "transcript_envelope": envelope, "reason": "missing_original_anchor"})
                 continue
             source_system, source_user = (_text_content(m["content"]) for m in messages[:2])
             prompt = envelope["task"].get("prompt")
             if not isinstance(prompt, str) or source_user != prompt:
                 exclusions["source_task_prompt_mismatch"] += 1
-                quarantine.append({"selection": item, "summary": summary,
-                                   "transcript_envelope": envelope, "reason": "source_task_prompt_mismatch"})
                 continue
             target_user = _target_user(prompt)
             if version in probes:
@@ -646,25 +642,17 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
             training_messages = _training_messages(messages)
             if training_messages is None:
                 exclusions["unsupported_message_content_or_private_reasoning"] += 1
-                quarantine.append({"selection": item, "summary": summary,
-                                   "transcript_envelope": envelope,
-                                   "reason": "unsupported_message_content_or_private_reasoning"})
                 continue
             visible_messages = training_messages
             report_id = _report_call(training_messages)
             if report_id is None:
                 exclusions["unbound_successful_report"] += 1
-                quarantine.append({"selection": item, "summary": summary,
-                                   "transcript_envelope": envelope, "reason": "unbound_successful_report"})
                 continue
             report_end = next(index for index, message in enumerate(training_messages)
                               if message.get("role") == "tool" and message.get("tool_call_id") == report_id)
             tool_checked = _tool_operations(training_messages, report_end)
             if tool_checked is None:
                 exclusions["tool_argument_or_result_contract_mismatch"] += 1
-                quarantine.append({"selection": item, "summary": summary,
-                                   "transcript_envelope": envelope,
-                                   "reason": "tool_argument_or_result_contract_mismatch"})
                 continue
             operations, target_messages = tool_checked
             transform = {"schema": "fleet_opencode_anchor_substitution_v1",
@@ -720,7 +708,6 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
         if len(probe_versions) < MIN_ANCHOR_PROBES:
             raise SourceError("exact-version target-anchor probes were not bound to source")
         files = {"request": request_file_sha256,
-                 "quarantine": _write(output / "quarantine.private.jsonl", quarantine, lines=True),
                  "raw_sources": _write(output / "raw-sources.private.jsonl", raw_sources, lines=True),
                  "dense_target_normalized": _write(output / "dense-target-anchored.jsonl", target_records, lines=True),
                  "dense_success_evidence": _write(output / "dense-success-evidence.jsonl", target_proofs, lines=True),
@@ -746,8 +733,7 @@ def fetch(request: dict, *, get: Callable[[str], dict] = _request) -> dict:
                    "anchor_method": ANCHOR_METHOD,
                    "visibility_method": "visible_only_assistant_content_v1",
                    "model_facing_tools_sha256": TOOL_DIGEST,
-                   "download_complete": len(target_records) + len(quarantine)
-                   + exclusions["final_test"] == len(selected),
+                   "download_complete": len(target_records) + sum(exclusions.values()) == len(selected),
                    "training_ready": False,
                    "training_blocker": "live_fleet_mcp_and_served_model_request_attestation_required"}
         receipt["sha256"] = digest(receipt)
