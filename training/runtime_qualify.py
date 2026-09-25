@@ -35,6 +35,10 @@ ORDER_PATH = Path(__file__).resolve().parents[1] / "configs/data/fleet-blackbox-
 PROBES = {"bash": {"script": "printf task-quality-runtime-ok"},
           "submit_report": {"verdict": "no_flag", "explanation":
                             "Automated runtime check; exploitability was not tested."}}
+FAILURE_STAGES = frozenset({"preflight", "provision", "claim", "instance", "ttl",
+                            "runner_auth", "mcp_initialize", "mcp_ready", "mcp_list",
+                            "mcp_bash", "mcp_submit_report", "mcp_close", "verifier",
+                            "cleanup"})
 
 
 def canonical(value: dict) -> bytes:
@@ -218,13 +222,19 @@ def mcp_json(response: httpx.Response) -> dict:
     return response.json()
 
 
-def probe_tools(root_url: str, auth_header: str, token: str) -> str:
+def probe_tools(root_url: str, auth_header: str, token: str,
+                stage: list[str] | None = None) -> str:
+    def mark(value: str) -> None:
+        if stage is not None:
+            stage[0] = value
+
     endpoint = root_url.rstrip("/") + "/mcp"
     headers = {auth_header: token, "Accept": "application/json, text/event-stream",
                "Content-Type": "application/json"}
     with httpx.Client(timeout=120) as client:
         session = None
         try:
+            mark("mcp_initialize")
             init_response = client.post(endpoint, headers=headers, json={
                 "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
                     "protocolVersion": "2025-03-26", "capabilities": {},
@@ -235,9 +245,11 @@ def probe_tools(root_url: str, auth_header: str, token: str) -> str:
             session = init_response.headers.get("mcp-session-id")
             if session:
                 headers["Mcp-Session-Id"] = session
+            mark("mcp_ready")
             ready = client.post(endpoint, headers=headers, json={
                 "jsonrpc": "2.0", "method": "notifications/initialized"})
             ready.raise_for_status()
+            mark("mcp_list")
             listed = mcp_json(client.post(endpoint, headers=headers, json={
                 "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}))
             tools = listed.get("result", {}).get("tools")
@@ -250,6 +262,7 @@ def probe_tools(root_url: str, auth_header: str, token: str) -> str:
             if names != ["bash", "submit_report"]:
                 raise ValueError("MCP tool catalog differs from expected tools")
             for call_id, name in enumerate(names, 3):
+                mark("mcp_" + name)
                 answer = mcp_json(client.post(endpoint, headers=headers, json={
                     "jsonrpc": "2.0", "id": call_id, "method": "tools/call",
                     "params": {"name": name, "arguments": PROBES[name]}}))
@@ -259,8 +272,12 @@ def probe_tools(root_url: str, auth_header: str, token: str) -> str:
             return "sha256:" + hashlib.sha256(canonical({"tools": tools})).hexdigest()
         finally:
             if session:
-                closed = client.delete(endpoint, headers=headers)
-                closed.raise_for_status()
+                try:
+                    closed = client.delete(endpoint, headers=headers)
+                    closed.raise_for_status()
+                except Exception:
+                    mark("mcp_close")
+                    raise
 
 
 def cleanup(client: httpx.Client, intent: dict, binding: dict,
@@ -348,39 +365,47 @@ def run_cell(wave_path: Path, index: int, root: Path) -> dict:
     instance_id = None
     passed = False
     error_type = None
+    error_stage = None
+    stage = ["preflight"]
     with httpx.Client(headers={"Authorization": f"Bearer {key}"}, timeout=180) as client:
         try:
             binding = preflight(client, row, request_id)
             write_once(cell / "BINDING.json", binding)
             write_once(cell / "INTENT.json", intent)
+            stage[0] = "provision"
             provision = create_instance(client, row, request_id)
             instance_id = provision["instance_id"]
             write_once(cell / "STARTED.json", seal({
                 "instance_id": instance_id,
                 "evidence_run_id": provision["evidence_run_id"],
                 "task_version_id": row["task_version_id"], "environment_started": True}))
+            stage[0] = "claim"
             claim = request(client, "GET",
                             f"/v1/env/instances/create-requests/{request_id}")
             if (claim.get("request_id") != request_id or claim.get("team_id") != TEAM
                     or claim.get("state") != "materialized"
                     or claim.get("instance_id") != instance_id):
                 raise ValueError("materialized create claim mismatch")
+            stage[0] = "instance"
             instance = request(client, "GET", f"/v1/env/instances/{instance_id}")
             if (instance.get("instance_id") != instance_id or instance.get("team_id") != TEAM
                     or instance.get("env_key") != binding["environment_id"]
                     or instance.get("version") != binding["environment_version"]
                     or instance.get("status") != "running"):
                 raise ValueError("running instance identity mismatch")
+            stage[0] = "ttl"
             write_once(cell / "TTL.json", clamp_ttl(client, instance_id))
+            stage[0] = "runner_auth"
             auth = request(client, "GET", "/v1/runner-auth/token")
             if not auth.get("header") or not auth.get("token"):
                 raise ValueError("runner authorization unavailable")
             tool_digest = probe_tools(instance["urls"]["root"],
-                                      auth["header"], auth["token"])
+                                      auth["header"], auth["token"], stage)
             write_once(cell / "TOOLS.json", seal({"task_version_id": row["task_version_id"],
                                                    "bash_reachable": True,
                                                    "submit_report_reachable": True,
                                                    "tool_catalog_sha256": tool_digest}))
+            stage[0] = "verifier"
             score = request(client, "POST", route(row), json={
                 "instance_id": instance_id, "scoring_mode": "partial",
                 "multi_app_aggregation_mode": "fractional"})
@@ -414,6 +439,7 @@ def run_cell(wave_path: Path, index: int, root: Path) -> dict:
             passed = True
         except Exception as error:
             error_type = type(error).__name__
+            error_stage = stage[0]
         finally:
             if (cell / "INTENT.json").exists() and binding is not None:
                 try:
@@ -421,6 +447,7 @@ def run_cell(wave_path: Path, index: int, root: Path) -> dict:
                                cleanup(client, intent, binding, instance_id))
                 except Exception as error:
                     error_type = "Cleanup" + type(error).__name__
+                    error_stage = "cleanup"
                     passed = False
     cleanup_complete = (cell / "CLEANUP.json").exists()
     if not (cell / "INTENT.json").exists():
@@ -433,6 +460,8 @@ def run_cell(wave_path: Path, index: int, root: Path) -> dict:
                      "qualified": False,  # Positive solvability/grading still unproven.
                      "cleanup_complete": cleanup_complete,
                      "error_type": error_type,
+                     "failure_stage": (error_stage if error_stage in FAILURE_STAGES
+                                       else "unclassified" if error_type else None),
                      "private_content_persisted": False})
     write_once(cell / "TERMINAL.json", terminal)
     return terminal

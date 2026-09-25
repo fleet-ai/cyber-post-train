@@ -19,8 +19,9 @@ Teacher cross-entropy on unseen successes diagnoses optimization, **not** exploi
 ability. Matched base/checkpoint Fleet pass@4 on runnable versions measures
 ability: select on DEV, confirm once on final, exclude infrastructure failures.
 The old paired structured-window DEV converter was unused and incompatible with
-the corrected dense TRAIN path; a new target-compatible DEV builder is still
-required before teacher cross-entropy can be trusted.
+the corrected dense TRAIN path. `training/teacher_dev.py` now builds a disjoint,
+target-compatible DEV panel offline, but deliberately rejects provisional
+source evidence; no trusted teacher cross-entropy panel exists yet.
 
 ## Source-to-OpenCode compatibility
 

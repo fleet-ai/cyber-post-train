@@ -169,6 +169,30 @@ class RuntimeQualificationTests(unittest.TestCase):
         self.assertEqual(calls[-1], ("DELETE", None, "session-1"))
         self.assertTrue(all(session == "session-1" for _, _, session in calls[1:]))
 
+    def test_mcp_failure_records_only_fixed_tool_stage(self):
+        def handle(request):
+            payload = json.loads(request.content) if request.method == "POST" else {}
+            method = payload.get("method")
+            if method == "initialize":
+                return response(200, {"id": 1, "result": {}},
+                                headers={"mcp-session-id": "session-1"})
+            if method == "tools/list":
+                return response(200, {"id": 2, "result": {"tools": [
+                    {"name": "bash"}, {"name": "submit_report"}]}})
+            if method == "tools/call":
+                return response(200, {"id": payload["id"],
+                                      "result": {"isError": True}})
+            return response(200, {})
+
+        original = httpx.Client
+        with patch.object(q.httpx, "Client", side_effect=lambda **kw: original(
+                transport=httpx.MockTransport(handle), **kw)):
+            stage = ["runner_auth"]
+            with self.assertRaisesRegex(ValueError, "tool probe failed"):
+                q.probe_tools("https://example.test", "X-Runner", "dummy", stage)
+        self.assertEqual(stage, ["mcp_bash"])
+        self.assertIn(stage[0], q.FAILURE_STAGES)
+
 
 if __name__ == "__main__":
     unittest.main()
