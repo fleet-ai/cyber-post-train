@@ -21,7 +21,7 @@ def direct_fixture():
     raw = {k: copy.deepcopy(v) for k, v in native["protocol"].items() if k != "sha256"}
     raw["common"].update(harness_version="1.18.27", context_window_tokens=98304, max_output_tokens=16384,
                          context_policy="native_compaction_reserved_32768")
-    tools = [{"name": name, "inputSchema": {}} for name in ("fleet_bash", "fleet_submit_report")]
+    tools = [{"name": name, "inputSchema": {}} for name in ("bash", "submit_report")]
     raw["common"]["tool_schema_sha256"] = digest(tools)
     live.update(environment_id="synthetic-env", version="synthetic-v1", data_id="synthetic-data", prompt="Synthetic challenge.")
     plan = {"schema": "fleet_direct_opencode_v1", "protocol": seal_protocol(raw), "family_roles": native["family_roles"],
@@ -110,6 +110,11 @@ class DirectTests(unittest.TestCase):
                 run_once(plan, "base", "version-1", 1, Path(directory), api=api, runner=runner, **gates(plan))
             self.assertEqual(api.posts, 1)
             self.assertEqual(summarize(plan["protocol"], [event])["status"], "incomplete")
+        prefixed = [{"name": "fleet_" + tool["name"], "inputSchema": {}} for tool in tools]
+        with tempfile.TemporaryDirectory() as directory, patch("evals.direct._mcp_tools", return_value=prefixed):
+            with self.assertRaisesRegex(LaunchError, "MCP tool schema"):
+                run_once(plan, "base", "version-1", 1, Path(directory), api=api, runner=runner, **gates(plan))
+        self.assertTrue(api.deleted)
 
     def test_uncertain_create_never_retries(self):
         plan, live, _ = direct_fixture()

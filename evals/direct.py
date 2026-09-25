@@ -80,6 +80,7 @@ def validate_plan(plan: dict) -> dict:
             or common["seed_policy"] != {"mode": "server_assigned_unobserved"}
             or common["temperature"] is not None or common["top_p"] is not None
             or common["retry_limit"] != 0 or common["scoring_mode"] != "partial"
+            or common["tools"] != ["fleet_bash", "fleet_submit_report"]
             or common["pass_criterion"] != PASS):
         raise LaunchError("direct OpenCode requires exact matched 96K profile, scoring and unobserved sampling")
     _families(plan)
@@ -314,7 +315,7 @@ def run_once(plan: dict, arm: str, version: str, attempt: int, journal_dir: Path
             raise LaunchError("Fleet MCP authentication/URL unavailable")
         mcp_url = root.rstrip("/") + "/mcp"
         tools = _mcp_tools(mcp_url, header, token)
-        if ([tool["name"] for tool in tools] != plan["protocol"]["common"]["tools"]
+        if ([tool["name"] for tool in tools] != ["bash", "submit_report"]
                 or digest(tools) != plan["protocol"]["common"]["tool_schema_sha256"]):
             raise LaunchError("live challenge MCP tool schema changed")
         _append(path, {"state": "RUNTIME_BOUND", "instance_id": instance_id, "task_response_sha256": first["task_response_sha256"],
