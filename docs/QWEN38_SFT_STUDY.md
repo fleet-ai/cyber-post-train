@@ -52,6 +52,20 @@ Private sealed diagnostic: `/private/tmp/cpt-q38-live-qwen-wire.YKisC9/LIVE_WIRE
 This proves current target first-request wire only, **not** the historical
 teacher tool-result renderer or corpus acceptance; `training_ready` stays false.
 
+An isolated OpenCode 1.18.27 mock confirmed that two one-block MCP text results
+reached its model request byte-for-byte. A separate current TRAIN task/version
+was then probed with one exact historical bash call: the stored teacher result
+was 2,451 characters, while the fresh MCP text was 2,444 characters and marked
+as a tool error. The fresh instance was independently confirmed stopped with
+its durable claim (sealed terminal
+`sha256:53d52f465cc5428da273428d7551d1131b7aa137cd4a4fe25459f75ad18b7294`).
+Different runtime output may explain the difference; it does **not** prove a
+renderer bug or equivalence. The historical corpus remains unaccepted. An
+earlier attempt against an obsolete TRAIN task version was rejected before an
+instance was created; its durable claim was independently absent. Fresh teacher
+collection through Fleet OpenCode was also rejected before job creation with
+`sales_product_required`; the correct cyber-study billing label needs review.
+
 A read-only check of one exact strict TRAIN session found 53 stored tool-result
 strings but neither raw MCP response blocks nor a separately captured next
 model-facing tool message. Its harness metadata lacks a renderer binary/image
@@ -73,6 +87,10 @@ collect fresh verifier-backed OpenCode teacher successes on TRAIN families.
   near-262k first-batch update, finite gradients, peak memory, checkpoint,
   release and separate zero-step reload. Old eight-node step/zero-GPU preflight
   prove neither; CPU preflight v2/v3 failed, pinned v4 passed.
+  At 2026-09-25 12:42 UTC it remained unadmitted, holding zero GPUs: the
+  training queue had 25 GPUs below its 192-GPU quota, short of this job's 32.
+  Kueue displayed a `cpu-head` topology fallback error; that alone does not
+  establish a job-config defect while the B300 flavor lacks quota.
 - **262k corrected scientific lane (not launchable):** freeze independent
   name/output/data/steps after source/capacity gates. Require transitive roles,
   verified successes, exact OpenCode 1.18.27 anchors/tools, visible complete
