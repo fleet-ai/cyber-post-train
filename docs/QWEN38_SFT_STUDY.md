@@ -15,36 +15,30 @@ privately, use exact target anchors/tools, preserve early/middle/late complete
 rounds without duplicate targets or final-submission bias, freeze family roles,
 and verify native token/mask files and digests.
 
-## What the two held-out measurements mean
+## Two held-out measurements
 
-- **Teacher-validation loss:** next-token prediction on successful teacher
-  sessions from unseen families diagnoses optimization, not exploit ability.
-- **Fleet outcomes:** matched baseline/checkpoint pass@4 on exact runnable
-  task versions measures ability. Development selects checkpoints; a separate
-  final set confirms once. Infrastructure-invalid is not model failure.
-
-The old 13-dev/7-final families need fresh proof and cannot resolve a modest
-10-point lift. Discovery candidates are not qualified tasks; see
-[HOLDOUT.md](HOLDOUT.md) for frozen order and API defects.
+Teacher cross-entropy on unseen successful sessions diagnoses optimization,
+**not** exploit ability. Matched baseline/checkpoint Fleet pass@4 on runnable
+versions measures ability: select on DEV, confirm once on final, and exclude
+infrastructure-invalid attempts. The old 13-DEV/7-final families need fresh
+proof and cannot resolve modest lift; see [HOLDOUT.md](HOLDOUT.md).
 
 ## Source-to-OpenCode compatibility
 
-All **2,886** envelopes passed exact session/version/transcript digests in a
-private cache. Strict checks provisionally retain **943 TRAIN sessions/116
-families** and **27 teacher-DEV/9 families**; 16 protected sessions are
-quarantined. The importer strips hidden reasoning, substitutes probed OpenCode
-anchors and proven calls, but local probes cannot prove live served-Qwen wire.
-The detailed historical exclusion census remains in Git history.
+All **2,886** envelopes passed exact session/version/transcript digests.
+Strict checks provisionally retain **943 TRAIN/116 families** and **27 teacher-
+DEV/9 families**; 16 protected sessions are quarantined. The importer strips
+hidden reasoning and substitutes probed OpenCode anchors/proven calls, but
+local probes cannot prove live served-Qwen wire. Detailed exclusions remain
+in Git history.
 
-`use_tool` wrappers remain excluded: individual CLI versions and MCP block
-boundaries are unbound. A synthetic Grok/OpenCode two-block result differed by
-one newline, and none of 28,312 wrapped-bash strings has a uniquely
-recoverable final status block. A **provisional** one-text-block conversion
-adds 219 TRAIN/15 DEV: total **1,162/42** across **153/12** families, with
-old source-token proxies **22,295,624/639,694**. Neither proxy is a native
-Qwen masked-token count; the ≥20M train floor and historical deployed
-tool-result parity remain unproved. Use attested original blocks or fresh
-target-harness successes for an accepted corpus.
+`use_tool` wrappers remain excluded: CLI versions/MCP block boundaries are
+unbound, and none of 28,312 wrapped-bash strings has a uniquely recoverable
+final status block. A **provisional** one-text-block conversion adds 219
+TRAIN/15 DEV: total **1,162/42** sessions across **153/12** families, with
+old token proxies **22,295,624/639,694**. Native Qwen masked-token count,
+live wire and historical deployed tool-result parity remain unproved; an
+accepted corpus needs attested blocks or fresh target-harness successes.
 
 ## Parallel execution lanes
 

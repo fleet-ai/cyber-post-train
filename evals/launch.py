@@ -1,10 +1,4 @@
-"""Fail-closed Fleet Jobs API launcher for a sealed OpenCode pass@4 comparison.
-
-The native API creates a Fleet eval/Temporal workflow, not a Kubernetes Job.
-There is no server preview endpoint or caller-controlled seed/sampling setting.
-This module never pretends otherwise: preview is local and read-only, and the
-independent route/qualification adapters must prove facts the API cannot.
-"""
+"""Fail-closed Fleet Jobs OpenCode pass@4 launcher with local read-only preview."""
 
 from __future__ import annotations
 
@@ -23,6 +17,8 @@ SCHEMA = "fleet_native_paired_launch_v1"
 TEAM_ID = "a1025f0b-ad67-49fc-a023-51800ab43e84"
 SHA = re.compile(r"sha256:[0-9a-f]{64}\Z")
 UUID = re.compile(r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\Z")
+SERVED_ID = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
+CHECKPOINT_ID = re.compile(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?-step-[0-9]+\Z")
 
 
 class LaunchError(ValueError):
@@ -105,12 +101,13 @@ def validate_plan(plan: dict) -> str:
     if not all(map(_sha, receipts.values())):
         raise LaunchError("export, reload, registration and live parity receipts are required")
     routes = _fields(plan["routes"], {"base", "candidate"}, "native model routes")
-    if (routes["base"] == routes["candidate"] or any(
-        not isinstance(route, str) or not route.startswith("fleet-qwen/")
-        or len(route) <= len("fleet-qwen/") or any(c.isspace() for c in route)
-        for route in routes.values()
-    )):
-        raise LaunchError("distinct catalog-compatible Fleet Qwen routes are required")
+    if any(not isinstance(route, str) for route in routes.values()):
+        raise LaunchError("exact Fleet base and checkpoint routes are required")
+    base, candidate = routes["base"].removeprefix("fleet-qwen/"), routes["candidate"].removeprefix("fleet/")
+    if (routes["base"] != "fleet-qwen/" + base or routes["candidate"] != "fleet/" + candidate
+            or base == candidate or not SERVED_ID.fullmatch(base) or not SERVED_ID.fullmatch(candidate)
+            or not CHECKPOINT_ID.fullmatch(candidate)):
+        raise LaunchError("exact Fleet base and checkpoint routes are required")
     return _identity(protocol)
 
 
@@ -142,7 +139,7 @@ def _readiness_expected(plan: dict) -> dict:
         "receipts": plan["readiness_sha256"],
         "routes": {
             arm: {
-                "model_id": plan["routes"][arm],
+                "model_id": plan["routes"][arm], "served_id": plan["routes"][arm].partition("/")[2],
                 "model_revision": protocol["arms"][arm]["model_revision"],
                 "weights_sha256": protocol["arms"][arm]["weights_sha256"],
                 "checkpoint_sha256": protocol["arms"][arm].get("checkpoint_sha256"),

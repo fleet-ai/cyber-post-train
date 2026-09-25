@@ -73,7 +73,7 @@ def fixture():
         },
         "routes": {
             "base": "fleet-qwen/baseline-synthetic",
-            "candidate": "fleet-qwen/checkpoint-synthetic",
+            "candidate": "fleet/checkpoint-synthetic-step-16",
         },
     }
     group = {
@@ -105,7 +105,8 @@ class LaunchTests(unittest.TestCase):
             "name", "models", "pass_k", "scoring_mode", "task_group_id", "agent_runtime",
             "harness", "mode", "tools", "max_steps", "max_duration_minutes",
         })
-        self.assertEqual(payload["models"], [plan["routes"]["base"]])
+        self.assertEqual(job_payload(plan, "candidate")["models"], ["fleet/checkpoint-synthetic-step-16"])
+        self.assertEqual(_readiness_expected(plan)["routes"]["candidate"]["served_id"], "checkpoint-synthetic-step-16")
         self.assertEqual(payload["pass_k"], 4)
         self.assertEqual(payload["scoring_mode"], "partial")
         self.assertEqual(payload["tools"], [])
@@ -174,10 +175,12 @@ class LaunchTests(unittest.TestCase):
         checks["readiness_get"] = lambda: proof
         with self.assertRaisesRegex(LaunchError, "checkpoint/route/harness proof"):
             preview(plan, "candidate", **checks)
-        plan, live, group = fixture()
-        plan["routes"]["candidate"] = "fleet/unrouted-checkpoint"
-        with self.assertRaisesRegex(LaunchError, "Fleet Qwen routes"):
-            validate_plan(plan)
+        for route in ("fleet/unrouted-checkpoint", "fleet-qwen/checkpoint-synthetic-step-16", "fleet/Invalid-step-16",
+                      "fleet/checkpoint_synthetic-step-16", "fleet/" + "x" * 58 + "-step-1"):
+            plan, _, _ = fixture()
+            plan["routes"]["candidate"] = route
+            with self.assertRaisesRegex(LaunchError, "exact Fleet base and checkpoint routes"):
+                validate_plan(plan)
 
     def test_wrong_account_and_budget_fail(self):
         plan, live, group = fixture()
