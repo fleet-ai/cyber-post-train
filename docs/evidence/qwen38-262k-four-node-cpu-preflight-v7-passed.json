@@ -1,0 +1,22 @@
+{
+  "schema": "qwen38_262k_cpu_preflight_attempt_v1",
+  "job": "fleet-train-jobs/chris-q38-262k4n-cpu-pre-v7",
+  "job_uid": "36612535-0d62-4965-9c48-64129c6a0907",
+  "pod_uid": "cfb98cc8-4068-471f-baeb-2c6a9fecf6a5",
+  "image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "root_failure_alert_annotation": "off",
+  "priority": "c1/q1",
+  "gpu_request": 0,
+  "pod_restarts": 0,
+  "status": "Succeeded",
+  "exit_code": 0,
+  "job_and_pod_released": true,
+  "candidate_plan_sha256": "3c630d5d924767d4ed78a823d1d1d6f5793e650bcc5c3221e1e86228adc7b8d2",
+  "candidate_request_sha256": "f8ff4d2f8cbdf81f95547b0e9e1ec53b3015de313efe639f39624c753c7d0389",
+  "preflight_log_sha256": "ad828249b1f71da441f2a2bf2bdca25d9ce2352afb7fbe9b219d251d8c7f95af",
+  "checked": ["entrypoint_plan_validation", "native_sources", "model_files", "dataset_files", "native_config", "native_forward_backward_signature", "tokenization", "target_accounting"],
+  "train_rows": 112,
+  "train_tasks": 27,
+  "supervised_tokens": 3022959,
+  "limits": "CPU-only validation; not evidence of GPU fit, optimizer progress, or checkpoint reload."
+}

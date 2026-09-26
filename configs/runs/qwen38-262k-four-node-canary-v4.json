@@ -1,0 +1,18 @@
+{
+  "schema": "qwen38_262k_four_node_repair_v2",
+  "source_v3_sha256": "6fc94f97ad0d8756c159eac0a53292421d1a6108c15e352f8f7cc5b5391f0df2",
+  "name": "chris-q38-t3k262-4n-can-v4",
+  "output_root": "/mnt/sfs/jobs/chris-q38-t3k262-4n-can-v4",
+  "delta": "new identity; skip the nonexistent post-pause finalizer after the synchronous native FSDP checkpoint save; model, data and recipe unchanged",
+  "root_review": {
+    "scope": "one create-once v4 four-node capacity canary, then zero-step checkpoint reload; not scientific training",
+    "v3_deleted_rayjob_uid": "0b135d1f-3326-401b-a83c-68923d6e1b6b",
+    "v3_deleted_workload_uid": "14050301-32dd-4855-bcc9-9d3919b5619f",
+    "v3_delete_http_status": 204
+  },
+  "submission_authorized": true,
+  "cpu_preflight": {
+    "path": "docs/evidence/qwen38-262k-four-node-cpu-preflight-v7-passed.json",
+    "file_sha256": "b795deddc2c227cdad89e7f58d9f5051f4cb0d9ac7f1f960dad166df42bf4178"
+  }
+}

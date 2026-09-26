@@ -12,18 +12,23 @@ import gzip
 import hashlib
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-from training.long_context import ROOT, SPEC, validate_length_audit, validate_real_row_witness, validate_spec
+ROOT = Path(__file__).resolve().parents[1]
+SPEC = ROOT / "configs/runs/qwen38-262k-four-node-canary.json"
+BASE_SPEC_SHA256 = "c1f2e4006756f77b11dbc71b079146fcb19f67e5f96405fc876517471e6012b1"
 
 
 REVISION = "65fcf03812e48cf6f0845c607152b2069f3275b4"
 SUCCESSOR = ROOT / "configs/runs/qwen38-262k-four-node-canary-v3.json"
+V4 = ROOT / "configs/runs/qwen38-262k-four-node-canary-v4.json"
 OLD_NAME = "chris-q38-t3k262-4n-can-v1"
 NEW_NAME = "chris-q38-t3k262-4n-can-v3"
+V4_NAME = "chris-q38-t3k262-4n-can-v4"
 SOURCES = (
     "training/__init__.py",
     "training/io.py",
@@ -49,10 +54,21 @@ def digest(blob: bytes) -> str:
     return hashlib.sha256(blob).hexdigest()
 
 
+def base_spec() -> dict:
+    blob = SPEC.read_bytes()
+    if digest(blob) != BASE_SPEC_SHA256:
+        raise ValueError("historical capacity spec changed")
+    spec = json.loads(blob)
+    for key in ("length_audit", "real_row_witness"):
+        receipt = spec[key]
+        if digest((ROOT / receipt["path"]).read_bytes()) != receipt["file_sha256"]:
+            raise ValueError(f"historical {key} evidence changed")
+    return spec
+
+
 def successor_spec() -> dict:
     spec = json.loads(SUCCESSOR.read_text())
-    base = json.loads(SPEC.read_text())
-    validate_spec(base)
+    base = base_spec()
     if (
         set(spec) != {"schema", "base_spec", "base_spec_sha256", "name", "output_root", "delta", "accepted", "submission_authorized", "root_review", "cpu_preflight", "remaining_gates"}
         or spec["schema"] != "qwen38_262k_four_node_repair_v1"
@@ -76,8 +92,6 @@ def successor_spec() -> dict:
         or len(spec["remaining_gates"]) != 3
     ):
         raise ValueError("v2 successor intent or root review changed")
-    validate_length_audit(base)
-    validate_real_row_witness(base)
     receipt_blob = (ROOT / spec["cpu_preflight"]["path"]).read_bytes()
     receipt = json.loads(receipt_blob)
     if (
@@ -139,6 +153,60 @@ def stage_old_code(root: Path, *, successor: bool = False) -> None:
         path.write_text(source.replace(old, new))
 
 
+def v4_spec(*, for_cpu_preflight: bool = False) -> dict:
+    spec = json.loads(V4.read_text())
+    if (set(spec) != {"schema", "source_v3_sha256", "name", "output_root", "delta", "root_review", "submission_authorized", "cpu_preflight"}
+            or spec["schema"] != "qwen38_262k_four_node_repair_v2"
+            or spec["source_v3_sha256"] != digest(SUCCESSOR.read_bytes())
+            or spec["name"] != V4_NAME
+            or spec["output_root"] != f"/mnt/sfs/jobs/{V4_NAME}"
+            or spec["root_review"]["v3_deleted_rayjob_uid"] != "0b135d1f-3326-401b-a83c-68923d6e1b6b"
+            or spec["root_review"]["v3_deleted_workload_uid"] != "14050301-32dd-4855-bcc9-9d3919b5619f"
+            or spec["root_review"]["v3_delete_http_status"] != 204):
+        raise ValueError("v4 repair provenance changed")
+    if not for_cpu_preflight:
+        if spec["submission_authorized"] is not True or not spec["cpu_preflight"]:
+            raise ValueError("v4 GPU submission is closed until exact CPU preflight")
+        receipt = spec["cpu_preflight"]
+        blob = (ROOT / receipt["path"]).read_bytes()
+        record = json.loads(blob)
+        if (digest(blob) != receipt["file_sha256"] or record.get("status") != "Succeeded"
+                or record.get("candidate_plan_sha256") != "3c630d5d924767d4ed78a823d1d1d6f5793e650bcc5c3221e1e86228adc7b8d2"
+                or record.get("candidate_request_sha256") != "f8ff4d2f8cbdf81f95547b0e9e1ec53b3015de313efe639f39624c753c7d0389"
+                or record.get("root_failure_alert_annotation") != "off"
+                or record.get("gpu_request") != 0 or record.get("pod_restarts") != 0
+                or record.get("exit_code") != 0 or record.get("job_and_pod_released") is not True):
+            raise ValueError("v4 CPU preflight receipt differs")
+    return spec
+
+
+def stage_v4_code(root: Path) -> None:
+    stage_old_code(root, successor=True)
+    spec = v4_spec(for_cpu_preflight=True)
+    for name in ("training/sft_262k_4node_v1.py", "training/sft_262k_runtime.py", "configs/runs/qwen38-teacher3k-262k-4node-canary-v1.json"):
+        path = root / name
+        source = path.read_text()
+        if NEW_NAME not in source:
+            raise ValueError(f"v3 identity missing in {name}")
+        path.write_text(source.replace(NEW_NAME, V4_NAME))
+    runtime = root / "training/sft_runtime.py"
+    before = runtime.read_text()
+    old = '                trainer.dispatch.finalize_pending_saves("policy")'
+    if before.count(old) != 1:
+        raise ValueError("unreviewed post-pause finalizer")
+    after = before.replace(old, '                pass  # native FSDP save already waited for completion')
+    runtime.write_text(after)
+    port = root / "training/sft_262k_runtime.py"
+    source = port.read_text()
+    if source.count(SOURCE_SHA256["training/sft_runtime.py"]) != 1:
+        raise ValueError("unreviewed base runtime pin")
+    source = source.replace(SOURCE_SHA256["training/sft_runtime.py"], digest(after.encode()))
+    old_review = repr(successor_spec()["root_review"])
+    if source.count(old_review) != 1:
+        raise ValueError("v3 approval binding changed")
+    port.write_text(source.replace(old_review, repr(spec["root_review"])))
+
+
 def _old_python(root: Path, program: str, *, stdin: str = "") -> dict:
     env = {**os.environ, "PYTHONPATH": str(root), "PYTHONDONTWRITEBYTECODE": "1"}
     result = subprocess.run(
@@ -152,16 +220,8 @@ def _old_python(root: Path, program: str, *, stdin: str = "") -> dict:
     return json.loads(result.stdout)
 
 
-def historical_request(*, successor: bool = False) -> tuple[dict, dict]:
-    spec = successor_spec() if successor else json.loads(SPEC.read_text())
-    if not successor:
-        validate_spec(spec)
-        validate_length_audit(spec)
-        validate_real_row_witness(spec)
-    with tempfile.TemporaryDirectory(prefix="q38-262k-4n-") as tmp:
-        root = Path(tmp)
-        stage_old_code(root, successor=successor)
-        result = _old_python(root, """
+def _compiled(root: Path) -> tuple[dict, dict]:
+    result = _old_python(root, """
 import json, sys
 from pathlib import Path
 from training.sft_262k_4node_v1 import compile_sft, job_request
@@ -170,7 +230,15 @@ config = json.loads((root/'configs/runs/qwen38-teacher3k-262k-4node-canary-v1.js
 plan = compile_sft(config, relative_to=root/'configs/runs')
 print(json.dumps({'plan': plan, 'request': job_request(plan)}, sort_keys=True))
 """)
-    plan, request = result["plan"], result["request"]
+    return result["plan"], result["request"]
+
+
+def historical_request(*, successor: bool = False) -> tuple[dict, dict]:
+    spec = successor_spec() if successor else base_spec()
+    with tempfile.TemporaryDirectory(prefix="q38-262k-4n-") as tmp:
+        root = Path(tmp)
+        stage_old_code(root, successor=successor)
+        plan, request = _compiled(root)
     if (
         plan["qualification"]["submission_gate"]["submission_authorized"] is not successor
         or request["name"] != spec["name"]
@@ -185,6 +253,50 @@ print(json.dumps({'plan': plan, 'request': job_request(plan)}, sort_keys=True))
         raise ValueError("historical request differs from the held 4×8 canary")
     verify_bundle(plan, request)
     return plan, request
+
+
+def v4_request(*, for_cpu_preflight: bool = False) -> tuple[dict, dict]:
+    spec = v4_spec(for_cpu_preflight=for_cpu_preflight)
+    with tempfile.TemporaryDirectory(prefix="q38-262k-4n-v4-") as tmp:
+        root = Path(tmp)
+        stage_v4_code(root)
+        plan, request = _compiled(root)
+    if (request["name"] != spec["name"] or request["run_dir"] != spec["output_root"]
+            or request["workers"] != 4 or request["gpus_per_worker"] != 8
+            or request["priority_class"] != "c1" or request["failureAlerts"] is not False
+            or plan["pause_after_step"] != 1 or plan["recipe"]["max_length"] != 262144
+            or plan["qualification"]["submission_gate"]["approval_evidence"] != spec["root_review"]):
+        raise ValueError("v4 canary request differs from reviewed repair")
+    verify_bundle(plan, request)
+    return plan, request
+
+
+def v4_cpu_job() -> dict:
+    """Run the exact gate-true entrypoint through its native CPU checks only."""
+    _, request = v4_request(for_cpu_preflight=True)
+    program = shlex.split(request["command"])
+    if program[:2] != ["python", "-c"] or len(program) != 3:
+        raise ValueError("unexpected GPU bootstrap command")
+    old = "];runpy.run_path(str(p/'sft_runtime.py'),run_name='__main__')"
+    if program[2].count(old) != 1:
+        raise ValueError("unexpected runtime argv bootstrap")
+    program[2] = program[2].replace(old, ",'--validate-only','--preflight-tokenize'];runpy.run_path(str(p/'sft_runtime.py'),run_name='__main__')")
+    env = {k: v for k, v in request["env"].items() if k.startswith("CYBER_SFT_BUNDLE")}
+    env.update(RUN_DIR="/tmp/q38-v4-cpu-preflight", HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1", TOKENIZERS_PARALLELISM="false")
+    return {"apiVersion": "batch/v1", "kind": "Job", "metadata": {
+        "name": "chris-q38-262k4n-cpu-pre-v7", "namespace": "fleet-train-jobs",
+        "annotations": {"fleet.ai/failure-alerts": "off"},
+        "labels": {"cyber-post-train.fleet.ai/owner": "chris", "kueue.x-k8s.io/queue-name": "training-lq", "kueue.x-k8s.io/priority-class": "q1"}},
+        "spec": {"suspend": True, "backoffLimit": 0, "activeDeadlineSeconds": 3600, "ttlSecondsAfterFinished": 3600,
+        "template": {"spec": {"restartPolicy": "Never", "priorityClassName": "c1",
+            "nodeSelector": {"kubernetes.io/arch": "amd64", "workload": "fleetai-training-ng-cpu"},
+            "tolerations": [{"key": "workload", "operator": "Equal", "value": "fleetai-training-ng-cpu", "effect": "NoSchedule"}],
+            "volumes": [{"name": "sfs", "persistentVolumeClaim": {"claimName": "sfs-shared", "readOnly": True}}],
+            "containers": [{"name": "preflight", "image": request["image"], "command": program,
+                "env": [{"name": k, "value": v} for k, v in env.items()],
+                "resources": {"requests": {"cpu": "4", "memory": "16Gi"}, "limits": {"cpu": "8", "memory": "24Gi"}},
+                "volumeMounts": [{"name": "sfs", "mountPath": "/mnt/sfs", "readOnly": True}],
+                "securityContext": {"allowPrivilegeEscalation": False, "privileged": False}}]}}}}
 
 
 def verify_bundle(plan: dict, request: dict) -> None:

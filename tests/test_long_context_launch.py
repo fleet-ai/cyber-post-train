@@ -1,6 +1,7 @@
 """No-network checks for the held historical four-node 262K request."""
 
 import json
+import hashlib
 import os
 import subprocess
 import sys
@@ -8,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from training.long_context_launch import historical_request, stage_old_code, successor_spec, verify_bundle
+from training.long_context_launch import historical_request, stage_old_code, stage_v4_code, successor_spec, v4_cpu_job, v4_request, verify_bundle
 
 
 class LongContextLaunchTests(unittest.TestCase):
@@ -61,6 +62,25 @@ class LongContextLaunchTests(unittest.TestCase):
             for root, candidate, success in ((a, old_plan, False), (b, plan, True)):
                 result = subprocess.run([sys.executable, "-c", program], input=json.dumps(candidate), text=True, capture_output=True, cwd=root, env={**os.environ, "PYTHONPATH": root})
                 self.assertEqual(result.returncode == 0, success)
+
+    def test_v4_repair_is_bound_to_cpu_receipt_and_removes_bad_finalizer(self):
+        old, _ = historical_request(successor=True)
+        plan, request = v4_request()
+        self.assertEqual((plan, request), v4_request(for_cpu_preflight=True))
+        for field in ("model", "datasets", "recipe", "runtime_variant"):
+            self.assertEqual(plan[field], old[field])
+        self.assertEqual(plan["pause_after_step"], 1)
+        self.assertEqual(request["name"], "chris-q38-t3k262-4n-can-v4")
+        with tempfile.TemporaryDirectory() as tmp:
+            stage_v4_code(Path(tmp))
+            base = (Path(tmp) / "training/sft_runtime.py").read_bytes()
+            port = (Path(tmp) / "training/sft_262k_runtime.py").read_text()
+            self.assertNotIn(b'trainer.dispatch.finalize_pending_saves("policy")', base)
+            self.assertIn(hashlib.sha256(base).hexdigest(), port)
+        job = v4_cpu_job()
+        self.assertEqual(job["metadata"]["annotations"]["fleet.ai/failure-alerts"], "off")
+        self.assertEqual(job["spec"]["template"]["spec"]["priorityClassName"], "c1")
+        self.assertNotIn("nvidia.com/gpu", job["spec"]["template"]["spec"]["containers"][0]["resources"]["requests"])
 
 if __name__ == "__main__":
     unittest.main()

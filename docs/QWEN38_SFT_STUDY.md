@@ -86,11 +86,13 @@ two stored names (`bash`, `submit_report`), not the provider-facing bytes.
   regression test reproduces the v2 failure. Exact-image zero-GPU preflight v6
   passed and was released. The create-once v3 RayJob UID
   `0b135d1f-3326-401b-a83c-68923d6e1b6b` / Workload UID
-  `14050301-32dd-4855-bcc9-9d3919b5619f` was created at 22:51:37 UTC on
-  September 25 and remained queued at 23:58 without GPU allocation. Scheduler
-  events excluded all 24 nodes for capacity, not canary failure. The older v2
-  reload design note is historical; `training/long_context_reload.py` is v3-bound
-  and review-only until its step-1 checkpoint is sealed. This lane is **not
+  `14050301-32dd-4855-bcc9-9d3919b5619f` was deleted through the Jobs API
+  while still queued with zero GPUs: its frozen pause path repeated the known
+  nonexistent `finalize_pending_saves` call. V4 changes only that post-save call
+  and its create-once identity. Exact-image zero-GPU CPU preflight v7 passed,
+  verified 112 rows/3,022,959 targets, and was released; v4 GPU is not yet
+  submitted. `training/long_context_reload.py` remains review-only until the
+  exact v4 step-1 checkpoint is sealed. This lane is **not
   scientific**. Require real
   near-262k first-batch update, finite gradients, peak memory, checkpoint,
   release and separate zero-step reload. Old eight-node step/zero-GPU preflight
