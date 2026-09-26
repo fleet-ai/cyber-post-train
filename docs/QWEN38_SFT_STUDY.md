@@ -49,7 +49,7 @@ rejected `harness=opencode` (HTTP 400); it accepts Claude Code, Codex, Grok and
 Grok-bot. Direct Fleet-instance creation then returned generic HTTP 500 before
 a claim or instance existed on three current TRAIN versions (fira, fentry,
 rops). Delayed claim readback remained absent. Stop repeating this route until
-its server defect is understood; no model rollout or GPU allocation occurred.
+its server defect is understood; no model rollout or GPU allocation occurred. A read-only check of a previously full-credit DEV instance found its task's exact seed bindings matched, but `environment_version_id` and `image_url` were absent from the instance readback. The server create route uses the task's version label but does not pass its frozen seed configuration or exact environment-version ID; this is a separate runtime-identity proof gap, not an established cause of the HTTP 500s. Require an authoritative immutable runtime binding before paired evaluation.
 Another current TRAIN version returned one successful MCP text block but differed
 from its stored result by one character (2,251 versus 2,252); line-ending
 equivalence was **not** established. A bounded follow-up timed out during
