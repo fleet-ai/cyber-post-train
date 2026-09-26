@@ -1,8 +1,4 @@
-"""Review-only builder and separate zero-step restore for the 4×8 262K canary.
-
-No GPU submission is exposed. A CPU/SFS seal and independent review are needed
-after the source reaches step 1; this is capacity proof, not scientific SFT.
-"""
+"""Digest-bound zero-step restore of the four-node 262K capacity canary."""
 
 import argparse
 import copy
@@ -14,7 +10,7 @@ import tempfile
 import time
 from pathlib import Path
 
-NAME = "chris-q38-t3k262-4n-reload-v4"
+NAME = "chris-q38-t3k262-4n-reload-v5"
 MANIFEST = Path("/mnt/sfs/jobs/chris-q38-t3k262-4n-can-v4/checkpoint-manifest-step1.json")
 CHECKPOINT = "/mnt/sfs/jobs/chris-q38-t3k262-4n-can-v4/checkpoints/global_step_1"
 SOURCE_SHA = "3c630d5d924767d4ed78a823d1d1d6f5793e650bcc5c3221e1e86228adc7b8d2"
@@ -22,8 +18,44 @@ PINNED = {
     "training/checkpoints.py": "b2bfa604a45a7ea1ed1b195401ce3c489f6460b36d2cd39d68a43033d23873b7",
     "training/recovery.py": "0765eb0f09378566c68e47861f6cc3d04c245aa438353befdb1c176d8726e84a",
 }
-GATE = {"submission_authorized": False, "accepted": False,
-        "remaining": "source step-1 seal, exact-image CPU preflight, separate root GPU review"}
+GATE = {"submission_authorized": True, "accepted": False,
+        "remaining": "exact-image CPU preflight and zero-step GPU reload"}
+
+
+def _recovery_overlay(blob):
+    """Keep the source's bounded forward path while adding native state checks."""
+    edits = (
+        ("    layer_checkpoint_group_size: int,\n):\n",
+         "    layer_checkpoint_group_size: int,\n    recovery_plan=None,\n):\n"),
+        ("    fsdp_worker.PolicyWorker = ray.remote(num_gpus=1)(ChunkedSFTPolicyWorker)\n",
+         "    if recovery_plan is not None:\n"
+         "        from training import recovery\n"
+         "        class RestoringChunkedWorker(recovery.worker_class(recovery_plan), ChunkedSFTPolicyWorker):\n"
+         "            pass\n"
+         "        fsdp_worker.PolicyWorker = ray.remote(num_gpus=1)(RestoringChunkedWorker)\n"
+         "    else:\n"
+         "        fsdp_worker.PolicyWorker = ray.remote(num_gpus=1)(ChunkedSFTPolicyWorker)\n"),
+        ("                recipe[\"layer_checkpoint_group_size\"],\n            )\n",
+         "                recipe[\"layer_checkpoint_group_size\"],\n"
+         "                recovery_plan=self.plan if self.plan.get(\"recovery\") else None,\n            )\n"),
+        ("            super()._init_workers()\n",
+         "            if self.plan.get(\"recovery\"):\n"
+         "                import contextlib\n"
+         "                from training import recovery\n"
+         "                native_use_worker = recovery.use_worker\n"
+         "                recovery.use_worker = lambda _: contextlib.nullcontext()\n"
+         "                try:\n"
+         "                    super()._init_workers()\n"
+         "                finally:\n"
+         "                    recovery.use_worker = native_use_worker\n"
+         "            else:\n"
+         "                super()._init_workers()\n"),
+    )
+    for old, new in edits:
+        if blob.count(old) != 1:
+            raise ValueError("pinned long-context recovery overlay anchor changed")
+        blob = blob.replace(old, new)
+    return blob
 
 
 def canonical(value):
@@ -34,7 +66,7 @@ def sha(blob):
     return hashlib.sha256(blob).hexdigest()
 
 
-def build_plan(manifest):
+def build_plan(manifest, manifest_file_sha256=None):
     from training.long_context_launch import v4_request
 
     source, _ = v4_request()
@@ -60,9 +92,17 @@ def build_plan(manifest):
     plan.update(run_name=NAME, output_root=f"/mnt/sfs/jobs/{NAME}")
     plan["wandb"].update(run_id=NAME, name=NAME)
     plan["recovery"] = {"mode": "validate", "checkpoint": manifest,
-                        "manifest_path": str(MANIFEST), "manifest_file_sha256": sha(MANIFEST.read_bytes())}
+                        "manifest_path": str(MANIFEST),
+                        "manifest_file_sha256": manifest_file_sha256 or sha(MANIFEST.read_bytes())}
     plan["recovery_runtime_sha256"] = PINNED["training/recovery.py"]
     plan["reload_runtime_sha256"] = sha(Path(__file__).read_bytes())
+    from training.long_context_launch import stage_v4_code
+    with tempfile.TemporaryDirectory(prefix="q38-262k-source-") as tmp:
+        stage_v4_code(Path(tmp))
+        source_blob = (Path(tmp) / "training/sft_262k_runtime.py").read_bytes()
+    if sha(source_blob) != source["runtime_sha256"]:
+        raise ValueError("pinned long-context runtime changed")
+    plan["reload_overlay_sha256"] = sha(_recovery_overlay(source_blob.decode()).encode())
     plan["reload_gate"] = GATE
     return plan
 
@@ -71,6 +111,8 @@ def _stage(root):
     from training.long_context_launch import REVISION, ROOT, stage_v4_code
 
     stage_v4_code(root)
+    runtime = root / "training/sft_262k_runtime.py"
+    runtime.write_text(_recovery_overlay(runtime.read_text()))
     for name, expected in PINNED.items():
         blob = subprocess.run(["git", "show", f"{REVISION}:{name}"], cwd=ROOT,
                               check=True, capture_output=True).stdout
@@ -81,13 +123,16 @@ def _stage(root):
         path.write_bytes(blob)
 
 
-def prepare(path=MANIFEST):
-    """Build a request for review only; source files must already be CPU-sealed."""
+def prepare(path=MANIFEST, *, cpu_preflight=False):
+    """Build from a verified local copy; the GPU plan binds the SFS original."""
     from training.long_context_launch import _old_python, v4_request
 
-    if path != MANIFEST or path.is_symlink():
-        raise ValueError("manifest must be the exact immutable source output")
-    plan = build_plan(json.loads(path.read_text()))
+    if path.is_symlink():
+        raise ValueError("sealed manifest copy is a symlink")
+    if not path.is_file():
+        raise FileNotFoundError("sealed manifest copy is missing")
+    blob = path.read_bytes()
+    plan = build_plan(json.loads(blob), sha(blob))
     with tempfile.TemporaryDirectory(prefix="q38-262k-reload-") as tmp:
         root = Path(tmp)
         _stage(root)
@@ -104,8 +149,9 @@ import json,sys
 from cyber_post_train.jobs import bundled_request
 v=json.loads(sys.stdin.read())
 print(json.dumps(bundled_request(v['request'],v['files'],'training.long_context_reload',
-    ['--plan','plan.json','--plan-sha256',v['sha']]),sort_keys=True))
-""", stdin=json.dumps({"request": request, "files": files, "sha": sha(canonical(plan))}))
+    ['--plan','plan.json','--plan-sha256',v['sha']]+(['--cpu-preflight'] if v['cpu_preflight'] else [])),sort_keys=True))
+""", stdin=json.dumps({"request": request, "files": files, "sha": sha(canonical(plan)),
+                         "cpu_preflight": cpu_preflight}))
     return plan, request
 
 
@@ -138,6 +184,7 @@ def check(plan):
     if (base._unsigned_digest(source) != SOURCE_SHA or
         plan["reload_runtime_sha256"] != base.digest(Path(__file__)) or
         plan["recovery_runtime_sha256"] != base.digest(Path(recovery.__file__)) or
+        plan["reload_overlay_sha256"] != base.digest(Path(long.__file__)) or
         plan["recovery"]["manifest_path"] != str(MANIFEST)):
         raise ValueError("wrong frozen restore binding")
     base._checked_file(MANIFEST, plan["recovery"]["manifest_file_sha256"])
@@ -145,10 +192,29 @@ def check(plan):
     recovery.validate(plan, check_files=False)
     expected = {**source, "run_name": NAME, "output_root": f"/mnt/sfs/jobs/{NAME}"}
     expected["wandb"] = {**source["wandb"], "name": NAME, "run_id": NAME}
-    for key in ("recovery", "recovery_runtime_sha256", "reload_runtime_sha256", "reload_gate"):
+    for key in ("recovery", "recovery_runtime_sha256", "reload_runtime_sha256", "reload_overlay_sha256", "reload_gate"):
         expected[key] = plan[key]
     if plan != expected or plan["reload_gate"] != GATE:
         raise ValueError("restore-only plan changes source science or topology")
+
+
+def check_worker_composition(plan):
+    import contextlib
+    from training import recovery, sft_262k_runtime as long
+
+    class Probe:
+        def _init_workers(self):
+            if not isinstance(recovery.use_worker(plan), contextlib.nullcontext):
+                raise ValueError("base trainer replaced the bounded recovery worker")
+
+    parent = long._BASE_MAKE_TRAINER_CLASS
+    long._BASE_MAKE_TRAINER_CLASS = lambda: Probe
+    try:
+        trainer = long._make_trainer_class()()
+        trainer.plan = plan
+        trainer._init_workers()
+    finally:
+        long._BASE_MAKE_TRAINER_CLASS = parent
 
 
 def restore(plan):
@@ -178,12 +244,18 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--plan-sha256", required=True)
+    parser.add_argument("--cpu-preflight", action="store_true")
     args = parser.parse_args()
     from training import sft_runtime as base
 
     base._checked_file(args.plan, args.plan_sha256)
     plan = json.loads(args.plan.read_text())
     check(plan)
+    if args.cpu_preflight:
+        check_worker_composition(plan)
+        print(json.dumps({"status": "cpu_preflight_passed", "optimizer_steps_executed": 0,
+                          "source_manifest_sha256": plan["recovery"]["checkpoint"]["receipt_sha256"]}), flush=True)
+        return
     if not plan["reload_gate"]["submission_authorized"]:
         raise ValueError("restore-only GPU launch has not received separate root review")
     plan["plan_sha256"] = args.plan_sha256

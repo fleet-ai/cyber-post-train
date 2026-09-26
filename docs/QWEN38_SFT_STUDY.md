@@ -26,129 +26,51 @@ All **2,886** envelopes passed session/version/transcript digests. Provisional s
 One-text-block conversion adds 219 TRAIN/15 DEV: **1,162/42** sessions, **153/12** families, old token proxies **22,295,624/639,694**.
 Native masked counts, live wire and tool-result parity remain unproved. OpenCode 1.18.27 truncates above 50 KiB/2,000 lines; only 362 TRAIN/7 DEV sessions are size-safe—too little for accepted full SFT.
 
-## Bounded live target-wire probe (2026-09-25)
+## Live tool-format check (2026-09-25)
 
-The Chris-owned exact-base route (model UID `54beeb64-c498-4e7d-a504-05a8d694808b`, Pod UID `6a7308b4-4e8b-4683-a21f-9c32147dfd0a`) served two frozen TRAIN task anchors through pinned OpenCode 1.18.27 and the fixed proxy. Both first requests matched the reviewed system/user and two-tool hashes; both returned complete HTTP-200 SSE streams with distinct response IDs. The synthetic local MCP did not execute task tools. The first probe entered a tool loop: 10 bounded live chat requests total, each capped at 128 output tokens. The route was paused and independently read back at zero Pods/replicas and routing disabled.
-Private sealed diagnostic: `/private/tmp/cpt-q38-live-qwen-wire.YKisC9/LIVE_WIRE_DIAGNOSTIC.json`
-(file SHA-256 `c6d475ba5b54bb2a34b1f2f68ee4aa4e10964873de0208d7cc4ae326e81eeeed`).
-This proves first-request wire, **not** historical tool-result parity or corpus acceptance; `training_ready` stays false.
-
-An isolated OpenCode 1.18.27 mock confirmed that two one-block MCP text results reached its model request byte-for-byte. A separate current TRAIN task/version was then probed with one exact historical bash call: the stored teacher result was 2,451 characters, while the fresh MCP text was 2,444 characters and marked as a tool error. The fresh instance was independently confirmed stopped with its durable claim (sealed terminal
-`sha256:53d52f465cc5428da273428d7551d1131b7aa137cd4a4fe25459f75ad18b7294`).
-Different runtime output may explain the difference; it does **not** prove a
-renderer bug or equivalence. The historical corpus remains unaccepted. An
-earlier attempt against an obsolete TRAIN task version was rejected before an
-instance was created; its durable claim was independently absent. Fresh teacher
-collection through Fleet OpenCode was also rejected before job creation with
-`sales_product_required`. The live OTS Cyber project has no default billing
-selection; the active catalog offers both OTS Dataminer and Platform General.
-The unsupported native OpenCode Jobs launcher was removed; matched DEV attempts use the direct, version-pinned `evals/direct.py` path.
-An exact one-task TRAIN-only probe against current production version
-`43dc2c52-f283-4454-8987-69c6cbbd4160` used Platform General. The Jobs API
-rejected `harness=opencode` (HTTP 400); it accepts Claude Code, Codex, Grok and
-Grok-bot. Direct Fleet-instance creation then returned generic HTTP 500 before
-a claim or instance existed on three current TRAIN versions (fira, fentry,
-rops). Delayed claim readback remained absent. Stop repeating this route until
-its server defect is understood; no model rollout or GPU allocation occurred. A read-only check of a previously full-credit DEV instance found its task's exact seed bindings matched, but `environment_version_id` and `image_url` were absent from the instance readback. The server create route uses the task's version label but does not pass its frozen seed configuration or exact environment-version ID; this is a separate runtime-identity proof gap, not an established cause of the HTTP 500s. Require an authoritative immutable runtime binding before paired evaluation.
-The September 26 live capability readback still lacks `exact_instance_runtime_readback:v1`. In the local Theseus checkout, `orchestrator/models/models.py::InstanceRecord` has a mutable `version` label, `image_url`, and seed-binding fields but no `environment_version_id`; `public_api/instances.py::get_instance` returns `InstanceResponse(**instance.__dict__)`. This source inspection explains why the current response cannot independently prove the exact environment-version UUID. It does not establish that the local checkout equals the deployed revision or explain the pre-instance HTTP 500. The upstream fix must make create persist the immutable environment-version and seed binding and make GET return that persisted identity, then advertise the capability only after deployed readback tests pass. Keep the local eval launcher fail-closed meanwhile.
-An independent read of local Theseus worktree `7aa3bb3473d` found a newer `InstanceRecord` with `environment_version_id`, and generic instance creation can persist it. Its version-scoped rollout creator still constructs `CreateEnvParams` from a mutable version label, image URL, and seed overlay files without explicitly passing that immutable ID; its response includes only the instance and evidence IDs. This local source is not deployed proof and does not resolve the HTTP 500. At 06:25 UTC the deployed capability still omitted exact runtime readback, so the evaluation gate remains closed.
-Another current TRAIN version returned one successful MCP text block but differed
-from its stored result by one character (2,251 versus 2,252); line-ending
-equivalence was **not** established. A bounded follow-up timed out during
-creation after the server materialized an instance. Its exact durable claim
-enabled cleanup, and independent readback confirmed that instance `stopped`.
-No further retry of that probe is planned without a changed diagnostic.
-
-A September 25 read-only scan of all 144 strict TRAIN task keys found 6,648 historical sessions (4,143 successful); only seven began after September 20, and the four successes were Qwen on one key, not new teacher data. An exact strict TRAIN session had 53 stored tool-result
-strings but neither raw MCP response blocks nor a separately captured next
-model-facing tool message. Its harness metadata lacks a renderer binary/image
-digest, and its instance lacks environment-version/image pins; exact session
-and instance detail readbacks returned 404. A result string alone cannot prove
-Grok-to-OpenCode rendering equivalence. The 943 strict TRAIN/27 DEV historical
-sessions and one-block salvage remain provisional. Admit none as scientific
-training data without immutable renderer and same-call wire evidence; otherwise
-collect fresh verifier-backed OpenCode teacher successes on TRAIN families.
-The Fleet transcript exporter at Theseus `e2b20f08` explicitly marks its
-stored available-tools snapshot `model_facing: false` and
-`requires_harness_reconstruction: true`. An exact old TRAIN session returned
-two stored names (`bash`, `submit_report`), not the provider-facing bytes.
+Two first requests matched pinned OpenCode 1.18.27 anchors/tools, but replayed
+historical tool results differed from stored strings. Fleet Jobs rejected
+`harness=opencode`; direct instance creation returned HTTP 500 on three TRAIN
+versions. At 06:25 UTC, deployed readback still lacked immutable environment-version
+and seed identity; local Theseus source changes are not deployed proof.
+Across 144 TRAIN keys, 6,648 sessions existed (4,143 successes), but their
+stored tool strings are not captured model-facing messages. Keep the 943
+TRAIN/27 DEV historical successes provisional pending same-call wire proof or
+fresh verifier-backed OpenCode teacher collection. All probes released resources.
 
 ## Parallel execution lanes
 
-- **96k independent fast lane:** one node/eight GPUs; corrected family-disjoint
-  data, update, native checkpoint, zero-step reload and tool match. At **every**
-  checkpoint immediately queue teacher loss and matched Fleet DEV pass@4;
-  retain state through eval (old keep-two evicted too early).
-- **262k capacity lane:** four-node 112-row canary
-  `chris-q38-t3k262-4n-can-v2-1502ba9f` was admitted on four B300 nodes on
-  2026-09-25, then failed before training: the entrypoint added a plan digest
-  field that the candidate's strict validator rejected. No optimizer step or
-  checkpoint was proven; the exact Pods and Ray cluster were released. The
-  narrowly repaired v3 validator checks that field's digest, and its local
-  regression test reproduces the v2 failure. Exact-image zero-GPU preflight v6
-  passed and was released. The create-once v3 RayJob UID
-  `0b135d1f-3326-401b-a83c-68923d6e1b6b` / Workload UID
-  `14050301-32dd-4855-bcc9-9d3919b5619f` was deleted through the Jobs API
-  while still queued with zero GPUs: its frozen pause path repeated the known
-  nonexistent `finalize_pending_saves` call. V4 changes only that post-save call
-  and its create-once identity. Exact-image zero-GPU CPU preflight v7 passed,
-  verified 112 rows/3,022,959 targets, and was released. Exactly one v4 GPU
-  POST created `chris-q38-t3k262-4n-can-v4-441c5703` (API run
+- **96k fast lane:** one node; family-disjoint data, checkpoint, zero-step
+  reload and tool match. Queue teacher loss/Fleet DEV pass@4 at every save.
+- **262k capacity lane:** the v2 attempt failed before training because its
+  entrypoint added a digest field rejected by the frozen validator. V3 was
+  deleted while queued: its pause path repeated the known missing finalizer.
+  V4 repaired only that post-save call and passed exact-image CPU preflight.
+  One c1/q1 POST created `chris-q38-t3k262-4n-can-v4-441c5703` (API run
   `441c5703-3e78-481f-a12c-3273ad81977a`, RayJob UID
-  `cfede13d-a3e0-4ad3-818b-02f8538f8017`, Workload UID
-  `166cf858-82a1-46d0-9f7a-975776745b7b`); it was queued without GPUs at
-  00:35 UTC September 26. Request SHA-256 `f8ff4d2f8cbdf81f95547b0e9e1ec53b3015de313efe639f39624c753c7d0389`.
-  At 03:30:03 UTC it remained suspended without admission or GPU allocation.
-  Kueue then excluded all 24 nodes for eight-GPU Pod fit despite 141/192 GPU
-  quota reserved: aggregate free GPUs are not four usable whole nodes.
-  At 03:40 UTC, 21 GPU nodes were full and the other three had only 3/4/4
-  GPUs free. Four separate Chris-named jobs each held one full node (two 96k
-  SFT, two RL); all four RayJobs were RUNNING. Do not interrupt them without
-  specific approval and checkpoint review. This canary is the oldest pending
-  c1 GPU workload in its local queue, but admission after capacity frees is
-  not guaranteed.
-  At 03:55 UTC it was still queued; 23/24 B300 nodes were full and the last
-  had three GPUs free. The two SFT jobs showed steps 26 and 601, with checkpoint
-  directories at steps 25 and 600; the two RL roots had only an `iter_0000000`
-  directory and no checkpoint directory, respectively. Directory presence is not
-  a reloadability proof; all four jobs remained Ready with zero restarts.
-  UID-bound comparison confirmed
-  V4's head-plus-three-worker pod sets, 8 GPUs/64 CPU/512 GiB each and preferred
-  tier-1 topology are identical to admitted V2's, so the `cpu-head` fallback
-  message is not evidence of a new request-shape defect. Keep the one
-  create-once c1 request queued; no duplicate, priority change or peer preemption.
-  `training/long_context_reload.py` remains review-only until the
-  exact v4 step-1 checkpoint is sealed. This lane is **not
-  scientific**. Require real
-  near-262k first-batch update, finite gradients, peak memory, checkpoint,
-  release and separate zero-step reload. Old eight-node step/zero-GPU preflight
-  prove neither; CPU preflight v2/v3 failed, pinned v4 passed.
-  Earlier queueing held zero GPUs until the 22:37 UTC admission.
-  A restore-only adapter and synthetic test exist, but no source step-1 seal,
-  exact-image restore preflight, or GPU reload acceptance exists yet.
-- **262k corrected scientific lane (not launchable):** freeze independent
-  name/output/data/steps after source/capacity gates. Require transitive roles,
-  verified successes, exact OpenCode 1.18.27 anchors/tools, visible complete
-  rounds, unique targets, ≥20M **actual** TRAIN masked tokens and disjoint
-  contiguous teacher DEV. Final families never train. Old runtime binds a
-  capacity-only corpus/no-CE mode; qualify a new binding.
+  `cfede13d-a3e0-4ad3-818b-02f8538f8017`). It succeeded at 05:27 UTC
+  September 26 after one finite optimizer update and released all four nodes.
+  Its first 32 rows included 15 at least 250,000 tokens long; the maximum
+  was 262,126/262,144. The saved checkpoint has 105 files across 32 ranks,
+  302.4 GiB total. CPU Job `chris-q38-262k4n-step1-seal-a01` (UID
+  `e279c843-dbee-4bd1-b816-4ad3da6e143d`) sealed it; the self-digest-valid
+  manifest file SHA-256 is `76184b48335e3382bb05510ef70c6628fe119230359b826bad29a7602bec4e2c`.
+  The v4 reload was withdrawn through the Jobs API before admission: code review
+  found its recovery worker could replace the bounded long-context worker.
+  Corrected v5 passed exact-image CPU preflight (Job UID `2086b070-1882-4dc4-913f-2c8c50737c21`, exit 0, zero restarts), then queued
+  as `chris-q38-t3k262-4n-reload-v5-e33ced3d` (RayJob UID
+  `6ba1dedd-1268-43c9-ba44-d70e114ab4a7`, Workload UID
+  `a63ce5c2-c193-4387-9fb8-db0101cb43f1`). Outcome pending; this is capacity
+  proof, **not scientific SFT** or lift.
+- **262k scientific lane (not launchable):** requires a new identity and ≥20M
+  verified masked TRAIN tokens in OpenCode format; disjoint DEV/final families.
 
-Initial full262 hypothesis after capacity/reload pass: full-weight Qwen3.8-27B,
-four 8-B300 nodes, 262,144 context, global batch 32, one epoch, LR 3e-6,
-group-1/GDN-512/chunk-1024. Freeze `max_steps = ceil(train_rows / 32)`, ~10–20
-spaced CE/checkpoints; retain **all** native saves through eval and budget SFS.
-Validate zero-step recovery with a new output/W&B identity. Each checkpoint
-needs BF16 readback and matched base/candidate Fleet DEV and OpenCode
-WebExploitBench pass@4. Keep final families sealed; train/teacher loss is not lift.
+Full262 hypothesis: full-weight Qwen3.8-27B, four B300 nodes, 262k context,
+batch 32, one epoch, LR 3e-6; `max_steps = ceil(train_rows / 32)`.
+Keep all saves for BF16 and matched Fleet DEV/WEB pass@4; loss is not lift.
 
-Before full262 POST, server-preview root `fleet.ai/failure-alerts: "off"`,
-c1/q1, four-node shape/release; recheck duplicates, empty output and capacity.
-The historical 57M-token full request passed an exact-image zero-GPU CPU check
-and live four-node/32-GPU preview under the earlier v3 runtime (receipt in
-`docs/evidence/qwen38-262k-full57-cpu-preflight-v1-passed.json`). Its data/model
-checks remain useful, but the v4-derived request needs a fresh exact-plan CPU
-preflight before submission. `submission_authorized` remains false until canary
-checkpoint and reload acceptance. No full POST has occurred. Apply [AGENTS.md](../AGENTS.md). Until
-Chris clarifies the wording, use stricter **>10 percentage-point absolute**
-final-task lift with statistical evidence; never iterate on the final panel.
-The disabled-gate v4-derived full request also passed a September 26 server preview: four nodes/32 GPUs, exact image, and rendered manifest SHA-256 `002383a56460d18a44f93170fc40317e7ac9747ecc4dccca3e78207afcf30d6a`. Re-preview after the canary acceptance binding changes; this is not submission permission.
+Before full262 POST, verify c1/q1, root alert-off, four-node release,
+duplicates, empty output and capacity. The old 57M-token CPU/preview gates
+do not authorize a new run; reload acceptance and fresh gates remain required.
+No full POST occurred. Require >10 percentage-point final-task lift with
+statistical evidence; never iterate on the final panel.

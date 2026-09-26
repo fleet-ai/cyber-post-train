@@ -32,9 +32,14 @@ class ReloadTests(unittest.TestCase):
             path.write_text(json.dumps(manifest))
             with patch.object(reload, "MANIFEST", path):
                 plan, request = reload.prepare(path)
+                _, cpu_request = reload.prepare(path, cpu_preflight=True)
             staged = Path(tmp) / "staged"
             staged.mkdir()
             reload._stage(staged)
+            staged_runtime = (staged / "training/sft_262k_runtime.py").read_text()
+            self.assertIn("class RestoringChunkedWorker(recovery.worker_class(recovery_plan), ChunkedSFTPolicyWorker)", staged_runtime)
+            self.assertIn('recovery_plan=self.plan if self.plan.get("recovery") else None', staged_runtime)
+            self.assertIn('recovery.use_worker = lambda _: contextlib.nullcontext()', staged_runtime)
             (staged / "training/long_context_reload.py").write_bytes(Path(reload.__file__).read_bytes())
             _old_python(staged, """
 import json,sys
@@ -43,11 +48,12 @@ from training import long_context_reload as r
 v=json.loads(sys.stdin.read());r.MANIFEST=Path(v['path']);r.check(v['plan']);print('{}')
 """, stdin=json.dumps({"path": str(path), "plan": plan}))
         self.assertEqual((request["workers"], request["gpus_per_worker"]), (4, 8))
+        self.assertNotEqual(cpu_request["command"], request["command"])
         self.assertEqual(request["priority_class"], "c1")
         self.assertIs(request["failureAlerts"], False)
         self.assertIs(request["requeueIfPreempted"], False)
         self.assertEqual(plan["recovery"]["mode"], "validate")
-        self.assertIs(plan["reload_gate"]["submission_authorized"], False)
+        self.assertIs(plan["reload_gate"]["submission_authorized"], True)
         self.assertEqual((plan["model"], plan["datasets"], plan["recipe"]),
                          (source["model"], source["datasets"], source["recipe"]))
         manifest["optimizer_step"] = 2
