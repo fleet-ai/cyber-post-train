@@ -58,7 +58,9 @@ fresh verifier-backed OpenCode teacher collection. All probes released resources
   September 26 after one finite optimizer update and released all four nodes.
   Its first 32 rows included 15 at least 250,000 tokens long; the maximum
   was 262,126/262,144. The saved checkpoint has 105 files across 32 ranks,
-  302.4 GiB total. CPU Job `chris-q38-262k4n-step1-seal-a01` (UID
+  302.4 GiB total. The saved sampler state exactly matches replay: step 2 has
+  20/32 rows ≥250k (maximum 262,144), and step 3 has 14/32 ≥250k.
+  CPU Job `chris-q38-262k4n-step1-seal-a01` (UID
   `e279c843-dbee-4bd1-b816-4ad3da6e143d`) sealed it; the self-digest-valid
   manifest file SHA-256 is `76184b48335e3382bb05510ef70c6628fe119230359b826bad29a7602bec4e2c`.
   The v4 reload was withdrawn through the Jobs API before admission: code review
