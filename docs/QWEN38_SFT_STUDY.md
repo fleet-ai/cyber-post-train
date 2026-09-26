@@ -72,7 +72,7 @@ An exact intersection of the sealed full-pin screen and the finalized verifier-Q
   `6ba1dedd-1268-43c9-ba44-d70e114ab4a7`, Workload UID
   `a63ce5c2-c193-4387-9fb8-db0101cb43f1`). Outcome pending; this is capacity
   proof, **not scientific SFT** or lift.
-- **262k scientific lane (not launchable):** requires a new identity and ≥20M verified masked TRAIN tokens in OpenCode format; disjoint DEV/final families.
+- **262k scientific lane (not launchable):** requires a new identity and ≥20M verified masked TRAIN tokens in OpenCode format; disjoint DEV/final families. Checked-out Fi Agent Runtime sources pin OpenCode 1.18.18, whereas the shared evaluation runtime source pins 1.18.27; neither source pin attests the live pilot. Fresh collection needs live version/catalog parity or a reviewed platform repair.
 
 Full262 hypothesis: full-weight Qwen3.8-27B, four B300 nodes, 262k context, batch 32, one epoch, LR 3e-6; `max_steps = ceil(train_rows / 32)`.
 Keep all saves for BF16 and matched Fleet DEV/WEB pass@4; loss is not lift.
