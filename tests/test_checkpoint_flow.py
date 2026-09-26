@@ -18,8 +18,8 @@ def write(path, value):
     path.write_text(json.dumps(signed(value), sort_keys=True) + "\n")
 
 
-@pytest.mark.parametrize("step,max_steps", [(16, 32), (17, 17)])
-def test_step_flow_is_create_once_and_digest_bound(tmp_path, monkeypatch, step, max_steps):
+@pytest.mark.parametrize("step,max_steps,teacher_ce", [(16, 32, True), (17, 17, True), (17, 17, False)])
+def test_step_flow_is_create_once_and_digest_bound(tmp_path, monkeypatch, step, max_steps, teacher_ce):
     root, prepared_dir = tmp_path / "run", tmp_path / "prepared"
     prepared_dir.mkdir()
     (prepared_dir / "PREPARED.json").write_text("{}\n")
@@ -27,7 +27,7 @@ def test_step_flow_is_create_once_and_digest_bound(tmp_path, monkeypatch, step, 
     plan = {"run_name": "q38-corrected", "output_root": str(root),
             "execution": {"image": image},
             "datasets": {"dev": {"task_keys": ["task-a"]}},
-            "validation_mode": "teacher_cross_entropy",
+            "validation_mode": "teacher_cross_entropy" if teacher_ce else "task_outcomes_only",
             "recipe": {"max_steps": max_steps, "checkpoint_interval": 16, "eval_interval": 16}}
     request = {"name": plan["run_name"], "run_dir": str(root),
                "priority_class": "c1", "failureAlerts": False, "image": image}
@@ -76,27 +76,31 @@ def test_step_flow_is_create_once_and_digest_bound(tmp_path, monkeypatch, step, 
         flow.run(prepared_dir, step, "export")
     for stage in flow.STAGES[:-1]:
         flow.run(prepared_dir, step, stage)
-    with pytest.raises(ValueError, match="immutable receipt file missing"):
-        flow.run(prepared_dir, step, "ready")
-    with pytest.raises(ValueError, match="immutable receipt file missing"):
-        flow.stage_spec(prepared_dir, step, "ready")
     dev = root / "validation" / f"step-{step:06d}.json"
-    write(dev, {"optimizer_step": step - 1, "plan_sha256": prepared["plan_sha256"]})
-    with pytest.raises(ValueError, match="development receipt differs"):
-        flow.run(prepared_dir, step, "ready")
-    with pytest.raises(ValueError, match="development receipt differs"):
-        flow.stage_spec(prepared_dir, step, "ready")
-    write(dev, {"optimizer_step": step, "plan_sha256": prepared["plan_sha256"]})
-    with pytest.raises(ValueError, match="metrics are incomplete"):
-        flow.run(prepared_dir, step, "ready")
-    write(dev, {"optimizer_step": step, "plan_sha256": prepared["plan_sha256"],
-                "eval_loss": 1.2, "task_macro_loss": 1.3,
-                "supervised_tokens": 10, "windows": 1, "tasks": 1})
+    if teacher_ce:
+        with pytest.raises(ValueError, match="immutable receipt file missing"):
+            flow.run(prepared_dir, step, "ready")
+        with pytest.raises(ValueError, match="immutable receipt file missing"):
+            flow.stage_spec(prepared_dir, step, "ready")
+        write(dev, {"optimizer_step": step - 1, "plan_sha256": prepared["plan_sha256"]})
+        with pytest.raises(ValueError, match="development receipt differs"):
+            flow.run(prepared_dir, step, "ready")
+        with pytest.raises(ValueError, match="development receipt differs"):
+            flow.stage_spec(prepared_dir, step, "ready")
+        write(dev, {"optimizer_step": step, "plan_sha256": prepared["plan_sha256"]})
+        with pytest.raises(ValueError, match="metrics are incomplete"):
+            flow.run(prepared_dir, step, "ready")
+        write(dev, {"optimizer_step": step, "plan_sha256": prepared["plan_sha256"],
+                    "eval_loss": 1.2, "task_macro_loss": 1.3,
+                    "supervised_tokens": 10, "windows": 1, "tasks": 1})
     flow.run(prepared_dir, step, "ready")
     proof = flow._receipt(flow._paths(plan, step)["ready"])
     assert proof["checkpoint_sha256"] == flow._file_sha(flow._paths(plan, step)["seal"])
     assert proof["export_sha256"] == flow._file_sha(flow._paths(plan, step)["export"])
-    assert proof["teacher_loss_file_sha256"] == flow._file_sha(dev)
+    if teacher_ce:
+        assert proof["teacher_loss_file_sha256"] == flow._file_sha(dev)
+    else:
+        assert "teacher_loss_file_sha256" not in proof
     assert proof["serving_qualified"] is False
     with pytest.raises(ValueError, match="create-once"):
         flow.run(prepared_dir, step, "ready")
