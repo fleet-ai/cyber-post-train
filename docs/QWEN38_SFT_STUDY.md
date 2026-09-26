@@ -90,8 +90,13 @@ two stored names (`bash`, `submit_report`), not the provider-facing bytes.
   while still queued with zero GPUs: its frozen pause path repeated the known
   nonexistent `finalize_pending_saves` call. V4 changes only that post-save call
   and its create-once identity. Exact-image zero-GPU CPU preflight v7 passed,
-  verified 112 rows/3,022,959 targets, and was released; v4 GPU is not yet
-  submitted. `training/long_context_reload.py` remains review-only until the
+  verified 112 rows/3,022,959 targets, and was released. Exactly one v4 GPU
+  POST created `chris-q38-t3k262-4n-can-v4-441c5703` (API run
+  `441c5703-3e78-481f-a12c-3273ad81977a`, RayJob UID
+  `cfede13d-a3e0-4ad3-818b-02f8538f8017`, Workload UID
+  `166cf858-82a1-46d0-9f7a-975776745b7b`); it was queued without GPUs at
+  00:35 UTC September 26. Request SHA-256 `f8ff4d2f8cbdf81f95547b0e9e1ec53b3015de313efe639f39624c753c7d0389`.
+  `training/long_context_reload.py` remains review-only until the
   exact v4 step-1 checkpoint is sealed. This lane is **not
   scientific**. Require real
   near-262k first-batch update, finite gradients, peak memory, checkpoint,
@@ -118,9 +123,10 @@ WebExploitBench pass@4. Keep final families sealed; train/teacher loss is not li
 Before full262 POST, server-preview root `fleet.ai/failure-alerts: "off"`,
 c1/q1, four-node shape/release; recheck duplicates, empty output and capacity.
 The historical 57M-token full request passed an exact-image zero-GPU CPU check
-and live four-node/32-GPU server preview (receipt in
-`docs/evidence/qwen38-262k-full57-cpu-preflight-v1-passed.json`), but
-`submission_authorized` remains false until canary checkpoint and reload
-acceptance. No full POST has occurred. Apply [AGENTS.md](../AGENTS.md). Until
+and live four-node/32-GPU preview under the earlier v3 runtime (receipt in
+`docs/evidence/qwen38-262k-full57-cpu-preflight-v1-passed.json`). Its data/model
+checks remain useful, but the v4-derived request needs a fresh exact-plan CPU
+preflight before submission. `submission_authorized` remains false until canary
+checkpoint and reload acceptance. No full POST has occurred. Apply [AGENTS.md](../AGENTS.md). Until
 Chris clarifies the wording, use stricter **>10 percentage-point absolute**
 final-task lift with statistical evidence; never iterate on the final panel.

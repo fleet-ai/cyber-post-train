@@ -8,14 +8,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 from training import long_context_reload as reload
-from training.long_context_launch import _old_python, historical_request
+from training.long_context_launch import _old_python, v4_request
 
 
 class ReloadTests(unittest.TestCase):
     def test_sealed_step1_is_required_and_request_is_zero_step(self):
         with self.assertRaises(FileNotFoundError):
             reload.prepare()
-        source, _ = historical_request(successor=True)
+        source, _ = v4_request()
         names = {"data.pt", "trainer_state.pt", "policy/fsdp_config.json",
                  "policy/huggingface/config.json"} | {
                      f"policy/{kind}_world_size_32_rank_{rank}.pt"

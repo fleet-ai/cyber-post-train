@@ -12,7 +12,7 @@
   "epochs": 1,
   "max_steps": 115,
   "checkpoint_interval": 10,
-  "capacity_canary_plan_sha256": "85cbab43a21e195e231176b3e6246dc017204c9955a27e018c8ff0a3a86977f4",
+  "capacity_canary_plan_sha256": "3c630d5d924767d4ed78a823d1d1d6f5793e650bcc5c3221e1e86228adc7b8d2",
   "capacity_acceptance_sha256": null,
   "submission_authorized": false
 }

@@ -14,10 +14,10 @@ import tempfile
 import time
 from pathlib import Path
 
-NAME = "chris-q38-t3k262-4n-reload-v2"
-MANIFEST = Path("/mnt/sfs/jobs/chris-q38-t3k262-4n-can-v3/checkpoint-manifest-step1.json")
-CHECKPOINT = "/mnt/sfs/jobs/chris-q38-t3k262-4n-can-v3/checkpoints/global_step_1"
-SOURCE_SHA = "85cbab43a21e195e231176b3e6246dc017204c9955a27e018c8ff0a3a86977f4"
+NAME = "chris-q38-t3k262-4n-reload-v4"
+MANIFEST = Path("/mnt/sfs/jobs/chris-q38-t3k262-4n-can-v4/checkpoint-manifest-step1.json")
+CHECKPOINT = "/mnt/sfs/jobs/chris-q38-t3k262-4n-can-v4/checkpoints/global_step_1"
+SOURCE_SHA = "3c630d5d924767d4ed78a823d1d1d6f5793e650bcc5c3221e1e86228adc7b8d2"
 PINNED = {
     "training/checkpoints.py": "b2bfa604a45a7ea1ed1b195401ce3c489f6460b36d2cd39d68a43033d23873b7",
     "training/recovery.py": "0765eb0f09378566c68e47861f6cc3d04c245aa438353befdb1c176d8726e84a",
@@ -35,9 +35,9 @@ def sha(blob):
 
 
 def build_plan(manifest):
-    from training.long_context_launch import historical_request
+    from training.long_context_launch import v4_request
 
-    source, _ = historical_request(successor=True)
+    source, _ = v4_request()
     unsigned = {k: v for k, v in manifest.items() if k != "receipt_sha256"}
     files = manifest.get("files", {})
     required = {"data.pt", "trainer_state.pt", "policy/fsdp_config.json",
@@ -68,9 +68,9 @@ def build_plan(manifest):
 
 
 def _stage(root):
-    from training.long_context_launch import REVISION, ROOT, stage_old_code
+    from training.long_context_launch import REVISION, ROOT, stage_v4_code
 
-    stage_old_code(root, successor=True)
+    stage_v4_code(root)
     for name, expected in PINNED.items():
         blob = subprocess.run(["git", "show", f"{REVISION}:{name}"], cwd=ROOT,
                               check=True, capture_output=True).stdout
@@ -83,7 +83,7 @@ def _stage(root):
 
 def prepare(path=MANIFEST):
     """Build a request for review only; source files must already be CPU-sealed."""
-    from training.long_context_launch import _old_python, historical_request
+    from training.long_context_launch import _old_python, v4_request
 
     if path != MANIFEST or path.is_symlink():
         raise ValueError("manifest must be the exact immutable source output")
@@ -95,7 +95,7 @@ def prepare(path=MANIFEST):
                  ("training/__init__.py", "training/sft_runtime.py", "training/sft_262k_runtime.py", *PINNED)}
         files["training/long_context_reload.py"] = Path(__file__).read_text()
         files["plan.json"] = canonical(plan).decode()
-        _, request = historical_request(successor=True)
+        _, request = v4_request()
         request.update(name=NAME, title=NAME, run_dir=plan["output_root"])
         request["env"] = {k: v for k, v in request["env"].items() if not k.startswith("CYBER_SFT_BUNDLE")}
         request["env"].update(PYTHONPATH=plan["output_root"] + "/.runtime", WANDB_RUN_ID=NAME, WANDB_NAME=NAME)
