@@ -97,8 +97,10 @@ two stored names (`bash`, `submit_report`), not the provider-facing bytes.
   `cfede13d-a3e0-4ad3-818b-02f8538f8017`, Workload UID
   `166cf858-82a1-46d0-9f7a-975776745b7b`); it was queued without GPUs at
   00:35 UTC September 26. Request SHA-256 `f8ff4d2f8cbdf81f95547b0e9e1ec53b3015de313efe639f39624c753c7d0389`.
-  At 03:07:24 UTC it remained suspended without admission or GPU allocation;
-  Kueue reported insufficient B300 capacity. UID-bound comparison confirmed
+  At 03:30:03 UTC it remained suspended without admission or GPU allocation.
+  Kueue then excluded all 24 nodes for eight-GPU Pod fit despite 141/192 GPU
+  quota reserved: aggregate free GPUs are not four usable whole nodes.
+  UID-bound comparison confirmed
   V4's head-plus-three-worker pod sets, 8 GPUs/64 CPU/512 GiB each and preferred
   tier-1 topology are identical to admitted V2's, so the `cpu-head` fallback
   message is not evidence of a new request-shape defect. Keep the one
