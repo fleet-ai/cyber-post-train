@@ -97,6 +97,9 @@ two stored names (`bash`, `submit_report`), not the provider-facing bytes.
   `cfede13d-a3e0-4ad3-818b-02f8538f8017`, Workload UID
   `166cf858-82a1-46d0-9f7a-975776745b7b`); it was queued without GPUs at
   00:35 UTC September 26. Request SHA-256 `f8ff4d2f8cbdf81f95547b0e9e1ec53b3015de313efe639f39624c753c7d0389`.
+  At 02:35:54 UTC it remained suspended without admission or GPU allocation;
+  Kueue reported no topology-compatible GPU node among 24. Keep the one
+  create-once c1 request queued; no duplicate, priority change or peer preemption.
   `training/long_context_reload.py` remains review-only until the
   exact v4 step-1 checkpoint is sealed. This lane is **not
   scientific**. Require real
