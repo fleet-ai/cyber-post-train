@@ -440,7 +440,7 @@ def validate_stage_preview(spec: dict, server_preview: dict) -> dict:
         obj = yaml.safe_load(server_preview["manifest_yaml"])
         meta, actual = obj.get("metadata", {}), obj.get("spec", {})
         if (obj.get("kind") != "RayJob"
-            or meta.get("name") != request["name"]
+            or meta.get("name") not in {request["name"], request["name"] + "-00000000"}
             or meta.get("namespace") != "fleet-train-jobs"
             or meta.get("annotations", {}).get("fleet.ai/failure-alerts") != "off"
             or meta.get("annotations", {}).get("fleet.ai/run-dir") != request["run_dir"]

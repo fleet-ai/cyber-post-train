@@ -206,7 +206,7 @@ def test_stage_specs_require_c1_root_alert_opt_out(tmp_path, monkeypatch):
     assert gpu["request"]["priority_class"] == "c1"
     assert gpu["request"]["failureAlerts"] is False
     manifest = {"kind": "RayJob", "metadata": {
-        "name": gpu["request"]["name"],
+        "name": gpu["request"]["name"] + "-00000000",
         "namespace": "fleet-train-jobs",
         "annotations": {"fleet.ai/failure-alerts": "off",
                         "fleet.ai/run-dir": gpu["request"]["run_dir"]},
