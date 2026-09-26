@@ -26,22 +26,11 @@ All **2,886** envelopes passed session/version/transcript digests. Provisional s
 One-text-block conversion adds 219 TRAIN/15 DEV: **1,162/42** sessions, **153/12** families. The TRAIN-only diagnostic 262k repack (request `sha256:33278260ed26542810ae62ae41b2006be9d9c29db0fdd88c9e6677ed12e97c7c`, manifest `sha256:3a25c689e0455db80bba6bcc01bf0f9f8646cf3eed80b5fbf51ce78f12a701bd`) proves **22,003,398 distinct masked targets** in 1,566 rows, but source v3 still has no accepted source receipt.
 Only **6,176,104** of those targets have exclusively current-format bash replies in their visible context (152 source families; top family 19.0%; a 300k-token family cap leaves 4,962,086). The pinned OpenCode 1.18.27 source reads configurable tool-output limits; matched eval config now permits 300,000 bytes/15,000 lines, above the observed maxima of 266,159 bytes/11,655 lines, so size truncation need not discard otherwise valid replies. This does not validate the 5,107 older-format bash replies or prove live Fleet MCP parity; do not promote all 22M or launch full SFT yet.
 
-## Live tool-format check (2026-09-25)
+## Live tool-format check (2026-09-26)
 
-Two first requests matched pinned OpenCode 1.18.27 anchors/tools, but replayed
-historical tool results differed from stored strings. Fleet Jobs rejected
-`harness=opencode`; direct instance creation returned HTTP 500 on three TRAIN
-versions. At 06:25 UTC, deployed readback still lacked immutable environment-version
-and seed identity; local Theseus source changes are not deployed proof.
-Local Theseus `7aa3bb3473d` supplies a specific failure hypothesis: the
-version-scoped creator omits exact task/environment-version IDs and passes a
-direct image URL, while network-task admission requires those IDs and forbids
-the URL with an exact environment ID. Test this against the deployed revision;
-do not treat it as the proven cause of the HTTP 500 or retry unchanged creates.
-Across 144 TRAIN keys, 6,648 sessions existed (4,143 successes), but their
-stored tool strings are not captured model-facing messages. Keep the 943
-TRAIN/27 DEV historical successes provisional pending same-call wire proof or
-fresh verifier-backed OpenCode teacher collection. All probes released resources.
+Two synthetic first requests matched pinned OpenCode 1.18.27 anchors/tools; they did not prove historical tool-result parity. A direct, model-free exact-environment probe succeeded: MCP `bash` returned one canonical text block with exit status and stdout sections; its temporary instance was deleted and release verified (`sha256:7cb747fa439ccb5f404a1fae12fa8c2d41b2aceeae3b6c7de5d089c030567665`). This generic environment exposed four tools, not the exact blackbox task catalog, so it is format evidence only.
+One frozen TRAIN version was independently bound to nine live-listed verifier successes, the exact task/environment version, two immutable seed files, and its pinned data identity (`sha256:fe3bcf365ffe082101fc7157c5dcae4b298ad844f144fcc9ed12640c9b41dab1`). Three uniquely identified exact-task create diagnostics returned HTTP 409 before allocating anything; the redacted server reason was **“Exact Environment version has no pinned multi-app topology”**, even with the source task's exact data pin. Each run reconciled zero live allocations. Do not retry this version unchanged or claim its current task environment runnable. Find a version with a proven topology or repair the platform contract, then obtain actual task-bound model-facing parity.
+The fresh census of 428 TRAIN keys found 913 additional verifier successes on 136 keys, but only 199 direct-tool candidates across 18 families before historical-format review; 532 used incompatible wrappers and 182 failed exact version/role binding. This does not close the 20M-token gap. The old version-scoped creator's HTTP 500 cause remains a source-code hypothesis, not deployed proof. Keep historical data diagnostic until exact result parity or fresh verified collection is established; do not use private transcripts or tool errors as public evidence.
 
 ## Parallel execution lanes
 
