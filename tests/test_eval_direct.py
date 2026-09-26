@@ -100,6 +100,10 @@ class DirectTests(unittest.TestCase):
         with self.assertRaisesRegex(LaunchError, "profile changed"):
             preview(plan, "base", "version-1", 1, api=api, **checks)
         self.assertEqual(api.posts, 0)
+        api.capabilities = {**CAPABILITY, "unrelated_future_capability": "v1"}
+        with self.assertRaisesRegex(LaunchError, "profile changed"):
+            preview(plan, "base", "version-1", 1, api=api, **checks)
+        self.assertEqual(api.posts, 0)
 
     def test_one_claim_one_score_full_ctf_only_and_release(self):
         plan, live, tools = direct_fixture()

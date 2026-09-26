@@ -202,7 +202,8 @@ def preview(plan: dict, arm: str, version: str, attempt: int, *, api: FleetClien
     tasks = {task["task_version_id"]: task for task in protocol["tasks"]}
     if arm not in ("base", "candidate") or version not in tasks or type(attempt) is not int or attempt not in (1, 2, 3, 4):
         raise LaunchError("attempt outside sealed pass@4 roster")
-    if api._request("GET", "/v1/rollout-rewards/capabilities") != CAPABILITY:
+    capabilities = api._request("GET", "/v1/rollout-rewards/capabilities")
+    if not isinstance(capabilities, dict) or any(capabilities.get(key) != value for key, value in CAPABILITY.items()):
         raise LaunchError("durable create and exact runtime readback not deployed")
     account = api.account_get()
     if account.get("team_id") != TEAM_ID or account.get("team_name") != "fleet":
