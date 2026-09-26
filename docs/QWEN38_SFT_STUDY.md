@@ -100,6 +100,12 @@ two stored names (`bash`, `submit_report`), not the provider-facing bytes.
   At 03:30:03 UTC it remained suspended without admission or GPU allocation.
   Kueue then excluded all 24 nodes for eight-GPU Pod fit despite 141/192 GPU
   quota reserved: aggregate free GPUs are not four usable whole nodes.
+  At 03:40 UTC, 21 GPU nodes were full and the other three had only 3/4/4
+  GPUs free. Four separate Chris-named jobs each held one full node (two 96k
+  SFT, two RL); all four RayJobs were RUNNING. Do not interrupt them without
+  specific approval and checkpoint review. This canary is the oldest pending
+  c1 GPU workload in its local queue, but admission after capacity frees is
+  not guaranteed.
   UID-bound comparison confirmed
   V4's head-plus-three-worker pod sets, 8 GPUs/64 CPU/512 GiB each and preferred
   tier-1 topology are identical to admitted V2's, so the `cpu-head` fallback
