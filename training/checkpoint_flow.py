@@ -63,10 +63,10 @@ def _file_sha(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _receipt(path: Path) -> dict:
-    if path.is_symlink() or not path.is_file():
+def _receipt(path: Path | bytes) -> dict:
+    if not isinstance(path, bytes) and (path.is_symlink() or not path.is_file()):
         raise ValueError("immutable receipt file missing or symlinked")
-    value = json.loads(path.read_text())
+    value = json.loads(path if isinstance(path, bytes) else path.read_text())
     if (not isinstance(value, dict) or not re.fullmatch(r"[a-f0-9]{64}", value.get("receipt_sha256", ""))
         or value["receipt_sha256"] != _sha(_canonical({k: v for k, v in value.items() if k != "receipt_sha256"}))):
         raise ValueError("receipt digest mismatch")
@@ -295,8 +295,8 @@ def run(directory: Path, step: int, stage: str) -> dict:
             "output": str(output), "sha256": _file_sha(output if stage != "export" else paths["export"])}
 
 
-def stage_spec(directory: Path, step: int, stage: str) -> dict:
-    """Build, but do not submit, a c1/q1 stage Job or GPU Jobs-API request."""
+def stage_spec(directory: Path, step: int, stage: str, *, source_receipt_bytes: bytes | None = None) -> dict:
+    """Build without submitting; optional receipt bytes must be read from exact SFS."""
     if stage not in STAGES:
         raise ValueError("unknown checkpoint stage")
     plan, request, receipt = _prepared(directory)
@@ -310,8 +310,8 @@ def stage_spec(directory: Path, step: int, stage: str) -> dict:
     if destination.exists() or destination.is_symlink():
         raise ValueError("create-once checkpoint output already exists")
     if stage == "seal":
-        source = _receipt(Path(plan["output_root"]) / "checkpoint_receipts" /
-                          f"step-{step:06d}.json")
+        source = _receipt(source_receipt_bytes if source_receipt_bytes is not None else
+                          Path(plan["output_root"]) / "checkpoint_receipts" / f"step-{step:06d}.json")
         if (source.get("plan_sha256") != receipt["plan_sha256"]
             or source.get("optimizer_step") != step
             or source.get("checkpoint_path") != str(Path(plan["output_root"]) /

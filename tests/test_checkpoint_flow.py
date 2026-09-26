@@ -177,6 +177,11 @@ def test_stage_specs_require_c1_root_alert_opt_out(tmp_path, monkeypatch):
           {"plan_sha256": receipt["plan_sha256"], "optimizer_step": 16,
            "checkpoint_path": str(Path(plan["output_root"]) / "checkpoints/global_step_16")})
     cpu = flow.stage_spec(tmp_path, 16, "seal")["job"]
+    source = Path(plan["output_root"]) / "checkpoint_receipts/step-000016.json"
+    raw = source.read_bytes(); source.unlink()
+    assert flow.stage_spec(tmp_path, 16, "seal", source_receipt_bytes=raw)["job"] == cpu
+    with pytest.raises(ValueError, match="digest mismatch"): flow.stage_spec(tmp_path, 16, "seal", source_receipt_bytes=b"{}")
+    source.write_bytes(raw)
     assert cpu["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
     assert cpu["spec"]["suspend"] is True
     assert cpu["spec"]["template"]["spec"]["priorityClassName"] == "c1"
