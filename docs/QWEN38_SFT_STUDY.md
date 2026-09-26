@@ -46,7 +46,8 @@ fresh verifier-backed OpenCode teacher collection. All probes released resources
 ## Parallel execution lanes
 
 - **96k fast lane:** one node; family-disjoint data, checkpoint, zero-step
-  reload and tool match. Queue teacher loss/Fleet DEV pass@4 at every save.
+  reload and tool match. The pilot has no teacher-CE validation; run paired
+  Fleet DEV pass@4 only after checkpoint and route readiness are proven.
 - **262k capacity lane:** the v2 attempt failed before training because its
   entrypoint added a digest field rejected by the frozen validator. V3 was
   deleted while queued: its pause path repeated the known missing finalizer.
