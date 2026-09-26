@@ -106,6 +106,11 @@ two stored names (`bash`, `submit_report`), not the provider-facing bytes.
   specific approval and checkpoint review. This canary is the oldest pending
   c1 GPU workload in its local queue, but admission after capacity frees is
   not guaranteed.
+  At 03:55 UTC it was still queued; 23/24 B300 nodes were full and the last
+  had three GPUs free. The two SFT jobs showed steps 26 and 601, with checkpoint
+  directories at steps 25 and 600; the two RL roots had only an `iter_0000000`
+  directory and no checkpoint directory, respectively. Directory presence is not
+  a reloadability proof; all four jobs remained Ready with zero restarts.
   UID-bound comparison confirmed
   V4's head-plus-three-worker pod sets, 8 GPUs/64 CPU/512 GiB each and preferred
   tier-1 topology are identical to admitted V2's, so the `cpu-head` fallback
