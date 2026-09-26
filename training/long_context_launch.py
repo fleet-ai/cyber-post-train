@@ -268,6 +268,12 @@ def v4_request(*, for_cpu_preflight: bool = False) -> tuple[dict, dict]:
             or plan["qualification"]["submission_gate"]["approval_evidence"] != spec["root_review"]):
         raise ValueError("v4 canary request differs from reviewed repair")
     verify_bundle(plan, request)
+    if not for_cpu_preflight:
+        receipt = json.loads((ROOT / spec["cpu_preflight"]["path"]).read_text())
+        exact = lambda obj: digest(json.dumps(obj, sort_keys=True, separators=(",", ":"), allow_nan=False).encode())
+        if (exact(plan) != receipt["candidate_plan_sha256"]
+                or exact(request) != receipt["candidate_request_sha256"]):
+            raise ValueError("v4 request differs from its exact-image CPU preflight")
     return plan, request
 
 
