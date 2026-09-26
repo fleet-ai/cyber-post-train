@@ -131,3 +131,4 @@ preflight before submission. `submission_authorized` remains false until canary
 checkpoint and reload acceptance. No full POST has occurred. Apply [AGENTS.md](../AGENTS.md). Until
 Chris clarifies the wording, use stricter **>10 percentage-point absolute**
 final-task lift with statistical evidence; never iterate on the final panel.
+The disabled-gate v4-derived full request also passed a September 26 server preview: four nodes/32 GPUs, exact image, and rendered manifest SHA-256 `002383a56460d18a44f93170fc40317e7ac9747ecc4dccca3e78207afcf30d6a`. Re-preview after the canary acceptance binding changes; this is not submission permission.
