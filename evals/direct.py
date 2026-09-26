@@ -302,7 +302,7 @@ def _opencode(prompt: str, image: str, served_id: str, mcp_url: str, auth_header
             "mcp": {"fleet": {"type": "remote", "url": mcp_url, "enabled": True, "oauth": False, "headers": {auth_header: "{env:FLEET_MCP_TOKEN}"}}},
             "permission": {"*": "deny", "fleet_*": "allow"},
             "tools": {name: False for name in ("bash", "edit", "read", "glob", "grep", "list", "task", "webfetch", "websearch", "skill")},
-            "compaction": {"auto": True, "reserved": 32768}}
+            "compaction": {"auto": True, "reserved": 32768}, "tool_output": {"max_bytes": 300000, "max_lines": 15000}}
         (config_dir / "opencode.json").write_text(json.dumps(settings))
         (root / "prompt.txt").write_text(prompt)
         name = "q38-eval-" + hashlib.sha256(instance_id.encode()).hexdigest()[:16]
