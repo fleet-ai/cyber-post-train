@@ -33,6 +33,11 @@ historical tool results differed from stored strings. Fleet Jobs rejected
 `harness=opencode`; direct instance creation returned HTTP 500 on three TRAIN
 versions. At 06:25 UTC, deployed readback still lacked immutable environment-version
 and seed identity; local Theseus source changes are not deployed proof.
+Local Theseus `7aa3bb3473d` supplies a specific failure hypothesis: the
+version-scoped creator omits exact task/environment-version IDs and passes a
+direct image URL, while network-task admission requires those IDs and forbids
+the URL with an exact environment ID. Test this against the deployed revision;
+do not treat it as the proven cause of the HTTP 500 or retry unchanged creates.
 Across 144 TRAIN keys, 6,648 sessions existed (4,143 successes), but their
 stored tool strings are not captured model-facing messages. Keep the 943
 TRAIN/27 DEV historical successes provisional pending same-call wire proof or
