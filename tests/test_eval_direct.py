@@ -32,8 +32,8 @@ def direct_fixture():
 
 
 class FakeAPI:
-    def __init__(self, plan, live, *, capabilities=CAPABILITY, score=1.0, uncertain=False):
-        self.live, self.capabilities, self.score, self.uncertain = live, capabilities, score, uncertain
+    def __init__(self, plan, live, *, capabilities=CAPABILITY, score=1.0, uncertain=False, runtime_bound=True):
+        self.live, self.capabilities, self.score, self.uncertain, self.runtime_bound = live, capabilities, score, uncertain, runtime_bound
         self.posts, self.deleted = 0, False
 
     def account_get(self):
@@ -55,6 +55,11 @@ class FakeAPI:
             return {"instance_id": "owned-synthetic-instance", "team_id": self.live["team_id"], "status": "running",
                     "terminated_at": None, "env_key": self.live["environment_id"], "version": self.live["version"],
                     "data_key": self.live["data_id"], "data_version": self.live["data_version"],
+                    "eval_task_version_id": self.live["eval_task_version_id"] if self.runtime_bound else None,
+                    "environment_version_id": self.live["environment_version_id"] if self.runtime_bound else None,
+                    "seed_config": self.live["seed_config"] if self.runtime_bound else None,
+                    "multi_app_seed_bindings": self.live["multi_app_seed_bindings"] if self.runtime_bound else None,
+                    "multi_app_seed_versions": self.live["multi_app_seed_versions"] if self.runtime_bound else None,
                     "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
                     "urls": {"root": "https://synthetic.invalid"}}
         if path == "/v1/runner-auth/token":
@@ -85,7 +90,7 @@ def gates(plan):
 class DirectTests(unittest.TestCase):
     def test_capability_and_route_gate_before_any_post(self):
         plan, live, _ = direct_fixture()
-        api = FakeAPI(plan, live, capabilities={})
+        api = FakeAPI(plan, live, capabilities={key: value for key, value in CAPABILITY.items() if key != "exact_instance_runtime_readback"})
         with self.assertRaisesRegex(LaunchError, "not deployed"):
             preview(plan, "base", "version-1", 1, api=api, **gates(plan))
         self.assertEqual(api.posts, 0)
@@ -125,6 +130,15 @@ class DirectTests(unittest.TestCase):
             with self.assertRaisesRegex(LaunchError, "already claimed"):
                 run_once(plan, "candidate", "version-1", 2, Path(directory), api=api, runner=runner, **gates(plan))
             self.assertEqual(api.posts, 1)
+
+    def test_unbound_runtime_is_released_without_scoring(self):
+        plan, live, _ = direct_fixture()
+        api = FakeAPI(plan, live, runtime_bound=False)
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(LaunchError, "pinned task/runtime/seed"):
+                run_once(plan, "base", "version-1", 1, Path(directory), api=api, runner=runner, **gates(plan))
+        self.assertEqual(api.posts, 1)
+        self.assertTrue(api.deleted)
 
 
 if __name__ == "__main__":

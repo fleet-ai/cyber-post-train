@@ -47,6 +47,8 @@ def fixture():
                          "files": [{"sha256": "f" * 64, "target_path": "synthetic-seed",
                                     "size_bytes": 1}], "content_sha256": "f" * 64}},
         "seed_config": {"non_private_test_seed": True},
+        "multi_app_seed_bindings": {"synthetic-env": {"version": "synthetic-data-v1"}},
+        "multi_app_seed_versions": {"synthetic-env": "synthetic-data-v1"},
         "task_lifecycle_status": "production",
     }
     plan = {

@@ -76,8 +76,9 @@ def _check_task(task: dict, live: dict, expected_digest: str) -> None:
         or not verifier.get("verifier_version_id") or not seed_bound
         or metadata.get("projection_id") != "blackbox_ctf_v1"
         or live.get("task_lifecycle_status") != "production"
-        or "seed_config" not in live
-        or (live["seed_config"] is not None and not isinstance(live["seed_config"], dict))
+        or not isinstance(live.get("seed_config"), dict)
+        or not isinstance(live.get("multi_app_seed_bindings"), dict)
+        or not isinstance(live.get("multi_app_seed_versions"), dict)
         or digest(live) != expected_digest):
         raise LaunchError("live exact-version task/runtime/verifier binding changed")
 
@@ -107,7 +108,7 @@ class FleetClient:
                              query={"version_id": version_id})
 
 SCHEMA = "fleet_direct_opencode_v1"
-CAPABILITY = {"version_scoped_durable_create_claim": "v1", "create_request_field": "create_request_id", "claim_route": "/v1/env/instances/create-requests/{request_id}", "ttl_seconds_range": [60, 3600]}
+CAPABILITY = {"version_scoped_durable_create_claim": "v1", "create_request_field": "create_request_id", "claim_route": "/v1/env/instances/create-requests/{request_id}", "ttl_seconds_range": [60, 3600], "exact_instance_runtime_readback": "v1"}
 MODEL_ID = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
 HEADER = re.compile(r"[A-Za-z0-9-]+\Z")
 CONTEXT, OUTPUT = 98_304, 16_384
@@ -202,7 +203,7 @@ def preview(plan: dict, arm: str, version: str, attempt: int, *, api: FleetClien
     if arm not in ("base", "candidate") or version not in tasks or type(attempt) is not int or attempt not in (1, 2, 3, 4):
         raise LaunchError("attempt outside sealed pass@4 roster")
     if api._request("GET", "/v1/rollout-rewards/capabilities") != CAPABILITY:
-        raise LaunchError("durable version-scoped create claim/TTL not deployed")
+        raise LaunchError("durable create and exact runtime readback not deployed")
     account = api.account_get()
     if account.get("team_id") != TEAM_ID or account.get("team_name") != "fleet":
         raise LaunchError("Fleet-team account required")
@@ -388,9 +389,12 @@ def run_once(plan: dict, arm: str, version: str, attempt: int, journal_dir: Path
         instance = api._request("GET", "/v1/env/instances/" + quote(instance_id, safe=""))
         bound = {"instance_id": instance_id, "team_id": TEAM_ID, "status": "running", "terminated_at": None,
                  "env_key": live.get("environment_id"), "version": live.get("version"),
-                 "data_key": live.get("data_id"), "data_version": live.get("data_version")}
+                 "data_key": live.get("data_id"), "data_version": live.get("data_version"),
+                 "eval_task_version_id": version, "environment_version_id": live["environment_version_id"],
+                 "seed_config": live["seed_config"], "multi_app_seed_bindings": live["multi_app_seed_bindings"],
+                 "multi_app_seed_versions": live["multi_app_seed_versions"]}
         if any(instance.get(key) != value for key, value in bound.items()):
-            raise LaunchError("created instance differs from pinned task environment/data")
+            raise LaunchError("created instance differs from pinned task/runtime/seed")
         expiry = _time(instance.get("expires_at"))
         if expiry <= datetime.now(timezone.utc) + timedelta(minutes=5):
             raise LaunchError("instance TTL insufficient for safe execution")
