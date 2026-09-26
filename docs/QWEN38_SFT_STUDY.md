@@ -46,7 +46,7 @@ September 26 QA-list delta: 485 exact versions lay outside the frozen September 
 The observed GPT/OpenCode Jobs API HTTP 400 is not an unchanged request to retry. Theseus PR-head source also has no `opencode` entry in the legacy harness registry; its separate Agent Runtime maps `openai/*` to Codex and rejects an explicit OpenCode override. This source-code explanation is consistent with the live rejection but is not deployed-revision proof. A supported GPT/OpenCode collection route requires a reviewed platform change, while the DeepSeek/OpenCode pilot still lacks exact runtime-version and environment-UUID attestation. At the same PR head, the [session transcript formatter](https://github.com/fleet-ai/theseus/blob/72fef6654477fa0529baa0354cbed4c518666e33/orchestrator/public_api/sessions.py) includes `environment_version_id` when it exists on the instance: the 1,220 historical omissions are not explained by an absent formatter field, but neither prove that those instances ran the wrong environment. Do not infer an exact UUID from their environment labels.
 
 ## Parallel execution lanes
-
+An exact intersection of the sealed full-pin screen and the finalized verifier-QA exclusion leaves only three current production fully pinned TRAIN versions, all in one family; fresh exact-version QA state was `not_found` and task-QA feedback contained zero matching version reports for all three on September 26 at ~13:20 UTC. These are unreviewed candidates, not accepted training data, and cannot supply a balanced ≥20M-token corpus.
 - **96k fast lane:** one node; family-disjoint data, checkpoint, zero-step
   reload and tool match. The pilot has no teacher-CE validation; run paired
   Fleet DEV pass@4 only after checkpoint and route readiness are proven.
