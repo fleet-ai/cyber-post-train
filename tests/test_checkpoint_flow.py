@@ -128,8 +128,10 @@ def test_tampered_cpu_gate_rejects_ready(tmp_path):
         flow._receipt(path)
 
 
-@pytest.mark.parametrize("lazy", [False, True])
-def test_mechanics_checkpoint_profile_is_accepted_without_teacher_ce(tmp_path, lazy):
+@pytest.mark.parametrize("lazy,schema", [(False, "qwen38_96k_mechanics_prepared_v1"),
+                                         (True, "qwen38_96k_fast_diagnostic_prepared_v1"),
+                                         (True, "qwen38_96k_safe_prepared_v1")])
+def test_checkpoint_profile_is_accepted_without_teacher_ce(tmp_path, lazy, schema):
     plan = {"runtime_sha256": flow.SOURCES["training/sft_runtime.py"],
             "execution": {"image": "image@sha256:" + "a" * 64}}
     if lazy:
@@ -137,7 +139,7 @@ def test_mechanics_checkpoint_profile_is_accepted_without_teacher_ce(tmp_path, l
                      "lazy_overlay_sha256": flow._sha(Path(flow.lazy_overlay.__file__).read_bytes()),
                      "datasets": {"train": {"storage_layout": flow.lazy_overlay.LAYOUT}}})
     request = {"image": plan["execution"]["image"]}
-    prepared = {"schema": "qwen38_96k_fast_diagnostic_prepared_v1" if lazy else "qwen38_96k_mechanics_prepared_v1",
+    prepared = {"schema": schema,
                 "historical_commit": flow.COMMIT,
                 "plan_sha256": flow._sha(flow._canonical(plan)),
                 "request_sha256": flow._sha(flow._canonical(request))}

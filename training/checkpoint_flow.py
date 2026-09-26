@@ -81,7 +81,8 @@ def _prepared(directory: Path) -> tuple[dict, dict, dict]:
     if lazy:
         lazy_overlay.require_pin(plan)
     if (receipt.get("schema") not in {"qwen38_96k_mechanics_prepared_v1",
-                                           "qwen38_96k_full_prepared_v1", "qwen38_96k_fast_diagnostic_prepared_v1"}
+                                           "qwen38_96k_full_prepared_v1", "qwen38_96k_fast_diagnostic_prepared_v1",
+                                           "qwen38_96k_safe_prepared_v1"}
         or (receipt.get("schema") == "qwen38_96k_fast_diagnostic_prepared_v1" and not lazy)
         or receipt.get("historical_commit") != COMMIT
         or receipt.get("plan_sha256") != _sha(_canonical(plan))
