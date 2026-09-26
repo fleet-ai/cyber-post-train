@@ -18,6 +18,8 @@ Old packing clipped **11,794/14,693** rows, often losing task/tool anchors; tool
 
 ## Two held-out measurements
 
+September 26 held-out launch check (~17:03 UTC): the accepted step-47 BF16 export is visible from the inference namespace, but no candidate serving route exists. A zero-GPU, c1, root-alert-off source-mount Job verified the exact `CHECKPOINT_READY.json`, `EXPORT.json`, and `GPU_CHECK.json` file hashes and confirmed the intended model destination is absent; the Job and Pod were deleted. The live Fleet rollout-rewards capability response advertises durable create claims but **not** the exact-instance-runtime-readback capability required by `evals/direct.py`. One create-once route probe against protected DEV cell 0's exact current task version returned HTTP 500 before an instance ID; its durable claim read back HTTP 404 immediately and again after the attempt. An exhaustive read-only pagination of all 1,162 currently running Fleet instances found zero in that target environment, so this probe has no observed live allocation. This is a distinct DEV version from the three documented failing TRAIN versions, not a retry of one of their claims. No rollout, score, model-serving allocation, or Fleet instance was accepted from this probe. Do not call the held-out eval launched; do not repeat that claim. The next gate is a proven task-scoped create/readback/scoring route plus a staged and live-matched base/candidate serving pair before any scored pass@4 submission.
+
 Teacher cross-entropy on unseen successes diagnoses optimization, **not** exploit ability. The unused provisional teacher-CE builder was removed. Matched base/checkpoint Fleet pass@4 on runnable versions measures ability: select on DEV, confirm once on final, and exclude infrastructure failures.
 
 ## Source-to-OpenCode compatibility
@@ -67,11 +69,9 @@ An exact intersection of the sealed full-pin screen and the finalized verifier-Q
   manifest file SHA-256 is `76184b48335e3382bb05510ef70c6628fe119230359b826bad29a7602bec4e2c`.
   The v4 reload was withdrawn through the Jobs API before admission: code review
   found its recovery worker could replace the bounded long-context worker.
-  Corrected v5 passed exact-image CPU preflight (Job UID `2086b070-1882-4dc4-913f-2c8c50737c21`, exit 0, zero restarts), then queued
-  as `chris-q38-t3k262-4n-reload-v5-e33ced3d` (RayJob UID
-  `6ba1dedd-1268-43c9-ba44-d70e114ab4a7`, Workload UID
-  `a63ce5c2-c193-4387-9fb8-db0101cb43f1`). Outcome pending; this is capacity
-  proof, **not scientific SFT** or lift.
+  Corrected v5 passed exact-image CPU preflight (Job UID `2086b070-1882-4dc4-913f-2c8c50737c21`, exit 0, zero restarts); `chris-q38-t3k262-4n-reload-v5-e33ced3d` (RayJob UID `6ba1dedd-1268-43c9-ba44-d70e114ab4a7`, Workload UID `a63ce5c2-c193-4387-9fb8-db0101cb43f1`) admitted at 16:54:32Z.
+  Exact RayCluster UID `a6e5b584-e3ed-4bee-af5c-d2de126b70da` held four ready eight-GPU Pods with zero restarts; RayJob and Workload succeeded at 17:04:40Z and absent cluster/Pods prove GPU release.
+  `RECOVERED.json` appeared at 17:04:35Z; it and `RELOAD_VALIDATED.json` still need independent inspection. The separate capacity monitor remains paused by Chris; this is not scientific SFT or lift.
 - **262k scientific lane (not launchable):** requires a new identity and ≥20M verified masked TRAIN tokens in OpenCode format; disjoint DEV/final families. Checked-out Fi Agent Runtime sources pin OpenCode 1.18.18, whereas the shared evaluation runtime source pins 1.18.27; neither source pin attests the live pilot. Fresh collection needs live version/catalog parity or a reviewed platform repair.
 
 Full262 hypothesis: full-weight Qwen3.8-27B, four B300 nodes, 262k context, batch 32, one epoch, LR 3e-6; `max_steps = ceil(train_rows / 32)`.
