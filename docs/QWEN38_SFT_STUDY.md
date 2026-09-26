@@ -67,11 +67,11 @@ An exact intersection of the sealed full-pin screen and the finalized verifier-Q
   CPU Job `chris-q38-262k4n-step1-seal-a01` (UID
   `e279c843-dbee-4bd1-b816-4ad3da6e143d`) sealed it; the self-digest-valid
   manifest file SHA-256 is `76184b48335e3382bb05510ef70c6628fe119230359b826bad29a7602bec4e2c`.
-  The v4 reload was withdrawn through the Jobs API before admission: code review
-  found its recovery worker could replace the bounded long-context worker.
+  The v4 reload was withdrawn through the Jobs API before admission because its recovery worker could replace the bounded long-context worker.
   Corrected v5 passed exact-image CPU preflight (Job UID `2086b070-1882-4dc4-913f-2c8c50737c21`, exit 0, zero restarts); `chris-q38-t3k262-4n-reload-v5-e33ced3d` (RayJob UID `6ba1dedd-1268-43c9-ba44-d70e114ab4a7`, Workload UID `a63ce5c2-c193-4387-9fb8-db0101cb43f1`) admitted at 16:54:32Z.
   Exact RayCluster UID `a6e5b584-e3ed-4bee-af5c-d2de126b70da` held four ready eight-GPU Pods with zero restarts; RayJob and Workload succeeded at 17:04:40Z and absent cluster/Pods prove GPU release.
-  `RECOVERED.json` appeared at 17:04:35Z; it and `RELOAD_VALIDATED.json` still need independent inspection. The separate capacity monitor remains paused by Chris; this is not scientific SFT or lift.
+  Independent read-only inspection found self-digest-valid `RELOAD_VALIDATED.json` (file SHA-256 `bacc1625e0bd1c2cd78aaf3275dcdc418a6a0b15bcc78be505eb42831393a330`) and `RECOVERED.json` (`7c6df452f712f5922fdf99c715380b84b0bf7183cbe2d5ad26fad1f3410ab128`), matching plan/source-manifest hashes, source step 1, zero new optimizer steps, 32/32 rank step/scheduler records, 851 optimizer states per rank, and restored sampler.
+  The source manifest file hash still matches its sealed SHA-256; a fresh full 302.4-GiB shard rehash remains outstanding. Chris paused the separate capacity monitor, so do not launch step-3 continuation; this is not scientific SFT or lift.
 - **262k scientific lane (not launchable):** requires a new identity and ≥20M verified masked TRAIN tokens in OpenCode format; disjoint DEV/final families. Checked-out Fi Agent Runtime sources pin OpenCode 1.18.18, whereas the shared evaluation runtime source pins 1.18.27; neither source pin attests the live pilot. Fresh collection needs live version/catalog parity or a reviewed platform repair.
 
 Full262 hypothesis: full-weight Qwen3.8-27B, four B300 nodes, 262k context, batch 32, one epoch, LR 3e-6; `max_steps = ceil(train_rows / 32)`.
